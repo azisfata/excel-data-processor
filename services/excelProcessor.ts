@@ -163,13 +163,54 @@ function prosesDanStrukturData(data: ExcelData): ExcelData {
         return row;
     });
 
-    // Forward-fill (ffill) the first column, similar to pandas' ffill()
-    let lastValidCode: any = undefined;
-    df.forEach(row => {
-        if (!isEmpty(row[0])) {
-            lastValidCode = row[0];
+        // Initialize trace for hierarchical code processing
+    const trace: string[] = [];
+    const MAX_TRACE_SIZE = 7;
+    const newCodes: string[] = [];
+
+    // Process each row to build hierarchical codes
+    for (const row of df) {
+        const value = row[0];
+        
+        if (!isEmpty(value)) {
+            // Convert to string and remove .0 suffix if present
+            let valueStr = String(value);
+            if (valueStr.endsWith('.0')) {
+                valueStr = valueStr.slice(0, -2);
+            }
+            
+            // Add the original value to new codes
+            newCodes.push(valueStr);
+            
+            // Process the value to update the trace
+            const itemsToAdd = valueStr.includes('.') ? valueStr.split('.') : [valueStr];
+            
+            for (const item of itemsToAdd) {
+                if (!trace.includes(item)) {
+                    if (trace.length < MAX_TRACE_SIZE) {
+                        trace.push(item);
+                    } else {
+                        // Update trace based on item type
+                        if (item.length === 6 && /^\d+$/.test(item)) {
+                            trace[6] = item; // Update 6-digit code at position 6
+                        } else if (item.length === 3 && /^\d+$/.test(item)) {
+                            trace[4] = item; // Update 3-digit code at position 4
+                        } else if (item.length === 2 && /^\d[a-zA-Z]$/.test(item)) {
+                            trace[5] = item; // Update 2-char code (1 digit + 1 letter) at position 5
+                        }
+                    }
+                }
+            }
         } else {
-            row[0] = lastValidCode;
+            // For empty cells, use the current trace
+            newCodes.push(trace.join('.'));
+        }
+    }
+
+    // Update the first column with the new hierarchical codes
+    df.forEach((row, index) => {
+        if (index < newCodes.length) {
+            row[0] = newCodes[index];
         }
     });
 
