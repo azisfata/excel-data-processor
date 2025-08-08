@@ -82,6 +82,9 @@ export default function App() {
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
     },
     multiple: false,
+    onDragEnter: undefined,
+    onDragOver: undefined,
+    onDragLeave: undefined
   });
 
   // Fungsi handleProcessFile sudah tidak digunakan lagi karena proses langsung dijalankan saat upload
@@ -95,126 +98,181 @@ export default function App() {
 
   const dropzoneClasses = useMemo(() => {
     const base = 'flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-lg cursor-pointer bg-gray-50';
-    return isDragActive ? `${base} border-blue-500 bg-blue-50` : `${base} border-gray-300 hover:bg-gray-100`;
+    return isDragActive ? `${base} border-blue-500 bg-blue-50` : `${base} border-gray-300 hover:border-blue-400`;
   }, [isDragActive]);
 
   return (
-    <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
-      <div className="w-full max-w-4xl mx-auto">
-        <header className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-slate-800">Excel Data Processor</h1>
-          <p className="text-slate-600 mt-2">Unggah, proses, dan unduh data Excel Anda dengan logika khusus.</p>
-        </header>
-
-        <main className="bg-white rounded-xl shadow-lg p-6 md:p-8">
-          {/* Step 1: Upload */}
-          <div className="mb-6">
-            <h2 className="text-xl font-semibold text-slate-700 mb-3">Langkah 1: Unggah File Excel</h2>
-            <div {...getRootProps()} className={dropzoneClasses}>
-              <input {...getInputProps()} />
-              <UploadIcon />
-              <p className="mb-2 text-sm text-gray-500">
-                <span className="font-semibold">Klik untuk mengunggah</span> atau seret dan lepas
-              </p>
-              <p className="text-xs text-gray-500">XLS atau XLSX</p>
+    <div className="min-h-screen bg-gray-50">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8">
+        {/* Only show upload section if no result yet */}
+        {!result && (
+          <div className="bg-white shadow-xl rounded-xl p-8 max-w-3xl mx-auto mt-8 border border-gray-100">
+            <div className="text-center mb-6">
+              <h2 className="text-2xl font-bold text-gray-800 mb-2">Mulai Memproses Excel</h2>
+              <p className="text-gray-600">Unggah file Excel untuk memulai pemrosesan data</p>
             </div>
-            {file && (
-              <p className="text-center text-sm text-slate-600 mt-4">
-                File terpilih: <span className="font-medium text-slate-800">{file.name}</span>
-              </p>
+            <div 
+              {...getRootProps()} 
+              className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${isDragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-blue-400'}`}
+            >
+              <input {...getInputProps()} />
+              <div className="flex flex-col items-center justify-center space-y-2">
+                <UploadIcon />
+                <p className="text-sm text-gray-600">
+                  {isDragActive ? 'Lepaskan file di sini...' : 'Seret file Excel ke sini, atau klik untuk memilih'}
+                </p>
+                <p className="text-xs text-gray-500">Hanya file .xls atau .xlsx yang didukung</p>
+                {file && (
+                  <p className="text-sm font-medium text-gray-900 mt-2">
+                    File dipilih: {file.name}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {isProcessing && (
+              <div className="mt-4 text-center">
+                <div className="inline-flex items-center px-4 py-2 text-sm font-medium text-blue-800 bg-blue-100 rounded-md">
+                  <Spinner /> Memproses file...
+                </div>
+              </div>
+            )}
+            
+            {error && (
+              <div className="mt-4 bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-md" role="alert">
+                <p>{error}</p>
+              </div>
             )}
           </div>
+        )}
 
-          {/* Processing indicator */}
-          {isProcessing && (
-            <div className="text-center mb-6">
-              <div className="inline-flex items-center px-4 py-2 text-sm font-medium text-blue-800 bg-blue-100 rounded-md">
-                <Spinner /> Memproses file...
+        {/* Dashboard & Results */}
+        {result && (
+          <div className="space-y-6">
+            {/* Totals Card */}
+            <div className="bg-white shadow-md rounded-lg overflow-hidden border border-gray-200 transition-all duration-200 hover:shadow-lg">
+              <div className="px-6 py-4 bg-gradient-to-r from-blue-600 to-blue-700">
+                <h3 className="text-lg font-semibold text-white">Ringkasan Keuangan</h3>
+                <p className="text-sm text-blue-100 mt-1">Total dan ringkasan data yang telah diproses</p>
               </div>
-            </div>
-          )}
-          
-          {error && (
-            <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-md mb-6" role="alert">
-                <p className="font-bold">Error</p>
-                <p>{error}</p>
-            </div>
-          )}
-
-          {/* Step 3: Results */}
-          {result && (
-            <div className="animate-fade-in">
-              <h2 className="text-xl font-semibold text-slate-700 mb-4">Langkah 3: Hasil Proses</h2>
-              <div className="grid md:grid-cols-2 gap-6">
-                {/* Totals */}
-                <div className="bg-slate-50 p-4 rounded-lg">
-                    <h3 className="font-bold text-slate-800 mb-3">Hasil Perhitungan Total</h3>
-                    <ul className="space-y-2 text-sm">
-                        {result.totals.map((total, index) => {
-                            const labels = [
-                                'Pagu Revisi',
-                                'Lock Pagu',
-                                'Periode Lalu',
-                                'Periode Saat Ini',
-                                's.d. Periode'
-                            ];
-                            return (
-                                <li key={index} className="flex justify-between items-center bg-white p-2 rounded shadow-sm">
-                                    <span className="text-slate-600">{labels[index]}:</span>
-                                    <span className="font-mono font-semibold text-blue-700">
-                                        {typeof total === 'number' ? total.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2}) : total}
-                                    </span>
-                                </li>
-                            );
-                        })}
-                    </ul>
-                </div>
-                {/* Download Button */}
-                <div className="bg-green-50 p-4 rounded-lg flex flex-col items-center justify-center">
-                    <h3 className="font-bold text-green-800 mb-3">Unduh Hasil Akhir</h3>
-                    <p className="text-sm text-green-700 text-center mb-4">Data yang difilter siap untuk diunduh sebagai file Excel baru.</p>
-                     <button
-                        onClick={handleDownload}
-                        className="inline-flex items-center justify-center px-5 py-2.5 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors"
-                    >
-                        <DownloadIcon />
-                        Unduh File
-                    </button>
-                </div>
-              </div>
-
-              {/* Data Preview */}
-              <div className="mt-8">
-                <h3 className="font-bold text-slate-800 mb-3">Pratinjau Data Hasil Akhir (Sama seperti file unduhan)</h3>
-                <div className="overflow-x-auto max-h-96 border border-gray-200 rounded-lg">
-                    <table className="min-w-full divide-y divide-gray-200 text-sm">
-                        <thead className="bg-gray-50 sticky top-0">
-                            <tr>
-                                {result.processedDataForPreview[0]?.map((_, index) => (
-                                    <th key={index} className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Kolom {index + 1}
-                                    </th>
-                                ))}
-                            </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                            {result.processedDataForPreview.map((row, rowIndex) => (
-                                <tr key={rowIndex} className="hover:bg-gray-50">
-                                    {row.map((cell, cellIndex) => (
-                                        <td key={cellIndex} className="px-4 py-2 whitespace-nowrap text-slate-700">
-                                            {cell === undefined || cell === null ? '' : String(cell)}
-                                        </td>
-                                    ))}
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+              <div className="p-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                  {result.totals.map((total, index) => {
+                    const labels = [
+                      { name: 'Pagu Revisi', color: 'bg-blue-100 text-blue-800' },
+                      { name: 'Lock Pagu', color: 'bg-purple-100 text-purple-800' },
+                      { name: 'Periode Lalu', color: 'bg-yellow-100 text-yellow-800' },
+                      { name: 'Periode Saat Ini', color: 'bg-green-100 text-green-800' },
+                      { name: 's.d. Periode', color: 'bg-indigo-100 text-indigo-800' }
+                    ];
+                    const label = labels[index];
+                    return (
+                      <div key={index} className="overflow-hidden rounded-lg border border-gray-200">
+                        <div className="px-4 py-3 text-center">
+                          <p className="text-sm font-medium text-gray-500 truncate">{label.name}</p>
+                          <p className="mt-1 text-lg font-semibold text-gray-900">
+                            {typeof total === 'number' 
+                              ? total.toLocaleString('id-ID', { 
+                                  minimumFractionDigits: 2, 
+                                  maximumFractionDigits: 2 
+                                })
+                              : total}
+                          </p>
+                        </div>
+                        <div className={`${label.color} px-4 py-1 text-center text-xs font-medium`}>
+                          {label.name}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
-          )}
-        </main>
-      </div>
+
+            {/* Action Buttons */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-3 rounded-lg shadow-sm border border-gray-200">
+              <div>
+                <h3 className="text-base font-semibold text-gray-800">Data Hasil Proses</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Menampilkan {Math.min(result.processedDataForPreview.length, 100)} dari {result.finalData.length} baris data
+                </p>
+              </div>
+              <div className="flex space-x-2">
+              <button
+                onClick={() => document.getElementById('file-upload')?.click()}
+                className="inline-flex items-center px-2.5 py-1 border border-gray-300 text-xs font-medium rounded text-gray-600 bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
+                title="Unggah File Baru"
+              >
+                <UploadIcon className="h-3 w-3 mr-1.5" />
+                <span>Unggah</span>
+                <input
+                  id="file-upload"
+                  type="file"
+                  className="hidden"
+                  accept=".xls,.xlsx"
+                  onChange={(e) => {
+                    if (e.target.files?.[0]) {
+                      setFile(e.target.files[0]);
+                      setError(null);
+                      setResult(null);
+                      processFile(e.target.files[0]);
+                    }
+                  }}
+                />
+              </button>
+              <button
+                onClick={handleDownload}
+                className="inline-flex items-center px-2.5 py-1 border border-transparent text-xs font-medium rounded shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
+                title="Unduh Hasil"
+              >
+                <DownloadIcon className="h-3 w-3 mr-1.5" />
+                <span>Unduh</span>
+              </button>
+              </div>
+            </div>
+
+            {/* Data Table */}
+            <div className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr className="text-left text-xs font-semibold text-gray-600 uppercase tracking-wider bg-gray-100">
+                      {result.processedDataForPreview[0]?.map((cell: any, cellIndex: number) => (
+                        <th 
+                          key={cellIndex} 
+                          scope="col" 
+                          className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap border-b border-gray-200"
+                        >
+                          {cellIndex === 0 ? 'Kode' : 
+                           cellIndex === 1 ? 'Uraian' : 
+                           `Kol ${cellIndex + 1}`}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {result.processedDataForPreview.map((row: any[], rowIndex: number) => (
+                      <tr 
+                        key={rowIndex} 
+                        className={`transition-colors duration-150 ${rowIndex % 2 === 0 ? 'bg-white hover:bg-gray-50' : 'bg-gray-50 hover:bg-gray-100'}`}
+                      >
+                        {row.map((cell: any, cellIndex: number) => (
+                          <td 
+                            key={cellIndex} 
+                            className={`px-4 py-3 text-sm ${cellIndex === 1 ? 'text-gray-900 font-medium' : 'text-gray-600'} border-t border-gray-100`}
+                          >
+                            {cell}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
     </div>
   );
 }
