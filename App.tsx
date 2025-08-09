@@ -34,7 +34,22 @@ export default function App() {
   const [file, setFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<ProcessingResult | null>(null);
+  const [result, setResult] = useState<ProcessingResult | null>(() => {
+    // Load saved result from localStorage on initial render
+    const savedResult = localStorage.getItem('excelProcessorResult');
+    return savedResult ? JSON.parse(savedResult) : null;
+  });
+  const [lastUpdated, setLastUpdated] = useState<string>(() => {
+    // Load saved lastUpdated from localStorage on initial render
+    return localStorage.getItem('excelProcessorLastUpdated') || '';
+  });
+
+  // Calculate progress percentage
+  const progressPercentage = useMemo(() => {
+    if (!result || typeof result.totals[0] !== 'number' || result.totals[0] <= 0) return 0;
+    if (typeof result.totals[4] !== 'number') return 0;
+    return (result.totals[4] / result.totals[0]) * 100;
+  }, [result]);
 
   const processFile = useCallback((fileToProcess: File) => {
     if (!fileToProcess) return;
@@ -49,7 +64,29 @@ export default function App() {
         const binaryStr = event.target?.result;
         const data = parseExcelFile(binaryStr as string | ArrayBuffer);
         const processingResult = processExcelData(data);
+        
+        // Save result to state
         setResult(processingResult);
+        
+        // Set last updated time
+        const now = new Date();
+        const options: Intl.DateTimeFormatOptions = { 
+          weekday: 'long',
+          year: 'numeric', 
+          month: 'long', 
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false,
+          timeZoneName: 'short'
+        };
+        const formattedDate = now.toLocaleString('id-ID', options);
+        setLastUpdated(formattedDate);
+        
+        // Save to localStorage
+        localStorage.setItem('excelProcessorResult', JSON.stringify(processingResult));
+        localStorage.setItem('excelProcessorLastUpdated', formattedDate);
       } catch (e: any) {
         setError(e.message || "Terjadi kesalahan yang tidak diketahui saat memproses file.");
         console.error(e);
@@ -152,39 +189,97 @@ export default function App() {
             {/* Totals Card */}
             <div className="bg-white shadow-md rounded-lg overflow-hidden border border-gray-200 transition-all duration-200 hover:shadow-lg">
               <div className="px-6 py-4 bg-gradient-to-r from-blue-600 to-blue-700">
-                <h3 className="text-lg font-semibold text-white">Ringkasan Keuangan</h3>
-                <p className="text-sm text-blue-100 mt-1">Total dan ringkasan data yang telah diproses</p>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="text-lg font-semibold text-white">Anggaran Biro Digitalisasi dan Pengelolaan Informasi</h3>
+                    <p className="text-sm text-blue-100">Informasi Pagu dan Realisasi</p>
+                  </div>
+                  {lastUpdated && (
+                    <p className="text-xs text-blue-200 bg-blue-700/50 px-2 py-1 rounded">
+                      Diperbarui: {lastUpdated.split(', ')[1]}
+                    </p>
+                  )}
+                </div>
               </div>
               <div className="p-6">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-                  {result.totals.map((total, index) => {
-                    const labels = [
-                      { name: 'Pagu Revisi', color: 'bg-blue-100 text-blue-800' },
-                      { name: 'Lock Pagu', color: 'bg-purple-100 text-purple-800' },
-                      { name: 'Periode Lalu', color: 'bg-yellow-100 text-yellow-800' },
-                      { name: 'Periode Saat Ini', color: 'bg-green-100 text-green-800' },
-                      { name: 's.d. Periode', color: 'bg-indigo-100 text-indigo-800' }
-                    ];
-                    const label = labels[index];
-                    return (
-                      <div key={index} className="overflow-hidden rounded-lg border border-gray-200">
-                        <div className="px-4 py-3 text-center">
-                          <p className="text-sm font-medium text-gray-500 truncate">{label.name}</p>
-                          <p className="mt-1 text-lg font-semibold text-gray-900">
-                            {typeof total === 'number' 
-                              ? total.toLocaleString('id-ID', { 
-                                  minimumFractionDigits: 2, 
-                                  maximumFractionDigits: 2 
-                                })
-                              : total}
-                          </p>
-                        </div>
-                        <div className={`${label.color} px-4 py-1 text-center text-xs font-medium`}>
-                          {label.name}
-                        </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {/* Pagu Revisi */}
+                  <div className="overflow-hidden rounded-lg border border-gray-200">
+                    <div className="px-4 py-3 text-center">
+                      <p className="text-sm font-medium text-gray-500 truncate">Pagu Revisi</p>
+                      <p className="mt-1 text-lg font-semibold text-gray-900">
+                        {typeof result.totals[0] === 'number' 
+                          ? result.totals[0].toLocaleString('id-ID', { 
+                              maximumFractionDigits: 0 
+                            })
+                          : '0'}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {/* Realisasi */}
+                  <div className="overflow-hidden rounded-lg border border-gray-200">
+                    <div className="px-4 py-3 text-center">
+                      <p className="text-sm font-medium text-gray-500 truncate">Realisasi</p>
+                      <div className="flex items-center justify-center gap-2">
+                        <p className="text-lg font-semibold text-gray-900">
+                          {typeof result.totals[4] === 'number' 
+                            ? result.totals[4].toLocaleString('id-ID', { 
+                                maximumFractionDigits: 0 
+                              })
+                            : '0'}
+                        </p>
+                        {typeof result.totals[0] === 'number' && result.totals[0] > 0 && (
+                          <span className="text-sm text-indigo-600">
+                            ({(Number(result.totals[4]) / Number(result.totals[0]) * 100).toFixed(2)}%)
+                          </span>
+                        )}
                       </div>
-                    );
-                  })}
+                    </div>
+                    {/* Progress Bar */}
+                    <div className="px-4 pb-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-medium text-gray-700">Capaian Realisasi</span>
+                        <span className="text-xs font-semibold text-indigo-700">
+                          {progressPercentage.toFixed(1)}%
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
+                        <div 
+                          className="bg-gradient-to-r from-indigo-500 to-indigo-600 h-full rounded-full transition-all duration-700 ease-out"
+                          style={{ 
+                            width: `${Math.min(progressPercentage, 100)}%`,
+                            boxShadow: '0 2px 4px rgba(79, 70, 229, 0.2)'
+                          }}
+                        ></div>
+                      </div>
+                      <div className="flex justify-between mt-1">
+                        <span className="text-xs text-gray-400">0%</span>
+                        <span className="text-xs text-gray-400">100%</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Sisa Anggaran */}
+                  <div className="overflow-hidden rounded-lg border border-gray-200">
+                    <div className="px-4 py-3 text-center">
+                      <p className="text-sm font-medium text-gray-500 truncate">Sisa Anggaran</p>
+                      <div className="flex items-center justify-center gap-2">
+                        <p className="text-lg font-semibold text-gray-900">
+                          {typeof result.totals[0] === 'number' && typeof result.totals[4] === 'number'
+                            ? (Number(result.totals[0]) - Number(result.totals[4])).toLocaleString('id-ID', { 
+                                maximumFractionDigits: 0 
+                              })
+                            : '0'}
+                        </p>
+                        {typeof result.totals[0] === 'number' && result.totals[0] > 0 && (
+                          <span className="text-sm text-green-600">
+                            ({((Number(result.totals[0]) - Number(result.totals[4])) / Number(result.totals[0]) * 100).toFixed(2)}%)
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -192,42 +287,47 @@ export default function App() {
             {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-3 rounded-lg shadow-sm border border-gray-200">
               <div>
-                <h3 className="text-base font-semibold text-gray-800">Data Hasil Proses</h3>
+                <h3 className="text-base font-semibold text-gray-800">Detail Anggaran</h3>
                 <p className="text-xs text-gray-500 mt-0.5">
                   Menampilkan {Math.min(result.processedDataForPreview.length, 100)} dari {result.finalData.length} baris data
                 </p>
+
               </div>
-              <div className="flex space-x-2">
-              <button
-                onClick={() => document.getElementById('file-upload')?.click()}
-                className="inline-flex items-center px-2.5 py-1 border border-gray-300 text-xs font-medium rounded text-gray-600 bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
-                title="Unggah File Baru"
-              >
-                <UploadIcon className="h-3 w-3 mr-1.5" />
-                <span>Unggah</span>
-                <input
-                  id="file-upload"
-                  type="file"
-                  className="hidden"
-                  accept=".xls,.xlsx"
-                  onChange={(e) => {
-                    if (e.target.files?.[0]) {
-                      setFile(e.target.files[0]);
-                      setError(null);
-                      setResult(null);
-                      processFile(e.target.files[0]);
-                    }
-                  }}
-                />
-              </button>
-              <button
-                onClick={handleDownload}
-                className="inline-flex items-center px-2.5 py-1 border border-transparent text-xs font-medium rounded shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
-                title="Unduh Hasil"
-              >
-                <DownloadIcon className="h-3 w-3 mr-1.5" />
-                <span>Unduh</span>
-              </button>
+              <div className="flex space-x-1.5">
+                <button
+                  onClick={() => document.getElementById('file-upload')?.click()}
+                  className="inline-flex items-center px-2 py-0.5 text-xs text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition-colors"
+                  title="Unggah File Baru"
+                >
+                  <svg className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                  <span>Unggah</span>
+                  <input
+                    id="file-upload"
+                    type="file"
+                    className="hidden"
+                    accept=".xls,.xlsx"
+                    onChange={(e) => {
+                      if (e.target.files?.[0]) {
+                        setFile(e.target.files[0]);
+                        setError(null);
+                        setResult(null);
+                        processFile(e.target.files[0]);
+                      }
+                    }}
+                  />
+                </button>
+                <button
+                  onClick={handleDownload}
+                  className="inline-flex items-center px-2 py-0.5 text-xs text-blue-600 hover:text-white hover:bg-blue-600 rounded transition-colors"
+                  title="Unduh Hasil"
+                >
+                  <svg className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  <span>Unduh</span>
+                </button>
               </div>
             </div>
 
@@ -236,36 +336,39 @@ export default function App() {
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
-                    <tr className="text-left text-xs font-semibold text-gray-600 uppercase tracking-wider bg-gray-100">
-                      {result.processedDataForPreview[0]?.map((cell: any, cellIndex: number) => (
-                        <th 
-                          key={cellIndex} 
-                          scope="col" 
-                          className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap border-b border-gray-200"
-                        >
-                          {cellIndex === 0 ? 'Kode' : 
-                           cellIndex === 1 ? 'Uraian' : 
-                           `Kol ${cellIndex + 1}`}
-                        </th>
-                      ))}
+                    <tr className="text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                      <th className="px-6 py-3 w-1/6">Kode</th>
+                      <th className="px-6 py-3 w-3/6">Uraian</th>
+                      <th className="px-6 py-3 w-1/6 text-right">Pagu Revisi</th>
+                      <th className="px-6 py-3 w-1/6 text-right">s.d. Periode</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {result.processedDataForPreview.map((row: any[], rowIndex: number) => (
-                      <tr 
-                        key={rowIndex} 
-                        className={`transition-colors duration-150 ${rowIndex % 2 === 0 ? 'bg-white hover:bg-gray-50' : 'bg-gray-50 hover:bg-gray-100'}`}
-                      >
-                        {row.map((cell: any, cellIndex: number) => (
-                          <td 
-                            key={cellIndex} 
-                            className={`px-4 py-3 text-sm ${cellIndex === 1 ? 'text-gray-900 font-medium' : 'text-gray-600'} border-t border-gray-100`}
-                          >
-                            {cell}
+                    {result.processedDataForPreview.map((row: any[], rowIndex: number) => {
+                      // Only include columns 0, 1, 2, and 6 (Kode, Uraian, Pagu Revisi, s.d. Periode)
+                      const [kode, uraian, paguRevisi, sdPeriode] = [0, 1, 2, 6].map(index => row[index]);
+                      
+                      return (
+                        <tr key={rowIndex} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-6 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {kode}
                           </td>
-                        ))}
-                      </tr>
-                    ))}
+                          <td className="px-6 py-3 text-sm text-gray-700">
+                            {uraian}
+                          </td>
+                          <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-900 text-right">
+                            {typeof paguRevisi === 'number' 
+                              ? paguRevisi.toLocaleString('id-ID')
+                              : paguRevisi}
+                          </td>
+                          <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-900 text-right">
+                            {typeof sdPeriode === 'number' 
+                              ? sdPeriode.toLocaleString('id-ID')
+                              : sdPeriode}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
