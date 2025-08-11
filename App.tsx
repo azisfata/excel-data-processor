@@ -1,7 +1,8 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { ProcessingResult } from './types';
 import { processExcelData, downloadExcelFile, parseExcelFile } from './services/excelProcessor';
+import { createHierarchy, flattenTree } from './utils/hierarchy';
 
 // --- Icon Components ---
 const UploadIcon = () => (
@@ -32,17 +33,22 @@ const Spinner = () => (
 // --- Main App Component ---
 export default function App() {
   const [file, setFile] = useState<File | null>(null);
-  const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
+  const [hierarchicalData, setHierarchicalData] = useState<any[]>([]);
+  const [filteredData, setFilteredData] = useState<any[]>([]);
   const [result, setResult] = useState<ProcessingResult | null>(() => {
     // Load saved result from localStorage on initial render
     const savedResult = localStorage.getItem('excelProcessorResult');
     return savedResult ? JSON.parse(savedResult) : null;
   });
+  const [searchTerm, setSearchTerm] = useState('');
   const [lastUpdated, setLastUpdated] = useState<string>(() => {
     // Load saved lastUpdated from localStorage on initial render
     return localStorage.getItem('excelProcessorLastUpdated') || '';
   });
+  const [maxDepth, setMaxDepth] = useState<number>(6); // Default to showing 6 levels
 
   // Calculate progress percentage
   const progressPercentage = useMemo(() => {
@@ -51,15 +57,60 @@ export default function App() {
     return (result.totals[4] / result.totals[0]) * 100;
   }, [result]);
 
+  // Update hierarchical data when result, expandedNodes, or maxDepth changes
+  useEffect(() => {
+    if (result) {
+      const hierarchy = createHierarchy(result.processedDataForPreview);
+      
+      // Apply expanded state and max depth to nodes
+      const withExpanded = (nodes: any[], currentLevel = 0): any[] => nodes.map(node => {
+        const shouldExpand = currentLevel < maxDepth - 1; // Expand if within max depth
+        const isExpanded = expandedNodes[node.fullPath] ?? shouldExpand;
+        
+        return {
+          ...node,
+          isExpanded,
+          children: withExpanded(Object.values(node.children), currentLevel + 1)
+        };
+      });
+      
+      const processedHierarchy = withExpanded(hierarchy);
+      const flatData = flattenTree(processedHierarchy);
+      setHierarchicalData(flatData);
+      setFilteredData(flatData); // Initialize filtered data with all data
+    }
+  }, [result, expandedNodes, maxDepth]);
+
+  const toggleNode = useCallback((path: string, isDataGroup = false) => {
+    setExpandedNodes(prev => ({
+      ...prev,
+      [path]: !prev[path],
+      // For data groups, we need to update the hierarchy to reflect the expanded state
+      ...(isDataGroup ? { [`${path}-data`]: !prev[path] } : {})
+    }));
+  }, []);
+
+  // Update max depth and save to localStorage
+  const handleDepthChange = (depth: number) => {
+    setMaxDepth(depth);
+    localStorage.setItem('hierarchyMaxDepth', depth.toString());
+  };
+
   const processFile = useCallback((fileToProcess: File) => {
     if (!fileToProcess) return;
 
     setIsProcessing(true);
     setError(null);
     setResult(null);
+    
+    // Load saved max depth or use default
+    const savedDepth = localStorage.getItem('hierarchyMaxDepth');
+    if (savedDepth) {
+      setMaxDepth(parseInt(savedDepth, 10));
+    }
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
         const binaryStr = event.target?.result;
         const data = parseExcelFile(binaryStr as string | ArrayBuffer);
@@ -68,36 +119,41 @@ export default function App() {
         // Save result to state
         setResult(processingResult);
         
-        // Set last updated time
+        // Save to localStorage
+        localStorage.setItem('excelProcessorResult', JSON.stringify(processingResult));
         const now = new Date();
-        const options: Intl.DateTimeFormatOptions = { 
+        const dateOptions: Intl.DateTimeFormatOptions = {
           weekday: 'long',
-          year: 'numeric', 
-          month: 'long', 
-          day: 'numeric',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        };
+        const timeOptions: Intl.DateTimeFormatOptions = {
           hour: '2-digit',
           minute: '2-digit',
           second: '2-digit',
-          hour12: false,
-          timeZoneName: 'short'
+          hour12: false
         };
-        const formattedDate = now.toLocaleString('id-ID', options);
+        const dateStr = now.toLocaleDateString('id-ID', dateOptions);
+        const timeStr = now.toLocaleTimeString('id-ID', timeOptions);
+        const formattedDate = `${dateStr} pukul ${timeStr}`;
         setLastUpdated(formattedDate);
-        
-        // Save to localStorage
-        localStorage.setItem('excelProcessorResult', JSON.stringify(processingResult));
         localStorage.setItem('excelProcessorLastUpdated', formattedDate);
-      } catch (e: any) {
-        setError(e.message || "Terjadi kesalahan yang tidak diketahui saat memproses file.");
-        console.error(e);
+        
+      } catch (err) {
+        console.error('Error processing file:', err);
+        setError('Gagal memproses file. Pastikan format file sesuai.');
+        setResult(null);
       } finally {
         setIsProcessing(false);
       }
     };
+    
     reader.onerror = () => {
-      setError("Gagal membaca file. Silakan coba lagi.");
+      setError('Gagal membaca file. Silakan coba lagi.');
       setIsProcessing(false);
     };
+    
     reader.readAsBinaryString(fileToProcess);
   }, []);
 
@@ -137,6 +193,38 @@ export default function App() {
     const base = 'flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-lg cursor-pointer bg-gray-50';
     return isDragActive ? `${base} border-blue-500 bg-blue-50` : `${base} border-gray-300 hover:border-blue-400`;
   }, [isDragActive]);
+
+  useEffect(() => {
+    if (!searchTerm.trim()) {
+      setFilteredData(hierarchicalData);
+      return;
+    }
+
+    // When searching, automatically expand to max level (8) to show all matching results
+    if (maxDepth < 8) {
+      setMaxDepth(8);
+    }
+
+    // Split search terms by 'OR' (case-insensitive) and trim whitespace
+    const searchTerms = searchTerm
+      .split(/\s+OR\s+/i)
+      .map(term => term.trim().toLowerCase())
+      .filter(term => term.length > 0);
+
+    const filtered = hierarchicalData.filter(item => {
+      // Get values to search in (Kode and Uraian)
+      const kode = String(item[0] || '').toLowerCase();
+      const uraian = String(item[1] || '').toLowerCase();
+      
+      // Check if any search term matches either kode or uraian
+      return searchTerms.some(term => 
+        kode.includes(term) || 
+        uraian.includes(term)
+      );
+    });
+
+    setFilteredData(filtered);
+  }, [searchTerm, hierarchicalData, maxDepth]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -186,28 +274,30 @@ export default function App() {
         {/* Dashboard & Results */}
         {result && (
           <div className="space-y-6">
+            {/* Header with Title and Controls */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+              <div>
+                <h2 className="text-xl font-bold text-gray-800">Anggaran Biro Digitalisasi dan Pengelolaan Informasi</h2>
+                <p className="text-sm text-gray-600">Informasi Pagu dan Realisasi</p>
+              </div>
+              {lastUpdated && (
+                <div className="text-xs text-gray-600 bg-gray-100 px-3 py-1.5 rounded-md">
+                  <div>Diperbarui:</div>
+                  <div className="whitespace-nowrap font-medium">{lastUpdated}</div>
+                </div>
+              )}
+            </div>
+
             {/* Totals Card */}
             <div className="bg-white shadow-md rounded-lg overflow-hidden border border-gray-200 transition-all duration-200 hover:shadow-lg">
-              <div className="px-6 py-4 bg-gradient-to-r from-blue-600 to-blue-700">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="text-lg font-semibold text-white">Anggaran Biro Digitalisasi dan Pengelolaan Informasi</h3>
-                    <p className="text-sm text-blue-100">Informasi Pagu dan Realisasi</p>
-                  </div>
-                  {lastUpdated && (
-                    <p className="text-xs text-blue-200 bg-blue-700/50 px-2 py-1 rounded">
-                      Diperbarui: {lastUpdated.split(', ')[1]}
-                    </p>
-                  )}
-                </div>
-              </div>
-              <div className="p-6">
+              <div className="p-6 space-y-6">
+                {/* Cards Row */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   {/* Pagu Revisi */}
-                  <div className="overflow-hidden rounded-lg border border-gray-200">
-                    <div className="px-4 py-3 text-center">
-                      <p className="text-sm font-medium text-gray-500 truncate">Pagu Revisi</p>
-                      <p className="mt-1 text-lg font-semibold text-gray-900">
+                  <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+                    <div className="px-4 py-4 text-center">
+                      <p className="text-sm font-medium text-gray-500 mb-1">Pagu Revisi</p>
+                      <p className="text-lg font-semibold text-gray-900">
                         {typeof result.totals[0] === 'number' 
                           ? result.totals[0].toLocaleString('id-ID', { 
                               maximumFractionDigits: 0 
@@ -218,66 +308,55 @@ export default function App() {
                   </div>
                   
                   {/* Realisasi */}
-                  <div className="overflow-hidden rounded-lg border border-gray-200">
-                    <div className="px-4 py-3 text-center">
-                      <p className="text-sm font-medium text-gray-500 truncate">Realisasi</p>
-                      <div className="flex items-center justify-center gap-2">
-                        <p className="text-lg font-semibold text-gray-900">
-                          {typeof result.totals[4] === 'number' 
-                            ? result.totals[4].toLocaleString('id-ID', { 
-                                maximumFractionDigits: 0 
-                              })
-                            : '0'}
-                        </p>
-                        {typeof result.totals[0] === 'number' && result.totals[0] > 0 && (
-                          <span className="text-sm text-indigo-600">
-                            ({(Number(result.totals[4]) / Number(result.totals[0]) * 100).toFixed(2)}%)
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    {/* Progress Bar */}
-                    <div className="px-4 pb-3">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-medium text-gray-700">Capaian Realisasi</span>
-                        <span className="text-xs font-semibold text-indigo-700">
-                          {progressPercentage.toFixed(1)}%
-                        </span>
-                      </div>
-                      <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
-                        <div 
-                          className="bg-gradient-to-r from-indigo-500 to-indigo-600 h-full rounded-full transition-all duration-700 ease-out"
-                          style={{ 
-                            width: `${Math.min(progressPercentage, 100)}%`,
-                            boxShadow: '0 2px 4px rgba(79, 70, 229, 0.2)'
-                          }}
-                        ></div>
-                      </div>
-                      <div className="flex justify-between mt-1">
-                        <span className="text-xs text-gray-400">0%</span>
-                        <span className="text-xs text-gray-400">100%</span>
-                      </div>
+                  <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+                    <div className="px-4 py-4 text-center">
+                      <p className="text-sm font-medium text-gray-500 mb-1">Realisasi</p>
+                      <p className="text-lg font-semibold text-gray-900">
+                        {typeof result.totals[4] === 'number' 
+                          ? result.totals[4].toLocaleString('id-ID', { 
+                              maximumFractionDigits: 0 
+                            })
+                          : '0'}
+                      </p>
                     </div>
                   </div>
                   
                   {/* Sisa Anggaran */}
-                  <div className="overflow-hidden rounded-lg border border-gray-200">
-                    <div className="px-4 py-3 text-center">
-                      <p className="text-sm font-medium text-gray-500 truncate">Sisa Anggaran</p>
-                      <div className="flex items-center justify-center gap-2">
-                        <p className="text-lg font-semibold text-gray-900">
-                          {typeof result.totals[0] === 'number' && typeof result.totals[4] === 'number'
-                            ? (Number(result.totals[0]) - Number(result.totals[4])).toLocaleString('id-ID', { 
-                                maximumFractionDigits: 0 
-                              })
-                            : '0'}
-                        </p>
-                        {typeof result.totals[0] === 'number' && result.totals[0] > 0 && (
-                          <span className="text-sm text-green-600">
-                            ({((Number(result.totals[0]) - Number(result.totals[4])) / Number(result.totals[0]) * 100).toFixed(2)}%)
-                          </span>
-                        )}
-                      </div>
+                  <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+                    <div className="px-4 py-4 text-center">
+                      <p className="text-sm font-medium text-gray-500 mb-1">Sisa Anggaran</p>
+                      <p className="text-lg font-semibold text-gray-900">
+                        {typeof result.totals[0] === 'number' && typeof result.totals[4] === 'number'
+                          ? (Number(result.totals[0]) - Number(result.totals[4])).toLocaleString('id-ID', { 
+                              maximumFractionDigits: 0 
+                            })
+                          : '0'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Progress Bar Section */}
+                <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm">
+                  <div className="max-w-3xl mx-auto">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-gray-700">Capaian Realisasi</span>
+                      <span className="text-sm font-semibold text-indigo-700">
+                        {progressPercentage.toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
+                      <div 
+                        className="bg-gradient-to-r from-indigo-500 to-indigo-600 h-full rounded-full transition-all duration-700 ease-out"
+                        style={{
+                          width: `${Math.min(progressPercentage, 100)}%`,
+                          boxShadow: '0 2px 4px rgba(79, 70, 229, 0.2)'
+                        }}
+                      />
+                    </div>
+                    <div className="flex justify-between mt-1.5">
+                      <span className="text-xs text-gray-400">0%</span>
+                      <span className="text-xs text-gray-400">100%</span>
                     </div>
                   </div>
                 </div>
@@ -289,9 +368,40 @@ export default function App() {
               <div>
                 <h3 className="text-base font-semibold text-gray-800">Detail Anggaran</h3>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  Menampilkan {Math.min(result.processedDataForPreview.length, 100)} dari {result.finalData.length} baris data
+                  Menampilkan {filteredData.length} dari {result.finalData.length} baris data
+                  {searchTerm && ` (difilter berdasarkan: "${searchTerm}")`}
                 </p>
-
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Cari kode/uraian..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="block w-full pl-10 pr-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div className="flex items-center">
+                  <label htmlFor="depthSelect" className="text-sm font-medium text-gray-700 mr-2 whitespace-nowrap">Level:</label>
+                  <select
+                    id="depthSelect"
+                    value={maxDepth}
+                    onChange={(e) => handleDepthChange(parseInt(e.target.value, 10))}
+                    className="block rounded-md border-gray-300 py-1.5 pl-2 pr-8 text-sm focus:border-blue-500 focus:ring-blue-500"
+                  >
+                    {[1, 2, 3, 4, 5, 6, 7, 8].map((level) => (
+                      <option key={level} value={level}>
+                        {level}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
               <div className="flex space-x-1.5">
                 <button
@@ -300,7 +410,7 @@ export default function App() {
                   title="Unggah File Baru"
                 >
                   <svg className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                   </svg>
                   <span>Unggah</span>
                   <input
@@ -340,35 +450,79 @@ export default function App() {
                       <th className="px-6 py-3 w-1/6">Kode</th>
                       <th className="px-6 py-3 w-3/6">Uraian</th>
                       <th className="px-6 py-3 w-1/6 text-right">Pagu Revisi</th>
-                      <th className="px-6 py-3 w-1/6 text-right">s.d. Periode</th>
+                      <th className="px-6 py-3 w-1/6 text-right">REALISASI</th>
+                      <th className="px-6 py-3 w-[120px] text-right">% Realisasi</th>
+                      <th className="px-6 py-3 w-1/6 text-right">Sisa Anggaran</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {result.processedDataForPreview.map((row: any[], rowIndex: number) => {
-                      // Only include columns 0, 1, 2, and 6 (Kode, Uraian, Pagu Revisi, s.d. Periode)
-                      const [kode, uraian, paguRevisi, sdPeriode] = [0, 1, 2, 6].map(index => row[index]);
-                      
-                      return (
-                        <tr key={rowIndex} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-6 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
-                            {kode}
-                          </td>
-                          <td className="px-6 py-3 text-sm text-gray-700">
-                            {uraian}
-                          </td>
-                          <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-900 text-right">
-                            {typeof paguRevisi === 'number' 
-                              ? paguRevisi.toLocaleString('id-ID')
-                              : paguRevisi}
-                          </td>
-                          <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-900 text-right">
-                            {typeof sdPeriode === 'number' 
-                              ? sdPeriode.toLocaleString('id-ID')
-                              : sdPeriode}
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {filteredData.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-4 text-center text-sm text-gray-500">
+                          Tidak ada data yang cocok dengan pencarian "{searchTerm}"
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredData
+                        .filter(row => row.__isVisible !== false)
+                        .map((row: any, rowIndex: number) => {
+                        const isGroup = row.__hasChildren && !row.__isDataGroup;
+                        const isDataGroup = row.__isDataGroup;
+                        const [kode, uraian, paguRevisi, sdPeriode] = [0, 1, 2, 6].map(index => row[index]);
+                        const indent = row.__level * 20;
+                        const showExpandCollapse = row.__hasChildren || row.__isDataGroup;
+                        
+                        return (
+                          <tr 
+                            key={`${row.__path}-${rowIndex}`} 
+                            className={`hover:bg-gray-50 transition-colors ${isGroup ? 'bg-gray-50' : ''}`}
+                          >
+                            <td className="px-6 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                              <div className="flex items-center" style={{ paddingLeft: `${indent}px` }}>
+                                {showExpandCollapse && (
+                                  <button 
+                                    onClick={() => toggleNode(row.__path, isDataGroup)}
+                                    className="mr-2 text-gray-500 hover:text-gray-700 focus:outline-none w-4 flex-shrink-0"
+                                    aria-label={row.__isExpanded ? 'Collapse' : 'Expand'}
+                                  >
+                                    {row.__isExpanded ? '▼' : '▶'}
+                                  </button>
+                                )}
+                                {!showExpandCollapse && <div className="w-6"></div>}
+                                {isGroup || isDataGroup ? (
+                                  <span className={`${isDataGroup ? 'text-blue-600' : 'font-semibold'}`}>
+                                    {isDataGroup ? `${kode} (${row.__dataCount} items)` : kode}
+                                  </span>
+                                ) : kode}
+                              </div>
+                            </td>
+                            <td className="px-6 py-3 text-sm text-gray-700">
+                              {uraian}
+                            </td>
+                            <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-900 text-right">
+                              {typeof paguRevisi === 'number' 
+                                ? paguRevisi.toLocaleString('id-ID')
+                                : paguRevisi}
+                            </td>
+                            <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-900 text-right">
+                              {typeof sdPeriode === 'number' 
+                                ? sdPeriode.toLocaleString('id-ID')
+                                : sdPeriode}
+                            </td>
+                            <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-900 text-right">
+                              {typeof paguRevisi === 'number' && typeof sdPeriode === 'number' && paguRevisi > 0
+                                ? `${((sdPeriode / paguRevisi) * 100).toFixed(2)}%`
+                                : ''}
+                            </td>
+                            <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-900 text-right">
+                              {typeof paguRevisi === 'number' && typeof sdPeriode === 'number'
+                                ? (paguRevisi - sdPeriode).toLocaleString('id-ID')
+                                : ''}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
