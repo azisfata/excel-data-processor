@@ -205,22 +205,31 @@ export default function App() {
       setMaxDepth(8);
     }
 
-    // Split search terms by 'OR' (case-insensitive) and trim whitespace
-    const searchTerms = searchTerm
+    // First split by ' OR ' to handle OR conditions between groups
+    const orGroups = searchTerm
       .split(/\s+OR\s+/i)
-      .map(term => term.trim().toLowerCase())
-      .filter(term => term.length > 0);
+      .map(group => group.trim())
+      .filter(group => group.length > 0);
 
     const filtered = hierarchicalData.filter(item => {
       // Get values to search in (Kode and Uraian)
       const kode = String(item[0] || '').toLowerCase();
       const uraian = String(item[1] || '').toLowerCase();
       
-      // Check if any search term matches either kode or uraian
-      return searchTerms.some(term => 
-        kode.includes(term) || 
-        uraian.includes(term)
-      );
+      // Check each OR group
+      return orGroups.some(group => {
+        // Split group by ' AND ' to handle AND conditions within the group
+        const andTerms = group
+          .split(/\s+AND\s+/i)
+          .map(term => term.trim().toLowerCase())
+          .filter(term => term.length > 0);
+        
+        // All AND terms must match for this group to be a match
+        return andTerms.every(term => 
+          kode.includes(term) || 
+          uraian.includes(term)
+        );
+      });
     });
 
     setFilteredData(filtered);
@@ -373,19 +382,76 @@ export default function App() {
                 </p>
               </div>
               <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                <div className="relative">
+                <div className="relative group">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                     </svg>
                   </div>
-                  <input
-                    type="text"
-                    placeholder="Cari kode/uraian..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="block w-full pl-10 pr-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
-                  />
+                  <div className="relative group">
+                    <input
+                      type="text"
+                      placeholder="Cari kode/uraian..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="block w-full pl-10 pr-8 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+                      title="Pencarian mendukung AND/OR"
+                    />
+                    <div className="absolute inset-y-0 right-0 flex items-center pr-2 group-hover:opacity-100 opacity-70 transition-opacity">
+                      <svg 
+                        className="h-4 w-4 text-gray-400 hover:text-gray-600 cursor-help" 
+                        fill="none" 
+                        viewBox="0 0 24 24" 
+                        stroke="currentColor"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <div className="absolute z-20 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all duration-200 ease-in-out w-72 bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-sm text-gray-700"
+                        style={{
+                          top: 'calc(100% + 8px)',
+                          right: '0',
+                        }}
+                      >
+                        <div className="space-y-2">
+                          <p className="font-semibold text-gray-900 border-b pb-1 mb-2">Panduan Pencarian</p>
+                          
+                          <div className="space-y-3">
+                            <div>
+                              <p className="font-medium text-gray-800">Pencarian Sederhana:</p>
+                              <div className="bg-gray-50 p-2 rounded mt-1">
+                                <code className="text-blue-600">ATK</code>
+                                <p className="text-gray-600 text-xs mt-1">Mencari semua baris yang mengandung "ATK"</p>
+                              </div>
+                            </div>
+                            
+                            <div>
+                              <p className="font-medium text-gray-800">Menggunakan AND:</p>
+                              <div className="bg-gray-50 p-2 rounded mt-1">
+                                <code className="text-blue-600">ATK AND 521211</code>
+                                <p className="text-gray-600 text-xs mt-1">Mencari baris yang mengandung KEDUA kata tersebut</p>
+                                <p className="text-green-600 text-xs mt-1 font-medium">Contoh: "ATK Kantor 521211" akan muncul</p>
+                                <p className="text-red-600 text-xs font-medium">"ATK saja" atau "521211 saja" tidak akan muncul</p>
+                              </div>
+                            </div>
+                            
+                            <div>
+                              <p className="font-medium text-gray-800">Menggunakan OR:</p>
+                              <div className="bg-gray-50 p-2 rounded mt-1">
+                                <code className="text-blue-600">ATK OR 521211</code>
+                                <p className="text-gray-600 text-xs mt-1">Mencari baris yang mengandung SALAH SATU kata</p>
+                                <p className="text-green-600 text-xs mt-1 font-medium">"ATK saja" atau "521211" atau "Kedua-duanya" akan muncul</p>
+                              </div>
+                            </div>
+                            
+                            <div className="text-xs text-gray-500 border-t pt-2 mt-2">
+                              <p>• Pencarian tidak case-sensitive (tidak memperhatikan huruf besar/kecil)</p>
+                              <p>• Bisa dikombinasikan: <code className="text-blue-600">(ATK OR ALAT) AND 521211</code></p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 <div className="flex items-center">
                   <label htmlFor="depthSelect" className="text-sm font-medium text-gray-700 mr-2 whitespace-nowrap">Level:</label>
@@ -456,72 +522,106 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredData.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="px-6 py-4 text-center text-sm text-gray-500">
-                          Tidak ada data yang cocok dengan pencarian "{searchTerm}"
+                    {filteredData.map((row, rowIndex) => {
+                      const indent = row.__level * 20;
+                      const showExpandCollapse = row.__hasChildren || row.__isDataGroup;
+                      const isGroup = row.__isGroup;
+                      const isDataGroup = row.__isDataGroup;
+                      const kode = row[0] || '';
+                      const uraian = row[1] || '';
+                      const paguRevisi = row[2];
+                      const sdPeriode = row[6];
+                      
+                      return (
+                        <tr 
+                          key={`${row.__path}-${rowIndex}`} 
+                          className={`hover:bg-gray-50 transition-colors ${isGroup ? 'bg-gray-50' : ''}`}
+                        >
+                          <td className="px-6 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                            <div className="flex items-center" style={{ paddingLeft: `${indent}px` }}>
+                              {showExpandCollapse && (
+                                <button 
+                                  onClick={() => toggleNode(row.__path, isDataGroup)}
+                                  className="mr-2 text-gray-500 hover:text-gray-700 focus:outline-none w-4 flex-shrink-0"
+                                  aria-label={row.__isExpanded ? 'Collapse' : 'Expand'}
+                                >
+                                  {row.__isExpanded ? '▼' : '▶'}
+                                </button>
+                              )}
+                              {!showExpandCollapse && <div className="w-6"></div>}
+                              {isGroup || isDataGroup ? (
+                                <span className={`${isDataGroup ? 'text-blue-600' : 'font-semibold'}`}>
+                                  {isDataGroup ? `${kode} (${row.__dataCount} items)` : kode}
+                                </span>
+                              ) : kode}
+                            </div>
+                          </td>
+                          <td className="px-6 py-3 text-sm text-gray-700">
+                            {uraian}
+                          </td>
+                          <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-900 text-right">
+                            {typeof paguRevisi === 'number' 
+                              ? paguRevisi.toLocaleString('id-ID')
+                              : paguRevisi}
+                          </td>
+                          <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-900 text-right">
+                            {typeof sdPeriode === 'number' 
+                              ? sdPeriode.toLocaleString('id-ID')
+                              : sdPeriode}
+                          </td>
+                          <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-900 text-right">
+                            {typeof paguRevisi === 'number' && typeof sdPeriode === 'number' && paguRevisi > 0
+                              ? `${((sdPeriode / paguRevisi) * 100).toFixed(2)}%`
+                              : ''}
+                          </td>
+                          <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-900 text-right">
+                            {typeof paguRevisi === 'number' && typeof sdPeriode === 'number'
+                              ? (paguRevisi - sdPeriode).toLocaleString('id-ID')
+                              : ''}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {result && (
+                      <tr className="bg-gray-100 border-t-2 border-gray-300">
+                        <td colSpan={2} className="px-6 py-2 whitespace-nowrap text-sm font-semibold text-gray-900">
+                          {isProcessing ? 'Menghitung...' : `Total ${searchTerm ? 'Hasil Pencarian' : ''}`}
+                        </td>
+                        <td className="px-6 py-2 whitespace-nowrap text-sm font-semibold text-gray-900 text-right">
+                          {isProcessing ? '...' : (
+                            filteredData
+                              .filter(row => !row.__isGroup && !row.__isDataGroup) // Exclude group/header rows
+                              .reduce((sum, row) => sum + (Number(row[2]) || 0), 0)
+                              .toLocaleString('id-ID')
+                          )}
+                        </td>
+                        <td className="px-6 py-2 whitespace-nowrap text-sm font-semibold text-gray-900 text-right">
+                          {isProcessing ? '...' : (
+                            filteredData
+                              .filter(row => !row.__isGroup && !row.__isDataGroup) // Exclude group/header rows
+                              .reduce((sum, row) => sum + (Number(row[6]) || 0), 0)
+                              .toLocaleString('id-ID')
+                          )}
+                        </td>
+                        <td className="px-6 py-2 whitespace-nowrap text-sm font-semibold text-gray-900 text-right">
+                          {isProcessing ? '...' : (() => {
+                            const dataRows = filteredData.filter(row => !row.__isGroup && !row.__isDataGroup);
+                            const totalPagu = dataRows.reduce((sum, row) => sum + (Number(row[2]) || 0), 0);
+                            const totalRealisasi = dataRows.reduce((sum, row) => sum + (Number(row[6]) || 0), 0);
+                            return totalPagu > 0 
+                              ? `${((totalRealisasi / totalPagu) * 100).toFixed(2)}%`
+                              : '0%';
+                          })()}
+                        </td>
+                        <td className="px-6 py-2 whitespace-nowrap text-sm font-semibold text-gray-900 text-right">
+                          {isProcessing ? '...' : (() => {
+                            const dataRows = filteredData.filter(row => !row.__isGroup && !row.__isDataGroup);
+                            const totalPagu = dataRows.reduce((sum, row) => sum + (Number(row[2]) || 0), 0);
+                            const totalRealisasi = dataRows.reduce((sum, row) => sum + (Number(row[6]) || 0), 0);
+                            return (totalPagu - totalRealisasi).toLocaleString('id-ID');
+                          })()}
                         </td>
                       </tr>
-                    ) : (
-                      filteredData
-                        .filter(row => row.__isVisible !== false)
-                        .map((row: any, rowIndex: number) => {
-                        const isGroup = row.__hasChildren && !row.__isDataGroup;
-                        const isDataGroup = row.__isDataGroup;
-                        const [kode, uraian, paguRevisi, sdPeriode] = [0, 1, 2, 6].map(index => row[index]);
-                        const indent = row.__level * 20;
-                        const showExpandCollapse = row.__hasChildren || row.__isDataGroup;
-                        
-                        return (
-                          <tr 
-                            key={`${row.__path}-${rowIndex}`} 
-                            className={`hover:bg-gray-50 transition-colors ${isGroup ? 'bg-gray-50' : ''}`}
-                          >
-                            <td className="px-6 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
-                              <div className="flex items-center" style={{ paddingLeft: `${indent}px` }}>
-                                {showExpandCollapse && (
-                                  <button 
-                                    onClick={() => toggleNode(row.__path, isDataGroup)}
-                                    className="mr-2 text-gray-500 hover:text-gray-700 focus:outline-none w-4 flex-shrink-0"
-                                    aria-label={row.__isExpanded ? 'Collapse' : 'Expand'}
-                                  >
-                                    {row.__isExpanded ? '▼' : '▶'}
-                                  </button>
-                                )}
-                                {!showExpandCollapse && <div className="w-6"></div>}
-                                {isGroup || isDataGroup ? (
-                                  <span className={`${isDataGroup ? 'text-blue-600' : 'font-semibold'}`}>
-                                    {isDataGroup ? `${kode} (${row.__dataCount} items)` : kode}
-                                  </span>
-                                ) : kode}
-                              </div>
-                            </td>
-                            <td className="px-6 py-3 text-sm text-gray-700">
-                              {uraian}
-                            </td>
-                            <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-900 text-right">
-                              {typeof paguRevisi === 'number' 
-                                ? paguRevisi.toLocaleString('id-ID')
-                                : paguRevisi}
-                            </td>
-                            <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-900 text-right">
-                              {typeof sdPeriode === 'number' 
-                                ? sdPeriode.toLocaleString('id-ID')
-                                : sdPeriode}
-                            </td>
-                            <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-900 text-right">
-                              {typeof paguRevisi === 'number' && typeof sdPeriode === 'number' && paguRevisi > 0
-                                ? `${((sdPeriode / paguRevisi) * 100).toFixed(2)}%`
-                                : ''}
-                            </td>
-                            <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-900 text-right">
-                              {typeof paguRevisi === 'number' && typeof sdPeriode === 'number'
-                                ? (paguRevisi - sdPeriode).toLocaleString('id-ID')
-                                : ''}
-                            </td>
-                          </tr>
-                        );
-                      })
                     )}
                   </tbody>
                 </table>
