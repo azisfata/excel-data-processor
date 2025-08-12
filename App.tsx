@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { ProcessingResult } from './types';
+import { ProcessingResult, Activity, BudgetAllocation } from './types';
 import { processExcelData, downloadExcelFile, parseExcelFile } from './services/excelProcessor';
 import { createHierarchy, flattenTree } from './utils/hierarchy';
 
@@ -39,11 +39,76 @@ export default function App() {
   const [hierarchicalData, setHierarchicalData] = useState<any[]>([]);
   const [filteredData, setFilteredData] = useState<any[]>([]);
   const [result, setResult] = useState<ProcessingResult | null>(() => {
-    // Load saved result from localStorage on initial render
+    // Load saved data from localStorage on initial render
     const savedResult = localStorage.getItem('excelProcessorResult');
     return savedResult ? JSON.parse(savedResult) : null;
   });
   const [searchTerm, setSearchTerm] = useState('');
+  // Inisialisasi activities dari localStorage jika ada
+  const [activities, setActivities] = useState<Activity[]>(() => {
+    const savedActivities = localStorage.getItem('excelProcessorActivities');
+    return savedActivities ? JSON.parse(savedActivities) : [];
+  });
+  
+  const [newActivity, setNewActivity] = useState<Omit<Activity, 'id'>>({ 
+    nama: '', 
+    allocations: [] 
+  });
+  const [newAllocation, setNewAllocation] = useState<BudgetAllocation>({ 
+    kode: '', 
+    jumlah: 0 
+  });
+  const [showActivityForm, setShowActivityForm] = useState(false);
+
+  // Fungsi untuk menangani penambahan alokasi anggaran
+  const handleAddAllocation = () => {
+    if (!newAllocation.kode || newAllocation.jumlah <= 0) return;
+    
+    setNewActivity(prev => ({
+      ...prev,
+      allocations: [...prev.allocations, { ...newAllocation }]
+    }));
+    
+    // Reset form alokasi
+    setNewAllocation({ kode: '', jumlah: 0 });
+  };
+
+  // Fungsi untuk menghapus alokasi
+  const handleRemoveAllocation = (index: number) => {
+    setNewActivity(prev => ({
+      ...prev,
+      allocations: prev.allocations.filter((_, i) => i !== index)
+    }));
+  };
+
+  // Fungsi untuk menghapus kegiatan
+  const handleRemoveActivity = (id: string) => {
+    if (window.confirm('Apakah Anda yakin ingin menghapus kegiatan ini?')) {
+      setActivities(prev => prev.filter(activity => activity.id !== id));
+    }
+  };
+
+  // Fungsi untuk menambahkan kegiatan baru
+  const handleAddActivity = () => {
+    if (!newActivity.nama || newActivity.allocations.length === 0) return;
+    
+    const newActivityWithId: Activity = {
+      ...newActivity,
+      id: Date.now().toString()
+    };
+    
+    setActivities(prev => [...prev, newActivityWithId]);
+    
+    // Reset form
+    setNewActivity({ nama: '', allocations: [] });
+    setShowActivityForm(false);
+  };
+
+  // Hitung total alokasi untuk sebuah kegiatan
+  const calculateTotalAllocation = (allocations: BudgetAllocation[]) => {
+    return allocations.reduce((sum, item) => sum + item.jumlah, 0);
+  };
+
   const [lastUpdated, setLastUpdated] = useState<string>(() => {
     // Load saved lastUpdated from localStorage on initial render
     return localStorage.getItem('excelProcessorLastUpdated') || '';
@@ -395,7 +460,7 @@ export default function App() {
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                       className="block w-full pl-10 pr-8 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
-                      title="Pencarian mendukung AND/OR"
+                      title="Contoh: a and b atau x or y"
                     />
                     <div className="absolute inset-y-0 right-0 flex items-center pr-2 group-hover:opacity-100 opacity-70 transition-opacity">
                       <svg 
@@ -582,10 +647,10 @@ export default function App() {
                         </tr>
                       );
                     })}
-                    {result && (
+                    {result && searchTerm && (
                       <tr className="bg-gray-100 border-t-2 border-gray-300">
                         <td colSpan={2} className="px-6 py-2 whitespace-nowrap text-sm font-semibold text-gray-900">
-                          {isProcessing ? 'Menghitung...' : `Total ${searchTerm ? 'Hasil Pencarian' : ''}`}
+                          {isProcessing ? 'Menghitung...' : 'Total Hasil Pencarian'}
                         </td>
                         <td className="px-6 py-2 whitespace-nowrap text-sm font-semibold text-gray-900 text-right">
                           {isProcessing ? '...' : (
@@ -625,6 +690,156 @@ export default function App() {
                     )}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* Daftar Kegiatan */}
+        {result && (
+          <div className="bg-white shadow-xl rounded-xl p-6 mt-8">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold text-gray-800">Daftar Kegiatan</h2>
+              <button
+                onClick={() => setShowActivityForm(true)}
+                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center"
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                Tambah Kegiatan
+              </button>
+            </div>
+
+            {/* Daftar Kegiatan */}
+            {activities.length > 0 ? (
+              <div className="space-y-4">
+                {activities.map((activity) => (
+                  <div key={activity.id} className="border rounded-lg p-4">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h3 className="font-medium text-gray-900">{activity.nama}</h3>
+                        <p className="text-sm text-gray-500">
+                          {activity.allocations.length} alokasi • Total: Rp {calculateTotalAllocation(activity.allocations).toLocaleString('id-ID')}
+                        </p>
+                      </div>
+                      <button 
+                        onClick={() => handleRemoveActivity(activity.id)}
+                        className="text-red-500 hover:text-red-700"
+                        title="Hapus Kegiatan"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
+                    {activity.allocations.length > 0 && (
+                      <div className="mt-2 text-sm">
+                        <h4 className="font-medium text-gray-700 mb-1">Alokasi Anggaran:</h4>
+                        <ul className="space-y-1">
+                          {activity.allocations.map((alloc, idx) => (
+                            <li key={idx} className="flex justify-between">
+                              <span>{alloc.kode}</span>
+                              <span>Rp {alloc.jumlah.toLocaleString('id-ID')}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-gray-500 text-center py-4">Belum ada kegiatan. Klik 'Tambah Kegiatan' untuk memulai.</p>
+            )}
+          </div>
+        )}
+
+        {/* Modal Tambah Kegiatan */}
+        {showActivityForm && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg w-full max-w-md p-6">
+              <h2 className="text-xl font-semibold mb-4">Tambah Kegiatan Baru</h2>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Nama Kegiatan</label>
+                  <input
+                    type="text"
+                    value={newActivity.nama}
+                    onChange={(e) => setNewActivity({...newActivity, nama: e.target.value})}
+                    className="w-full p-2 border rounded-md"
+                    placeholder="Contoh: Pembangunan Jalan"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Tambah Alokasi Anggaran</label>
+                  <div className="flex space-x-2">
+                    <input
+                      type="text"
+                      value={newAllocation.kode}
+                      onChange={(e) => setNewAllocation({...newAllocation, kode: e.target.value})}
+                      className="flex-1 p-2 border rounded-md"
+                      placeholder="Kode Anggaran"
+                    />
+                    <input
+                      type="number"
+                      value={newAllocation.jumlah || ''}
+                      onChange={(e) => setNewAllocation({...newAllocation, jumlah: Number(e.target.value)})}
+                      className="w-32 p-2 border rounded-md"
+                      placeholder="Jumlah"
+                    />
+                    <button
+                      onClick={handleAddAllocation}
+                      className="bg-blue-100 text-blue-700 px-3 rounded-md hover:bg-blue-200"
+                    >
+                      Tambah
+                    </button>
+                  </div>
+                </div>
+
+                {newActivity.allocations.length > 0 && (
+                  <div className="border-t pt-3">
+                    <h4 className="font-medium text-gray-700 mb-2">Daftar Alokasi</h4>
+                    <ul className="space-y-2">
+                      {newActivity.allocations.map((alloc, idx) => (
+                        <li key={idx} className="flex justify-between items-center bg-gray-50 p-2 rounded">
+                          <div>
+                            <span className="font-medium">{alloc.kode}</span>
+                            <span className="ml-2 text-gray-600">Rp {alloc.jumlah.toLocaleString('id-ID')}</span>
+                          </div>
+                          <button
+                            onClick={() => handleRemoveAllocation(idx)}
+                            className="text-red-500 hover:text-red-700"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="mt-2 text-right font-medium">
+                      Total: Rp {calculateTotalAllocation(newActivity.allocations).toLocaleString('id-ID')}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-end space-x-3 pt-4 border-t">
+                  <button
+                    onClick={() => setShowActivityForm(false)}
+                    className="px-4 py-2 text-gray-700 border rounded-md hover:bg-gray-50"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    onClick={handleAddActivity}
+                    disabled={!newActivity.nama || newActivity.allocations.length === 0}
+                    className={`px-4 py-2 text-white rounded-md ${!newActivity.nama || newActivity.allocations.length === 0 ? 'bg-gray-300 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+                  >
+                    Simpan Kegiatan
+                  </button>
+                </div>
               </div>
             </div>
           </div>
