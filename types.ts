@@ -15,5 +15,5 @@ export interface Activity {
 export interface ProcessingResult {
   finalData: ExcelData;
   totals: number[];
-  preview: ExcelData;
+  processedDataForPreview: ExcelData;
 }
