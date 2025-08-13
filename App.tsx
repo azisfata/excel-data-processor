@@ -1,10 +1,10 @@
-
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
-import { useDropzone } from 'react-dropzone';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { useDropzone, type DropzoneOptions } from 'react-dropzone';
 import { ProcessingResult, Activity, BudgetAllocation } from './types';
 import { processExcelData, downloadExcelFile, parseExcelFile } from './services/excelProcessor';
 import { createHierarchy, flattenTree } from './utils/hierarchy';
 import * as supabaseService from './services/supabaseService';
+import { supabase } from './utils/supabase';
 
 // --- Icon Components ---
 const UploadIcon = () => (
@@ -30,6 +30,7 @@ const InitializingSpinner = () => (
 );
 
 
+
 // --- Main App Component ---
 export default function App() {
   // Loading states
@@ -43,6 +44,14 @@ export default function App() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [lastUpdated, setLastUpdated] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+  const [history, setHistory] = useState<Array<{
+    id: string;
+    fileName: string;
+    formattedDate: string;
+    createdAt: string;
+  }>>([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const historyRef = useRef<HTMLDivElement>(null);
 
   // UI states
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
@@ -55,6 +64,187 @@ export default function App() {
   // Form states
   const [newActivity, setNewActivity] = useState<Omit<Activity, 'id'>>({ nama: '', allocations: [] });
   const [newAllocation, setNewAllocation] = useState<BudgetAllocation>({ kode: '', jumlah: 0 });
+
+  // --- UI Components ---
+  const HistoryDropdown = () => (
+    <div className="relative" ref={historyRef}>
+      <button
+        onClick={() => setShowHistory(!showHistory)}
+        className="flex items-center space-x-1 text-xs text-gray-600 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-md transition-colors"
+      >
+        <span>Riwayat</span>
+        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      
+      {showHistory && (
+        <div className="absolute right-0 mt-2 w-64 bg-white rounded-md shadow-lg overflow-hidden z-50 border border-gray-200">
+          <div className="py-1">
+            {history.length === 0 ? (
+              <div className="px-4 py-2 text-sm text-gray-500">Tidak ada riwayat</div>
+            ) : (
+              history.map((item) => (
+                <div key={item.id} className="group relative">
+                  <button
+                    onClick={() => loadHistoricalResult(item.id)}
+                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900 pr-8"
+                  >
+                    <div className="font-medium truncate">{item.fileName}</div>
+                    <div className="text-xs text-gray-500">{item.formattedDate}</div>
+                  </button>
+                  <div 
+                    className="absolute right-2 top-1/2 -translate-y-1/2 z-50"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      console.log('Delete button clicked for ID:', item.id);
+                      deleteHistoryItem(item.id);
+                    }}
+                  >
+                    <button
+                      type="button"
+                      className="p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100 focus:outline-none"
+                      title="Hapus dari riwayat"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  const LastUpdatedBadge = () => (
+    <div className="flex items-center space-x-2">
+      <div className="text-xs text-gray-600 bg-gray-100 px-3 py-1.5 rounded-md">
+        <div>Diperbarui:</div>
+        <div className="whitespace-nowrap font-medium">{lastUpdated || 'Belum ada data'}</div>
+      </div>
+      <HistoryDropdown />
+    </div>
+  );
+
+  // Load history from Supabase
+  const loadHistory = useCallback(async () => {
+    try {
+      const historyData = await supabaseService.getAllProcessedResults();
+      setHistory(historyData.map(item => ({
+        id: item.id,
+        fileName: item.fileName,
+        formattedDate: item.formattedDate,
+        createdAt: item.createdAt
+      })));
+    } catch (err) {
+      console.error("Error loading history:", err);
+      setError("Gagal memuat riwayat pemrosesan.");
+    }
+  }, []);
+
+  // Delete a history item
+  const deleteHistoryItem = useCallback(async (id: string) => {
+    console.log('Delete initiated for ID:', id);
+    
+    // Show confirmation dialog
+    const confirmMessage = 'Apakah Anda yakin ingin menghapus riwayat ini?';
+    console.log('Showing confirmation dialog...');
+    const isConfirmed = window.confirm(confirmMessage);
+    console.log('User confirmed:', isConfirmed);
+    
+    if (!isConfirmed) return;
+
+    try {
+      console.log('Attempting to delete history item with ID:', id);
+      
+      // First, try to fetch the record to ensure it exists
+      const { data: existing, error: fetchError } = await supabase
+        .from('processed_results')
+        .select('id')
+        .eq('id', id)
+        .single();
+        
+      console.log('Fetch result:', { existing, fetchError });
+      
+      if (fetchError) {
+        console.error('Error fetching record:', fetchError);
+        throw new Error('Gagal memeriksa data yang akan dihapus');
+      }
+      
+      if (!existing) {
+        throw new Error('Data tidak ditemukan');
+      }
+      
+      // If we get here, the record exists - proceed with deletion
+      const { error: deleteError } = await supabase
+        .from('processed_results')
+        .delete()
+        .eq('id', id);
+
+      if (deleteError) {
+        console.error('Supabase delete error:', deleteError);
+        throw deleteError;
+      }
+      
+      console.log('Successfully deleted record with ID:', id);
+      
+      // Update local state directly for immediate UI update
+      setHistory(prev => prev.filter(item => item.id !== id));
+      
+      // Also refresh from server to ensure consistency
+      loadHistory().catch(err => {
+        console.error('Error refreshing history after delete:', err);
+      });
+    } catch (err) {
+      console.error('Error in deleteHistoryItem:', err);
+      setError('Gagal menghapus riwayat');
+    }
+  }, [loadHistory]);
+
+  // Load a specific historical result
+  const loadHistoricalResult = useCallback(async (id: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('processed_results')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (error || !data) throw error || new Error('Data tidak ditemukan');
+
+      const result: ProcessingResult = {
+        finalData: data.processed_data,
+        totals: data.totals,
+        processedDataForPreview: data.processed_data?.slice(0, 100) || []
+      };
+
+      setResult(result);
+      setLastUpdated(new Date(data.created_at).toLocaleString('id-ID'));
+      setShowHistory(false);
+    } catch (err) {
+      console.error("Error loading historical result:", err);
+      setError("Gagal memuat data riwayat yang dipilih.");
+    }
+  }, []);
+
+  // Close history dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (historyRef.current && !historyRef.current.contains(event.target as Node)) {
+        setShowHistory(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   // Initial data loading from Supabase
   useEffect(() => {
@@ -77,6 +267,9 @@ export default function App() {
         if (maxDepthSetting) {
           setMaxDepth(parseInt(maxDepthSetting, 10));
         }
+
+        // Load history after initial data
+        await loadHistory();
       } catch (err) {
         console.error("Error loading initial data:", err);
         setError("Gagal memuat data dari server. Silakan segarkan halaman.");
@@ -136,6 +329,51 @@ export default function App() {
     if (!result || typeof result.totals[0] !== 'number' || result.totals[0] <= 0) return 0;
     if (typeof result.totals[4] !== 'number') return 0;
     return (result.totals[4] / result.totals[0]) * 100;
+  }, [result]);
+
+  // Calculate level 7 account totals
+  const level7Totals = useMemo(() => {
+    if (!result) return [];
+    
+    const totalsMap = new Map();
+    
+    // Process all rows to find level 7 accounts
+    result.finalData.forEach(row => {
+      const kode = row[0];
+      if (typeof kode === 'string') {
+        const parts = kode.split('.');
+        if (parts.length === 7) { // Level 7 account code
+          const accountCode = parts[6];
+          const paguRevisi = Number(row[2]) || 0;
+          const realisasi = Number(row[6]) || 0;
+          
+          if (totalsMap.has(accountCode)) {
+            const current = totalsMap.get(accountCode);
+            current.paguRevisi += paguRevisi;
+            current.realisasi += realisasi;
+          } else {
+            totalsMap.set(accountCode, {
+              code: accountCode,
+              uraian: row[1] || `Akun ${accountCode}`,
+              paguRevisi,
+              realisasi,
+              persentase: 0,
+              sisa: 0
+            });
+          }
+        }
+      }
+    });
+    
+    // Calculate percentages and remaining
+    const totals = Array.from(totalsMap.values()).map(item => ({
+      ...item,
+      persentase: item.paguRevisi > 0 ? (item.realisasi / item.paguRevisi) * 100 : 0,
+      sisa: item.paguRevisi - item.realisasi
+    }));
+    
+    // Sort by account code
+    return totals.sort((a, b) => a.code.localeCompare(b.code));
   }, [result]);
 
   useEffect(() => {
@@ -223,7 +461,10 @@ export default function App() {
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
     },
     multiple: false,
-  });
+    onDragEnter: undefined,
+    onDragOver: undefined,
+    onDragLeave: undefined,
+  } as any);
 
   const handleDownload = () => {
       if (!result) return;
@@ -307,10 +548,7 @@ export default function App() {
                 <p className="text-sm text-gray-600">Informasi Pagu dan Realisasi</p>
               </div>
               {lastUpdated && (
-                <div className="text-xs text-gray-600 bg-gray-100 px-3 py-1.5 rounded-md">
-                  <div>Diperbarui:</div>
-                  <div className="whitespace-nowrap font-medium">{lastUpdated}</div>
-                </div>
+                <LastUpdatedBadge />
               )}
             </div>
 
@@ -344,15 +582,64 @@ export default function App() {
               </div>
             </div>
 
+            {/* Level 7 Account Totals */}
+            {level7Totals.length > 0 && (
+              <div className="bg-white shadow-md rounded-lg overflow-hidden border border-gray-200">
+                <div className="p-4 bg-gray-50 border-b border-gray-200">
+                  <h3 className="text-lg font-medium text-gray-800">Rekapitulasi per Akun</h3>
+                </div>
+                <div className="p-6 space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {level7Totals.map((item, index) => (
+                      <div key={index} className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm hover:shadow-md transition-shadow">
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <h4 className="font-medium text-gray-900">{item.uraian}</h4>
+                            <p className="text-xs text-gray-500">Kode: {item.code}</p>
+                          </div>
+                          <span className="text-sm font-medium text-blue-600">
+                            {item.persentase.toFixed(1)}%
+                          </span>
+                        </div>
+                        
+                        <div className="w-full bg-gray-100 rounded-full h-2.5 mb-2">
+                          <div 
+                            className="bg-gradient-to-r from-indigo-500 to-indigo-600 h-full rounded-full" 
+                            style={{ width: `${Math.min(100, item.persentase)}%` }}
+                          />
+                        </div>
+                        
+                        <div className="grid grid-cols-3 gap-2 text-xs mt-2">
+                          <div className="text-center">
+                            <p className="text-gray-500">Pagu</p>
+                            <p className="font-medium">{item.paguRevisi.toLocaleString('id-ID')}</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-gray-500">Realisasi</p>
+                            <p className="font-medium">{item.realisasi.toLocaleString('id-ID')}</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-gray-500">Sisa</p>
+                            <p className="font-medium">{item.sisa.toLocaleString('id-ID')}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Action Bar */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-3 rounded-lg shadow-sm border border-gray-200">
                 {/* Search and Filter */}
                 <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                        </svg>
+                        <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
                       </div>
                       <input
                         type="text"

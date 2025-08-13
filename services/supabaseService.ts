@@ -5,6 +5,47 @@ import { ProcessingResult, Activity } from '../types';
 // --- Processed Results ---
 
 /**
+ * Fetches all processed results from Supabase, ordered by creation date (newest first).
+ * @returns An array of objects containing the result data and metadata.
+ */
+export async function getAllProcessedResults() {
+  const { data, error } = await supabase
+    .from('processed_results')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching processed results:', error);
+    return [];
+  }
+
+  return data.map(item => {
+    const now = new Date(item.created_at);
+    const dateOptions: Intl.DateTimeFormatOptions = {
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+    };
+    const timeOptions: Intl.DateTimeFormatOptions = {
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+    };
+    const dateStr = now.toLocaleDateString('id-ID', dateOptions);
+    const timeStr = now.toLocaleTimeString('id-ID', timeOptions);
+    const formattedDate = `${dateStr} pukul ${timeStr}`;
+
+    return {
+      id: item.id,
+      fileName: item.file_name || 'File tanpa nama',
+      createdAt: item.created_at,
+      formattedDate,
+      result: {
+        finalData: item.processed_data,
+        totals: item.totals,
+        processedDataForPreview: item.processed_data?.slice(0, 100) || []
+      }
+    };
+  });
+}
+
+/**
  * Fetches the most recent processed Excel data from Supabase.
  * @returns An object containing the latest result and the update timestamp, or null if none found.
  */
