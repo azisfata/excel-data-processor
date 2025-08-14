@@ -221,7 +221,8 @@ export default function App() {
       const result: ProcessingResult = {
         finalData: data.processed_data,
         totals: data.totals,
-        processedDataForPreview: data.processed_data?.slice(0, 100) || []
+        processedDataForPreview: data.processed_data?.slice(0, 100) || [],
+        accountNameMap: data.account_name_map ? new Map(Object.entries(data.account_name_map)) : new Map()
       };
 
       setResult(result);
@@ -353,9 +354,11 @@ export default function App() {
             current.paguRevisi += paguRevisi;
             current.realisasi += realisasi;
           } else {
+            // Use accountNameMap to get the account name if available
+            const accountName = result.accountNameMap?.get(accountCode) || row[1] || `Akun ${accountCode}`;
             totalsMap.set(accountCode, {
               code: accountCode,
-              uraian: row[1] || `Akun ${accountCode}`,
+              uraian: accountName,
               paguRevisi,
               realisasi,
               persentase: 0,
@@ -608,7 +611,7 @@ export default function App() {
                           <div className="space-y-2">
                             <div className="flex justify-between items-start">
                               <div className="flex-1 min-w-0">
-                                <h4 className="text-sm font-medium text-gray-900 truncate leading-tight">{item.uraian}</h4>
+                                <h4 className="text-sm font-medium text-gray-900 break-words">{item.uraian}</h4>
                                 <p className="text-xs text-gray-500">{item.code}</p>
                               </div>
                               <span className="text-xs font-medium bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full ml-2">

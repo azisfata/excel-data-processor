@@ -39,7 +39,8 @@ export async function getAllProcessedResults() {
       result: {
         finalData: item.processed_data,
         totals: item.totals,
-        processedDataForPreview: item.processed_data?.slice(0, 100) || []
+        processedDataForPreview: item.processed_data?.slice(0, 100) || [],
+        accountNameMap: item.account_name_map ? new Map(Object.entries(item.account_name_map)) : new Map()
       }
     };
   });
@@ -58,30 +59,18 @@ export async function getLatestProcessedResult(): Promise<{ result: ProcessingRe
     .single();
 
   if (error || !data) {
-    if (error && error.code !== 'PGRST116') { // PGRST116: "The result contains 0 rows"
-        console.error('Error fetching latest result:', error);
-    }
     return null;
   }
 
-  const result: ProcessingResult = {
-    finalData: data.processed_data,
-    totals: data.totals,
-    processedDataForPreview: data.processed_data.slice(0, 100)
+  return {
+    result: {
+      finalData: data.processed_data,
+      totals: data.totals,
+      processedDataForPreview: data.processed_data?.slice(0, 100) || [],
+      accountNameMap: data.account_name_map ? new Map(Object.entries(data.account_name_map)) : new Map()
+    },
+    lastUpdated: new Date(data.created_at).toLocaleString('id-ID')
   };
-
-  const now = new Date(data.created_at);
-  const dateOptions: Intl.DateTimeFormatOptions = {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
-  };
-  const timeOptions: Intl.DateTimeFormatOptions = {
-    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
-  };
-  const dateStr = now.toLocaleDateString('id-ID', dateOptions);
-  const timeStr = now.toLocaleTimeString('id-ID', timeOptions);
-  const formattedDate = `${dateStr} pukul ${timeStr}`;
-
-  return { result, lastUpdated: formattedDate };
 }
 
 /**
@@ -90,17 +79,24 @@ export async function getLatestProcessedResult(): Promise<{ result: ProcessingRe
  * @param fileName The name of the original file.
  */
 export async function saveProcessedResult(result: ProcessingResult, fileName: string): Promise<void> {
+  // Convert Map to plain object for storage
+  const accountNameMapObj = result.accountNameMap ? 
+    Object.fromEntries(result.accountNameMap) : {};
+
   const { error } = await supabase
     .from('processed_results')
-    .insert({
-      file_name: fileName,
-      processed_data: result.finalData,
-      totals: result.totals,
-    });
+    .insert([
+      {
+        file_name: fileName,
+        processed_data: result.finalData,
+        totals: result.totals,
+        account_name_map: accountNameMapObj
+      },
+    ]);
 
   if (error) {
     console.error('Error saving processed result:', error);
-    throw new Error('Gagal menyimpan hasil pemrosesan ke database.');
+    throw error;
   }
 }
 

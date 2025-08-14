@@ -16,4 +16,5 @@ export interface ProcessingResult {
   finalData: ExcelData;
   totals: number[];
   processedDataForPreview: ExcelData;
+  accountNameMap: Map<string, string>;
 }

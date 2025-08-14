@@ -59,15 +59,45 @@ export function processExcelData(data: ExcelData): ProcessingResult {
             return !isColumnToDelete;
         });
     });
-    
+
+    // Log dataWithColsRemoved2
+    console.log('=== DATA DENGAN KOLOM YANG TELAH DIHAPUS ===');
+    console.log('Jumlah baris:', dataWithColsRemoved2.length);
+    if (dataWithColsRemoved2.length > 0) {
+        console.log('Jumlah kolom per baris:', dataWithColsRemoved2[0].length);
+        console.log('Contoh data (5 baris pertama):', JSON.stringify(dataWithColsRemoved2.slice(0, 5), null, 2));
+    }
+
     // Step 4: Filter and calculate totals on the final data structure
     const { finalData, totals } = filterDanHitungTotal(dataWithColsRemoved2);
+
+    // Create a map of account codes to their names from dataWithColsRemoved2
+    const accountNameMap = new Map();
+    dataWithColsRemoved2.forEach(row => {
+        if (row.length > 1 && typeof row[0] === 'string' && row[0].trim() !== '') {
+            const fullCode = row[0].trim();
+            const accountName = (row[1] || '').trim();
+            
+            // Only process if we have both code and name
+            if (fullCode && accountName) {
+                // For codes with dots, only take the part after the last dot
+                const codeParts = fullCode.split('.');
+                const shortCode = codeParts[codeParts.length - 1];
+                
+                // Only add if this short code is not already in the map
+                if (!accountNameMap.has(shortCode)) {
+                    accountNameMap.set(shortCode, accountName);
+                }
+            }
+        }
+    });
 
     return { 
         finalData, // Data with columns removed, ready for download
         totals,
         // The preview now shows the exact same data as the download file (limited to 100 rows for performance).
-        processedDataForPreview: finalData.slice(0, 100) 
+        processedDataForPreview: finalData.slice(0, 100),
+        accountNameMap // Map of account codes to account names
     };
 }
 
