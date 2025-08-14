@@ -651,56 +651,58 @@ export default function App() {
 
             {/* Action Bar */}
             <div className="bg-white shadow-sm rounded-lg p-4 mb-6">
-                {/* Search and Filter */}
-                <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"
-                            >
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                      </div>
-                      <input
-                        type="text"
-                        placeholder="Cari kode/uraian..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="block w-full sm:w-64 pl-10 pr-8 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
-                        title="Contoh: a and b atau x or y"
-                      />
-                      <div className="absolute inset-y-0 right-0 flex items-center pr-2">
-                        <div className="relative group">
-                            <svg 
-                              className="h-4 w-4 text-gray-400 hover:text-gray-600 cursor-help" 
-                              fill="none" 
-                              viewBox="0 0 24 24" 
-                              stroke="currentColor"
-                            >
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            <div className="absolute z-20 invisible group-hover:visible w-72 bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-sm text-gray-700"
-                              style={{ top: 'calc(100% + 8px)', right: '0' }}
-                            >
-                              <p className="font-semibold text-gray-900 border-b pb-1 mb-2">Panduan Pencarian</p>
-                              <p><code className="text-blue-600">ATK AND 521211</code>: Mencari baris yang mengandung KEDUA kata.</p>
-                              <p><code className="text-blue-600">ATK OR 521211</code>: Mencari baris yang mengandung SALAH SATU kata.</p>
-                              <p className="text-xs text-gray-500 mt-2">• Tidak case-sensitive. Kombinasikan dengan `AND` atau `OR`.</p>
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 w-full">
+                    {/* Search and Filter */}
+                    <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                        <div className="relative flex-1 sm:flex-none">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </div>
+                            <input
+                                type="text"
+                                placeholder="Cari kode/uraian..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="block w-full sm:w-64 pl-10 pr-8 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+                                title="Contoh: a and b atau x or y"
+                            />
+                            <div className="absolute inset-y-0 right-0 flex items-center pr-2">
+                                <div className="relative group">
+                                    <svg 
+                                        className="h-4 w-4 text-gray-400 hover:text-gray-600 cursor-help" 
+                                        fill="none" 
+                                        viewBox="0 0 24 24" 
+                                        stroke="currentColor"
+                                    >
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <div className="absolute z-20 invisible group-hover:visible w-72 bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-sm text-gray-700"
+                                        style={{ top: 'calc(100% + 8px)', right: '0' }}
+                                    >
+                                        <p className="font-semibold text-gray-900 border-b pb-1 mb-2">Panduan Pencarian</p>
+                                        <p><code className="text-blue-600">ATK AND 521211</code>: Mencari baris yang mengandung KEDUA kata.</p>
+                                        <p><code className="text-blue-600">ATK OR 521211</code>: Mencari baris yang mengandung SALAH SATU kata.</p>
+                                        <p className="text-xs text-gray-500 mt-2">• Tidak case-sensitive. Kombinasikan dengan `AND` atau `OR`.</p>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                      </div>
+                        <div className="flex items-center">
+                            <label htmlFor="depthSelect" className="text-sm font-medium text-gray-700 mr-2">Level:</label>
+                            <select id="depthSelect" value={maxDepth} onChange={(e) => handleDepthChange(parseInt(e.target.value, 10))} className="block rounded-md border-gray-300 py-1.5 pl-2 pr-8 text-sm">
+                                {[1, 2, 3, 4, 5, 6, 7, 8].map(l => <option key={l} value={l}>{l}</option>)}
+                            </select>
+                        </div>
                     </div>
-                    <div className="flex items-center">
-                        <label htmlFor="depthSelect" className="text-sm font-medium text-gray-700 mr-2">Level:</label>
-                        <select id="depthSelect" value={maxDepth} onChange={(e) => handleDepthChange(parseInt(e.target.value, 10))} className="block rounded-md border-gray-300 py-1.5 pl-2 pr-8 text-sm">
-                            {[1, 2, 3, 4, 5, 6, 7, 8].map(l => <option key={l} value={l}>{l}</option>)}
-                        </select>
+                    
+                    {/* Right-aligned Upload/Download Buttons */}
+                    <div className="flex space-x-1.5 w-full sm:w-auto mt-2 sm:mt-0">
+                        <button onClick={() => document.getElementById('file-upload-hidden')?.click()} className="inline-flex items-center justify-center px-3 py-1.5 text-xs text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors w-1/2 sm:w-auto">Unggah Baru</button>
+                        <input id="file-upload-hidden" type="file" className="hidden" accept=".xls,.xlsx" onChange={(e) => e.target.files?.[0] && processFile(e.target.files[0])} />
+                        <button onClick={handleDownload} className="inline-flex items-center justify-center px-3 py-1.5 text-xs text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors w-1/2 sm:w-auto">Unduh Hasil</button>
                     </div>
-                </div>
-                {/* Upload/Download Buttons */}
-                <div className="flex space-x-1.5">
-                    <button onClick={() => document.getElementById('file-upload-hidden')?.click()} className="inline-flex items-center px-3 py-1 text-xs text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors">Unggah Baru</button>
-                    <input id="file-upload-hidden" type="file" className="hidden" accept=".xls,.xlsx" onChange={(e) => e.target.files?.[0] && processFile(e.target.files[0])} />
-                    <button onClick={handleDownload} className="inline-flex items-center px-3 py-1 text-xs text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors">Unduh Hasil</button>
                 </div>
             </div>
 
