@@ -40,6 +40,7 @@ export default function App() {
 
   // Data states
   const [file, setFile] = useState<File | null>(null);
+  const [showAccountSummary, setShowAccountSummary] = useState(true);
   const [result, setResult] = useState<ProcessingResult | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [lastUpdated, setLastUpdated] = useState<string>('');
@@ -585,53 +586,71 @@ export default function App() {
             {/* Level 7 Account Totals */}
             {level7Totals.length > 0 && (
               <div className="bg-white shadow-md rounded-lg overflow-hidden border border-gray-200">
-                <div className="p-4 bg-gray-50 border-b border-gray-200">
+                <div 
+                  className="p-4 bg-gray-50 border-b border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors duration-200 flex justify-between items-center"
+                  onClick={() => setShowAccountSummary(!showAccountSummary)}
+                >
                   <h3 className="text-lg font-medium text-gray-800">Rekapitulasi per Akun</h3>
+                  <svg 
+                    className={`w-5 h-5 text-gray-500 transform transition-transform duration-200 ${showAccountSummary ? 'rotate-180' : ''}`} 
+                    fill="none" 
+                    viewBox="0 0 24 24" 
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
                 </div>
-                <div className="p-6 space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {level7Totals.map((item, index) => (
-                      <div key={index} className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm hover:shadow-md transition-shadow">
-                        <div className="flex justify-between items-start mb-2">
-                          <div>
-                            <h4 className="font-medium text-gray-900">{item.uraian}</h4>
-                            <p className="text-xs text-gray-500">Kode: {item.code}</p>
+                {showAccountSummary && (
+                  <div className="p-6 space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {level7Totals.map((item, index) => (
+                        <div key={index} className="bg-white rounded-lg border border-gray-200 p-3 shadow-sm hover:shadow-md transition-shadow">
+                          <div className="space-y-2">
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1 min-w-0">
+                                <h4 className="text-sm font-medium text-gray-900 truncate leading-tight">{item.uraian}</h4>
+                                <p className="text-xs text-gray-500">{item.code}</p>
+                              </div>
+                              <span className="text-xs font-medium bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full ml-2">
+                                {item.paguRevisi > 0 ? `${Math.round((item.realisasi / item.paguRevisi) * 100)}%` : '0%'}
+                              </span>
+                            </div>
+                            
+                            <div className="w-full bg-gray-100 rounded-full h-1.5">
+                              <div 
+                                className="h-full rounded-full transition-all duration-300 ease-out" 
+                                style={{ 
+                                  width: `${item.paguRevisi > 0 ? Math.min(100, Math.round((item.realisasi / item.paguRevisi) * 100)) : 0}%`,
+                                  backgroundColor: item.paguRevisi > 0 ? '#3b82f6' : '#e5e7eb' // Blue if has budget, gray if not
+                                }}
+                              ></div>
+                            </div>
+                            
+                            <div className="grid grid-cols-3 gap-1 text-xs">
+                              <div>
+                                <p className="text-gray-500">Pagu</p>
+                                <p className="font-medium">{item.paguRevisi?.toLocaleString('id-ID') || '0'}</p>
+                              </div>
+                              <div className="text-center">
+                                <p className="text-gray-500">Realisasi</p>
+                                <p className="font-medium">{item.realisasi?.toLocaleString('id-ID') || '0'}</p>
+                              </div>
+                              <div className="text-center">
+                                <p className="text-gray-500">Sisa</p>
+                                <p className="font-medium">{(item.paguRevisi - item.realisasi)?.toLocaleString('id-ID') || '0'}</p>
+                              </div>
+                            </div>
                           </div>
-                          <span className="text-sm font-medium text-blue-600">
-                            {item.persentase.toFixed(1)}%
-                          </span>
                         </div>
-                        
-                        <div className="w-full bg-gray-100 rounded-full h-2.5 mb-2">
-                          <div 
-                            className="bg-gradient-to-r from-indigo-500 to-indigo-600 h-full rounded-full" 
-                            style={{ width: `${Math.min(100, item.persentase)}%` }}
-                          />
-                        </div>
-                        
-                        <div className="grid grid-cols-3 gap-2 text-xs mt-2">
-                          <div className="text-center">
-                            <p className="text-gray-500">Pagu</p>
-                            <p className="font-medium">{item.paguRevisi.toLocaleString('id-ID')}</p>
-                          </div>
-                          <div className="text-center">
-                            <p className="text-gray-500">Realisasi</p>
-                            <p className="font-medium">{item.realisasi.toLocaleString('id-ID')}</p>
-                          </div>
-                          <div className="text-center">
-                            <p className="text-gray-500">Sisa</p>
-                            <p className="font-medium">{item.sisa.toLocaleString('id-ID')}</p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             )}
 
             {/* Action Bar */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-3 rounded-lg shadow-sm border border-gray-200">
+            <div className="bg-white shadow-sm rounded-lg p-4 mb-6">
                 {/* Search and Filter */}
                 <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
                     <div className="relative">
