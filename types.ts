@@ -3,12 +3,14 @@ export type ExcelData = ExcelRow[];
 
 export interface BudgetAllocation {
   kode: string;
+  uraian?: string;
   jumlah: number;
 }
 
 export interface Activity {
   id: string;
   nama: string;
+  status?: string;
   allocations: BudgetAllocation[];
 }
 

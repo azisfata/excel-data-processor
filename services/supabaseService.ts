@@ -112,6 +112,7 @@ export async function getActivities(): Promise<Activity[]> {
         .select(`
             id,
             nama,
+            status,
             allocations (
                 id,
                 kode,
@@ -128,6 +129,7 @@ export async function getActivities(): Promise<Activity[]> {
     return data.map((activity: any) => ({
         id: activity.id,
         nama: activity.nama,
+        status: activity.status || 'draft',
         allocations: activity.allocations.map((alloc: any) => ({
             kode: alloc.kode,
             jumlah: alloc.jumlah,
@@ -144,7 +146,10 @@ export async function getActivities(): Promise<Activity[]> {
 export async function addActivity(newActivity: Omit<Activity, 'id'>): Promise<Activity> {
     const { data: activityData, error: activityError } = await supabase
         .from('activities')
-        .insert({ nama: newActivity.nama })
+        .insert({ 
+            nama: newActivity.nama,
+            status: newActivity.status || 'draft'  // Default status 'draft' jika tidak diset
+        })
         .select()
         .single();
 
@@ -176,6 +181,62 @@ export async function addActivity(newActivity: Omit<Activity, 'id'>): Promise<Ac
     return {
         ...newActivity,
         id: newActivityId,
+    };
+}
+
+/**
+ * Updates an existing activity and its allocations in the database.
+ * @param id The ID of the activity to update.
+ * @param updatedActivity The updated activity data.
+ * @returns The updated activity.
+ */
+export async function updateActivity(id: string, updatedActivity: Omit<Activity, 'id'>): Promise<Activity> {
+    // Update the activity
+    const { error: activityError } = await supabase
+        .from('activities')
+        .update({ 
+            nama: updatedActivity.nama,
+            status: updatedActivity.status || 'draft'
+        })
+        .match({ id });
+
+    if (activityError) {
+        console.error('Error updating activity:', activityError);
+        throw new Error('Gagal memperbarui kegiatan.');
+    }
+
+    // Delete existing allocations
+    const { error: deleteAllocationsError } = await supabase
+        .from('allocations')
+        .delete()
+        .match({ activity_id: id });
+
+    if (deleteAllocationsError) {
+        console.error('Error removing old allocations:', deleteAllocationsError);
+        throw new Error('Gagal memperbarui alokasi kegiatan.');
+    }
+
+    // Add new allocations if any
+    if (updatedActivity.allocations.length > 0) {
+        const allocationsToInsert = updatedActivity.allocations.map(alloc => ({
+            activity_id: id,
+            kode: alloc.kode,
+            jumlah: alloc.jumlah,
+        }));
+
+        const { error: allocationError } = await supabase
+            .from('allocations')
+            .insert(allocationsToInsert);
+
+        if (allocationError) {
+            console.error('Error adding new allocations:', allocationError);
+            throw new Error('Gagal menambahkan alokasi untuk kegiatan.');
+        }
+    }
+    
+    return {
+        ...updatedActivity,
+        id,
     };
 }
 

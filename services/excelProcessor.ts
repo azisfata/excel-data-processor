@@ -298,7 +298,48 @@ function filterDanHitungTotal(data: ExcelData): { finalData: ExcelData; totals: 
  * @param fileName The desired name for the downloaded file.
  */
 export function downloadExcelFile(data: ExcelData, fileName: string): void {
-    const worksheet = XLSX.utils.aoa_to_sheet(data);
+    // Define headers
+    const headers = [
+        'Kode',
+        'Uraian',
+        'Pagu Revisi',
+        'Lock Pagu',
+        'Periode Lalu',
+        'Periode Ini',
+        's.d. Periode'
+    ];
+
+    // Add headers to the data if not already present
+    const dataWithHeaders = [headers, ...data];
+    
+    const worksheet = XLSX.utils.aoa_to_sheet(dataWithHeaders);
+    
+    // Style the header row
+    const headerStyle = {
+        font: { bold: true, color: { rgb: 'FFFFFF' } },
+        fill: { fgColor: { rgb: '1E40AF' } },
+        alignment: { horizontal: 'center' }
+    };
+    
+    // Apply style to header cells
+    const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
+    for (let C = range.s.c; C <= range.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: 0, c: C });
+        if (!worksheet[cellAddress]) continue;
+        worksheet[cellAddress].s = headerStyle;
+    }
+    
+    // Auto-size columns
+    worksheet['!cols'] = [
+        { wch: 20 }, // Kode
+        { wch: 50 }, // Uraian
+        { wch: 15 }, // Pagu Revisi
+        { wch: 15 }, // Lock Pagu
+        { wch: 15 }, // Periode Lalu
+        { wch: 15 }, // Periode Ini
+        { wch: 15 }  // s.d. Periode
+    ];
+    
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Hasil Olahan');
     XLSX.writeFile(workbook, fileName);
