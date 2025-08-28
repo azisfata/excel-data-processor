@@ -11,6 +11,7 @@ export interface Activity {
   id: string;
   nama: string;
   status?: string;
+  tanggal_pelaksanaan?: string;
   allocations: BudgetAllocation[];
 }
 

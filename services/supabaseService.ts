@@ -113,6 +113,7 @@ export async function getActivities(): Promise<Activity[]> {
             id,
             nama,
             status,
+            tanggal_pelaksanaan,
             allocations (
                 id,
                 kode,
@@ -148,7 +149,8 @@ export async function addActivity(newActivity: Omit<Activity, 'id'>): Promise<Ac
         .from('activities')
         .insert({ 
             nama: newActivity.nama,
-            status: newActivity.status || 'draft'  // Default status 'draft' jika tidak diset
+            status: newActivity.status || 'draft',  // Default status 'draft' jika tidak diset
+            tanggal_pelaksanaan: newActivity.tanggal_pelaksanaan || null
         })
         .select()
         .single();
@@ -196,7 +198,8 @@ export async function updateActivity(id: string, updatedActivity: Omit<Activity,
         .from('activities')
         .update({ 
             nama: updatedActivity.nama,
-            status: updatedActivity.status || 'draft'
+            status: updatedActivity.status || 'draft',
+            tanggal_pelaksanaan: updatedActivity.tanggal_pelaksanaan || null
         })
         .match({ id });
 
