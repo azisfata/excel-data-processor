@@ -40,9 +40,9 @@ const App: React.FC = () => {
   const [filteredData, setFilteredData] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [maxDepth, setMaxDepth] = useState(7);
-  const [isTableExpanded, setIsTableExpanded] = useState(true);
-  const [showAccountSummary, setShowAccountSummary] = useState(true);
-  const [showActivities, setShowActivities] = useState(true);
+  const [isTableExpanded, setIsTableExpanded] = useState(false);
+  const [showAccountSummary, setShowAccountSummary] = useState(false);
+  const [showActivities, setShowActivities] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState<any[]>([]);
   const [lastUpdated, setLastUpdated] = useState('');
@@ -712,7 +712,7 @@ const HistoryDropdown = () => (
                   <div className="max-w-3xl mx-auto">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-medium text-gray-700">Capaian Realisasi</span>
-                      <span className="text-sm font-semibold text-indigo-700">{progressPercentage.toFixed(1)}%</span>
+                      <span className="text-sm font-semibold text-indigo-700">{progressPercentage.toFixed(2)}%</span>
                     </div>
                     <div className="w-full bg-gray-100 rounded-full h-2.5"><div className="bg-gradient-to-r from-indigo-500 to-indigo-600 h-full rounded-full" style={{ width: `${progressPercentage}%` }}/></div>
                   </div>
@@ -749,7 +749,7 @@ const HistoryDropdown = () => (
                                 <p className="text-xs text-gray-500">{item.code}</p>
                               </div>
                               <span className="text-xs font-medium bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full ml-2">
-                                {item.paguRevisi > 0 ? `${Math.round((item.realisasi / item.paguRevisi) * 100)}%` : '0%'}
+                                {item.paguRevisi > 0 ? `${((item.realisasi / item.paguRevisi) * 100).toFixed(2)}%` : '0.00%'}
                               </span>
                             </div>
                             
