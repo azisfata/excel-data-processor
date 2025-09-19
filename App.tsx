@@ -41,7 +41,7 @@ const App: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [maxDepth, setMaxDepth] = useState(7);
   const [isTableExpanded, setIsTableExpanded] = useState(false);
-  const [showAccountSummary, setShowAccountSummary] = useState(false);
+  const [showAccountSummary, setShowAccountSummary] = useState(true);
   const [showActivities, setShowActivities] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState<any[]>([]);
