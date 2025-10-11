@@ -10,7 +10,17 @@ export default defineConfig(({ mode }) => {
       },
       server: {
         host: true,
-        allowedHosts: true
+        allowedHosts: true,
+        proxy: {
+          '/api': {
+            target: 'http://localhost:3001',
+            changeOrigin: true
+          },
+          '/activity-uploads': {
+            target: 'http://localhost:3001',
+            changeOrigin: true
+          }
+        }
       },
       resolve: {
         alias: {

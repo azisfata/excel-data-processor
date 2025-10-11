@@ -1,9 +1,10 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useDropzone, type DropzoneOptions } from 'react-dropzone';
-import { ProcessingResult, Activity, BudgetAllocation } from './types';
+import { ProcessingResult, Activity, ActivityAttachment, BudgetAllocation } from './types';
 import { processExcelData, downloadExcelFile, parseExcelFile } from './services/excelProcessor';
 import { createHierarchy, flattenTree } from './utils/hierarchy';
 import * as supabaseService from './services/supabaseService';
+import * as attachmentService from './services/activityAttachmentService';
 import { supabase } from './utils/supabase';
 
 // --- Icon Components ---
@@ -20,7 +21,9 @@ const App: React.FC = () => {
   const [newActivity, setNewActivity] = useState<Omit<Activity, 'id'>>({ 
     nama: '', 
     status: 'Rencana', 
-    allocations: [] 
+    allocations: [],
+    attachments: [],
+    tanggal_pelaksanaan: ''
   });
   const [isEditing, setIsEditing] = useState(false);
   const [editingActivityId, setEditingActivityId] = useState<string | null>(null);
@@ -31,6 +34,9 @@ const App: React.FC = () => {
   });
   const [showActivityForm, setShowActivityForm] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [activityAttachments, setActivityAttachments] = useState<ActivityAttachment[]>([]);
+  const [newAttachmentFiles, setNewAttachmentFiles] = useState<File[]>([]);
+  const [attachmentsToRemove, setAttachmentsToRemove] = useState<Set<string>>(new Set());
 
   // State for file processing
   const [isProcessing, setIsProcessing] = useState(false);
@@ -260,9 +266,13 @@ const HistoryDropdown = () => (
     async function loadInitialData() {
       setIsInitializing(true);
       try {
-        const [processedResultData, activitiesData, maxDepthSetting] = await Promise.all([
+        const [processedResultData, activitiesData, attachmentsMap, maxDepthSetting] = await Promise.all([
           supabaseService.getLatestProcessedResult(),
           supabaseService.getActivities(),
+          attachmentService.fetchActivityAttachments().catch((err) => {
+            console.error('Error loading attachments:', err);
+            return {} as Record<string, ActivityAttachment[]>;
+          }),
           supabaseService.getSetting('hierarchyMaxDepth')
         ]);
 
@@ -271,7 +281,12 @@ const HistoryDropdown = () => (
           setLastUpdated(processedResultData.lastUpdated);
         }
 
-        setActivities(activitiesData);
+        const attachmentsLookup: Record<string, ActivityAttachment[]> = attachmentsMap ?? {};
+        const mergedActivities = activitiesData.map(activity => ({
+          ...activity,
+          attachments: attachmentsLookup[activity.id] ?? []
+        }));
+        setActivities(mergedActivities);
 
         if (maxDepthSetting) {
           setMaxDepth(parseInt(maxDepthSetting, 10));
@@ -288,6 +303,15 @@ const HistoryDropdown = () => (
     }
     loadInitialData();
   }, []);
+
+  useEffect(() => {
+    if (showActivityForm && !isEditing) {
+      setNewActivity({ nama: '', allocations: [], status: 'Rencana', attachments: [], tanggal_pelaksanaan: '' });
+      setActivityAttachments([]);
+      setNewAttachmentFiles([]);
+      setAttachmentsToRemove(new Set());
+    }
+  }, [showActivityForm, isEditing]);
 
   // Format number with thousand separators
   const formatNumber = (num: string): string => {
@@ -330,25 +354,115 @@ const HistoryDropdown = () => (
     setNewActivity(prev => ({ ...prev, allocations: prev.allocations.filter((_, i) => i !== index) }));
   };
 
+  const handleAttachmentSelection = (files: FileList | File[] | null) => {
+    if (!files) return;
+    const incomingFiles = Array.isArray(files) ? files : Array.from(files);
+    if (!incomingFiles.length) return;
+
+    setNewAttachmentFiles(prev => {
+      const existingKeys = new Set(prev.map(file => `${file.name}_${file.lastModified}`));
+      const additions = incomingFiles.filter(file => {
+        const key = `${file.name}_${file.lastModified}`;
+        if (existingKeys.has(key)) {
+          return false;
+        }
+        existingKeys.add(key);
+        return true;
+      });
+      return [...prev, ...additions];
+    });
+  };
+
+  const handleRemoveNewAttachment = (index: number) => {
+    setNewAttachmentFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const toggleAttachmentRemoval = (attachmentId: string) => {
+    setAttachmentsToRemove(prev => {
+      const next = new Set(prev);
+      if (next.has(attachmentId)) {
+        next.delete(attachmentId);
+      } else {
+        next.add(attachmentId);
+      }
+      return next;
+    });
+  };
+
   const handleAddActivity = async () => {
     if (!newActivity.nama || newActivity.allocations.length === 0) return;
     setIsSaving(true);
     try {
+      let savedActivity: Activity;
+      const remainingAttachments = activityAttachments.filter(
+        attachment => !attachmentsToRemove.has(attachment.attachmentId)
+      );
+
+      const payload = {
+        ...newActivity,
+        attachments: remainingAttachments
+      };
+
       if (isEditing && editingActivityId) {
-        await supabaseService.updateActivity(editingActivityId, newActivity);
-        setActivities(prev => prev.map(activity => 
-          activity.id === editingActivityId ? { ...newActivity, id: editingActivityId } : activity
-        ));
+        await supabaseService.updateActivity(editingActivityId, payload);
+        savedActivity = { ...payload, id: editingActivityId };
       } else {
-        const addedActivity = await supabaseService.addActivity(newActivity);
-        setActivities(prev => [...prev, addedActivity]);
+        savedActivity = await supabaseService.addActivity(payload);
       }
-      setNewActivity({ nama: '', allocations: [], status: 'Rencana' });
+
+      if (isEditing && editingActivityId) {
+        for (const attachmentId of attachmentsToRemove) {
+          try {
+            await attachmentService.deleteActivityAttachment(editingActivityId, attachmentId);
+          } catch (attachmentErr) {
+            console.error('Error deleting attachment:', attachmentErr);
+            throw new Error('Gagal menghapus lampiran kegiatan.');
+          }
+        }
+      }
+
+      let updatedAttachments = [...remainingAttachments];
+
+      if (newAttachmentFiles.length > 0) {
+        try {
+          const uploaded = await attachmentService.uploadActivityAttachments(savedActivity.id, newAttachmentFiles);
+          updatedAttachments = [...updatedAttachments, ...uploaded];
+        } catch (uploadErr) {
+          console.error('Error uploading attachment(s):', uploadErr);
+          throw new Error('Gagal mengunggah lampiran kegiatan.');
+        }
+      }
+
+      const activityWithAttachments: Activity = {
+        ...savedActivity,
+        attachments: updatedAttachments
+      };
+
+      if (isEditing && editingActivityId) {
+        setActivities(prev => prev.map(activity => 
+          activity.id === editingActivityId ? activityWithAttachments : activity
+        ));
+        if (selectedActivity?.id === editingActivityId) {
+          setSelectedActivity(activityWithAttachments);
+        }
+      } else {
+        setActivities(prev => [...prev, activityWithAttachments]);
+      }
+
+      setNewActivity({ nama: '', allocations: [], status: 'Rencana', attachments: [], tanggal_pelaksanaan: '' });
+      setActivityAttachments([]);
+      setNewAttachmentFiles([]);
+      setAttachmentsToRemove(new Set());
       setShowActivityForm(false);
       setIsEditing(false);
       setEditingActivityId(null);
     } catch (err) {
-      setError(isEditing ? 'Gagal memperbarui kegiatan.' : 'Gagal menyimpan kegiatan baru.');
+      console.error('Error saving activity:', err);
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError(isEditing ? 'Gagal memperbarui kegiatan.' : 'Gagal menyimpan kegiatan baru.');
+      }
     } finally {
       setIsSaving(false);
     }
@@ -358,15 +472,23 @@ const HistoryDropdown = () => (
     setNewActivity({
       nama: activity.nama,
       status: activity.status || 'Rencana',
-      allocations: [...activity.allocations]
+      allocations: [...activity.allocations],
+      attachments: activity.attachments ?? [],
+      tanggal_pelaksanaan: activity.tanggal_pelaksanaan || ''
     });
+    setActivityAttachments(activity.attachments ?? []);
+    setNewAttachmentFiles([]);
+    setAttachmentsToRemove(new Set());
     setEditingActivityId(activity.id);
     setIsEditing(true);
     setShowActivityForm(true);
   };
 
   const handleCancelEdit = () => {
-    setNewActivity({ nama: '', allocations: [], status: 'Rencana' });
+    setNewActivity({ nama: '', allocations: [], status: 'Rencana', attachments: [], tanggal_pelaksanaan: '' });
+    setActivityAttachments([]);
+    setNewAttachmentFiles([]);
+    setAttachmentsToRemove(new Set());
     setIsEditing(false);
     setEditingActivityId(null);
     setShowActivityForm(false);
@@ -377,7 +499,13 @@ const HistoryDropdown = () => (
       setIsSaving(true);
       try {
         await supabaseService.removeActivity(id);
+        await attachmentService.deleteActivityAttachment(id).catch(err => {
+          console.warn('Failed to remove attachment for activity:', err);
+        });
         setActivities(prev => prev.filter(activity => activity.id !== id));
+        if (selectedActivity?.id === id) {
+          setSelectedActivity(null);
+        }
       } catch (err) {
         setError('Gagal menghapus kegiatan.');
       } finally {
@@ -595,6 +723,27 @@ const HistoryDropdown = () => (
                   </div>
                 )}
               </div>
+
+              {selectedActivity.attachments && selectedActivity.attachments.length > 0 && (
+                <div>
+                  <h4 className="font-medium text-gray-700 mb-2">Lampiran</h4>
+                  <div className="space-y-2">
+                    {selectedActivity.attachments.map(attachment => (
+                      <div key={attachment.attachmentId} className="flex items-center justify-between text-sm border border-gray-200 rounded-md px-3 py-2 bg-gray-50">
+                        <span className="text-gray-600 break-all pr-4">{attachment.fileName}</span>
+                        <a
+                          href={attachment.filePath}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center px-3 py-1.5 border border-blue-500 text-blue-600 rounded-md hover:bg-blue-50 transition"
+                        >
+                          Unduh
+                        </a>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div>
                 <h4 className="font-medium text-gray-700 mb-2">Alokasi Anggaran</h4>
@@ -1000,6 +1149,16 @@ const HistoryDropdown = () => (
                                                     {activity.allocations.length} alokasi • Total: {formatCurrency(activity.allocations.reduce((sum, alloc) => sum + (alloc.jumlah || 0), 0))}
                                                     {activity.status && ` • Status: ${activity.status}`}
                                                 </p>
+                                                {activity.attachments && activity.attachments.length > 0 && (
+                                                    <div className="mt-1 text-xs text-gray-500 flex items-center space-x-2">
+                                                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2v-7a2 2 0 00-.59-1.41l-5-5A2 2 0 0011.59 5H7a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                        </svg>
+                                                        <span className="truncate">
+                                                            {activity.attachments.length} lampiran
+                                                        </span>
+                                                    </div>
+                                                )}
                                             </div>
                                             <div className="flex space-x-2">
                                                 <button 
@@ -1124,6 +1283,93 @@ const HistoryDropdown = () => (
                       />
                     </div>
                     <p className="mt-1 text-xs text-gray-500">Pilih tanggal pelaksanaan kegiatan</p>
+                  </div>
+
+                  {/* Lampiran */}
+                  <div className="space-y-3">
+                    <label className="block text-sm font-medium text-gray-700">Lampiran Kegiatan</label>
+
+                    {activityAttachments.length > 0 && (
+                      <div className="space-y-2">
+                        {activityAttachments.map(attachment => {
+                          const isMarked = attachmentsToRemove.has(attachment.attachmentId);
+                          return (
+                            <div
+                              key={attachment.attachmentId}
+                              className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 border rounded-md text-sm ${isMarked ? 'border-red-300 bg-red-50' : 'border-gray-200 bg-gray-50'}`}
+                            >
+                              <div className="space-y-1">
+                                <p className={`break-all ${isMarked ? 'line-through text-red-600' : 'text-gray-700'}`}>
+                                  {attachment.fileName}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  Diunggah {new Date(attachment.uploadedAt).toLocaleString('id-ID')}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <a
+                                  href={attachment.filePath}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center px-3 py-1.5 border border-blue-500 text-blue-600 rounded-md hover:bg-blue-100 transition"
+                                >
+                                  Unduh
+                                </a>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleAttachmentRemoval(attachment.attachmentId)}
+                                  className={`text-xs font-medium ${isMarked ? 'text-gray-600 hover:text-gray-700' : 'text-red-600 hover:text-red-700'}`}
+                                >
+                                  {isMarked ? 'Batalkan' : 'Hapus'}
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {attachmentsToRemove.size > 0 && (
+                      <p className="text-xs text-yellow-600">
+                        Lampiran bertanda akan dihapus setelah Anda menyimpan perubahan.
+                      </p>
+                    )}
+
+                    {newAttachmentFiles.length > 0 && (
+                      <div className="space-y-2 text-xs text-gray-600">
+                        <p className="font-medium text-gray-700">Lampiran baru:</p>
+                        {newAttachmentFiles.map((file, index) => (
+                          <div key={`${file.name}-${file.lastModified}`} className="flex items-center justify-between gap-3 border border-dashed border-blue-200 rounded-md px-3 py-2 bg-blue-50/60">
+                            <span className="break-all">{file.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveNewAttachment(index)}
+                              className="text-red-500 hover:text-red-600"
+                            >
+                              Hapus
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div>
+                      <input
+                        id="activity-attachment"
+                        type="file"
+                        multiple
+                        className="block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                        onChange={(e) => {
+                          handleAttachmentSelection(e.target.files);
+                          if (e.target) {
+                            e.target.value = '';
+                          }
+                        }}
+                      />
+                      <p className="mt-1 text-xs text-gray-500">
+                        Anda dapat memilih beberapa file sekaligus. Format yang didukung: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG.
+                      </p>
+                    </div>
                   </div>
 
                 </div>

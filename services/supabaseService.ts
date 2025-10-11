@@ -131,6 +131,8 @@ export async function getActivities(): Promise<Activity[]> {
         id: activity.id,
         nama: activity.nama,
         status: activity.status || 'draft',
+        tanggal_pelaksanaan: activity.tanggal_pelaksanaan || null,
+        attachments: [],
         allocations: activity.allocations.map((alloc: any) => ({
             kode: alloc.kode,
             jumlah: alloc.jumlah,
@@ -183,6 +185,7 @@ export async function addActivity(newActivity: Omit<Activity, 'id'>): Promise<Ac
     return {
         ...newActivity,
         id: newActivityId,
+        attachments: newActivity.attachments ?? [],
     };
 }
 
@@ -240,6 +243,7 @@ export async function updateActivity(id: string, updatedActivity: Omit<Activity,
     return {
         ...updatedActivity,
         id,
+        attachments: updatedActivity.attachments ?? [],
     };
 }
 

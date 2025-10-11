@@ -7,12 +7,22 @@ export interface BudgetAllocation {
   jumlah: number;
 }
 
+export interface ActivityAttachment {
+  attachmentId: string;
+  activityId: string;
+  fileName: string;
+  storedFileName: string;
+  filePath: string;
+  uploadedAt: string;
+}
+
 export interface Activity {
   id: string;
   nama: string;
   status?: string;
   tanggal_pelaksanaan?: string;
   allocations: BudgetAllocation[];
+  attachments: ActivityAttachment[];
 }
 
 export interface ProcessingResult {
