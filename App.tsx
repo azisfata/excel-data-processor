@@ -44,11 +44,14 @@ const App: React.FC = () => {
   });
   const [isEditing, setIsEditing] = useState(false);
   const [editingActivityId, setEditingActivityId] = useState<string | null>(null);
-  const [newAllocation, setNewAllocation] = useState<Omit<BudgetAllocation, 'id'>>({ 
+  const [newAllocation, setNewAllocation] = useState<Omit<BudgetAllocation, 'id'> & { pagu?: number; sisa?: number }>({ 
     kode: '', 
     uraian: '',
-    jumlah: 0 
+    jumlah: 0,
+    pagu: 0,
+    sisa: 0
   });
+  const [allocationError, setAllocationError] = useState('');
   const [showActivityForm, setShowActivityForm] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [activityAttachments, setActivityAttachments] = useState<ActivityAttachment[]>([]);
@@ -57,7 +60,7 @@ const App: React.FC = () => {
   const [selectedYear, setSelectedYear] = useState<number | 'all'>(() => new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<number | 'all' | 'no-date'>(() => new Date().getMonth());
   const [showAllActivities, setShowAllActivities] = useState(false);
-  const [selectedStatus, setSelectedStatus] = useState<string>('all');
+  const [selectedStatus, setSelectedStatus] = useState<Set<string>>(new Set(['all']));
   const [activitySearchTerm, setActivitySearchTerm] = useState('');
   const [activitiesPerPage, setActivitiesPerPage] = useState<number | 'all'>(10);
   const [activitiesPage, setActivitiesPage] = useState(1);
@@ -95,6 +98,47 @@ const App: React.FC = () => {
   const [lastUpdated, setLastUpdated] = useState('');
   const [error, setError] = useState('');
   const [isInitializing, setIsInitializing] = useState(false);
+
+  // State for allocation search
+  const [allocationSearch, setAllocationSearch] = useState('');
+  const [isAllocationDropdownOpen, setIsAllocationDropdownOpen] = useState(false);
+  const allocationDropdownRef = useRef<HTMLDivElement>(null);
+
+  const filteredAllocations = useMemo(() => {
+    if (!allocationSearch) return [];
+    if (!result?.finalData) return [];
+
+    const searchLower = allocationSearch.toLowerCase();
+    return result.finalData.filter(item => 
+      item[0].toLowerCase().includes(searchLower) || item[1].toLowerCase().includes(searchLower)
+    ).slice(0, 50); // Limit to 50 results for performance
+  }, [allocationSearch, result?.finalData]);
+
+  const handleSelectAllocation = (kode: string, uraian: string) => {
+    const selectedRow = result?.finalData.find(row => row[0] === kode && row[1] === uraian);
+    if (selectedRow) {
+        const pagu = Number(selectedRow[2]) || 0;
+        const realisasi = Number(selectedRow[6]) || 0;
+        const sisa = pagu - realisasi;
+        setNewAllocation(prev => ({ ...prev, kode, uraian, pagu, sisa }));
+    } else {
+        setNewAllocation(prev => ({ ...prev, kode, uraian, pagu: 0, sisa: 0 }));
+    }
+    setAllocationSearch('');
+    setIsAllocationDropdownOpen(false);
+  };
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (allocationDropdownRef.current && !allocationDropdownRef.current.contains(event.target as Node)) {
+        setIsAllocationDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
   
   // Refs
   const historyRef = useRef<HTMLDivElement>(null);
@@ -375,7 +419,7 @@ const HistoryDropdown = () => (
 
   useEffect(() => {
     if (showActivityForm && !isEditing) {
-      setNewActivity({ nama: '', allocations: [], status: 'Rencana', attachments: [], tanggal_pelaksanaan: '' });
+      setNewActivity({ nama: '', allocations: [], status: 'Komitmen', attachments: [], tanggal_pelaksanaan: '' });
       setActivityAttachments([]);
       setNewAttachmentFiles([]);
       setAttachmentsToRemove(new Set());
@@ -414,9 +458,17 @@ const HistoryDropdown = () => (
 
   // --- Activity Form Handlers ---
   const handleAddAllocation = () => {
-    if (!newAllocation.kode || newAllocation.jumlah <= 0) return;
+    if (!newAllocation.kode || newAllocation.jumlah <= 0) {
+        setAllocationError('Pastikan akun telah dipilih dan jumlah lebih dari 0.');
+        return;
+    }
+    if (newAllocation.jumlah > (newAllocation.sisa ?? 0)) {
+        setAllocationError(`Jumlah alokasi (${formatCurrency(newAllocation.jumlah)}) melebihi sisa anggaran (${formatCurrency(newAllocation.sisa ?? 0)}).`);
+        return;
+    }
+    setAllocationError(''); // Clear error
     setNewActivity(prev => ({ ...prev, allocations: [...prev.allocations, { ...newAllocation }] }));
-    setNewAllocation({ kode: '', uraian: '', jumlah: 0 });
+    setNewAllocation({ kode: '', uraian: '', jumlah: 0, pagu: 0, sisa: 0 });
   };
 
   const handleRemoveAllocation = (index: number) => {
@@ -476,15 +528,35 @@ const HistoryDropdown = () => (
     setShowAllActivities(false);
   };
 
-  const handleStatusFilterChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedStatus(event.target.value);
+  const handleStatusChange = (status: string) => {
+    setSelectedStatus(prev => {
+        const newSet = new Set(prev);
+
+        if (status === 'all') {
+            return new Set(['all']);
+        }
+
+        newSet.delete('all');
+
+        if (newSet.has(status)) {
+            newSet.delete(status);
+        } else {
+            newSet.add(status);
+        }
+
+        if (newSet.size === 0) {
+            return new Set(['all']);
+        }
+
+        return newSet;
+    });
   };
 
   const handleResetFilters = () => {
     setSelectedYear(currentYear);
     setSelectedMonth(currentMonthIndex);
     setShowAllActivities(false);
-    setSelectedStatus('all');
+    setSelectedStatus(new Set(['all']));
   };
 
   const handleShowAllToggle = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -707,9 +779,13 @@ const HistoryDropdown = () => (
     const normalizedSearch = activitySearchTerm.trim().toLowerCase();
     const matchesSearch = (activity: Activity) =>
       !normalizedSearch || activity.nama.toLowerCase().includes(normalizedSearch);
-    const matchesStatus = (activity: Activity) =>
-      selectedStatus === 'all' ||
-      (activity.status ? activity.status.toLowerCase() === selectedStatus.toLowerCase() : selectedStatus === 'tanpa-status');
+    const matchesStatus = (activity: Activity) => {
+      if (selectedStatus.has('all')) {
+        return true;
+      }
+      const activityStatus = (activity.status || 'tanpa-status').toLowerCase();
+      return selectedStatus.has(activityStatus);
+    };
 
     const baseGroups = showAllActivities
       ? activitiesByMonth
@@ -823,6 +899,15 @@ const HistoryDropdown = () => (
     return map;
   }, [filteredActivityGroups]);
 
+  const totalPaginatedAllocation = useMemo(() => {
+    return paginatedActivityGroups
+        .flatMap(group => group.activities)
+        .reduce((total, activity) => {
+            const activityTotal = activity.allocations.reduce((allocSum, alloc) => allocSum + (alloc.jumlah || 0), 0);
+            return total + activityTotal;
+        }, 0);
+  }, [paginatedActivityGroups]);
+
   const handleAddActivity = async () => {
     if (!newActivity.nama || newActivity.allocations.length === 0) return;
     setIsSaving(true);
@@ -883,7 +968,7 @@ const HistoryDropdown = () => (
         setActivities(prev => [...prev, activityWithAttachments]);
       }
 
-      setNewActivity({ nama: '', allocations: [], status: 'Rencana', attachments: [], tanggal_pelaksanaan: '' });
+      setNewActivity({ nama: '', allocations: [], status: 'Komitmen', attachments: [], tanggal_pelaksanaan: '' });
       setActivityAttachments([]);
       setNewAttachmentFiles([]);
       setAttachmentsToRemove(new Set());
@@ -1027,6 +1112,7 @@ const HistoryDropdown = () => (
 
   const handleDepthChange = async (depth: number) => {
     setMaxDepth(depth);
+    setExpandedNodes({}); // Reset the expanded state
     try {
       await supabaseService.saveSetting('hierarchyMaxDepth', depth.toString());
     } catch (err) {
@@ -1488,20 +1574,15 @@ const HistoryDropdown = () => (
                     {/* Search and Filter */}
                     <div className="flex-1 w-full flex flex-col sm:flex-row gap-3">
                       <div className="relative flex-1">
-                        <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
-                        <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </div>
                         <input
                           type="text"
                           placeholder="Cari kode/uraian..."
                           value={searchTerm}
                           onChange={(e) => setSearchTerm(e.target.value)}
-                          className="block w-full pl-10 pr-8 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+                          className="block w-full pl-10 pr-16 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
                           title="Contoh: a and b atau x or y"
                         />
-                        <div className="absolute inset-y-0 right-0 flex items-center pr-2">
+                        <div className="absolute inset-y-0 right-0 flex items-center pr-3 space-x-2">
                           <div className="relative group">
                             <svg 
                               className="h-4 w-4 text-gray-400 hover:text-gray-600 cursor-help" 
@@ -1520,6 +1601,9 @@ const HistoryDropdown = () => (
                               <p className="text-xs text-gray-500 mt-2">• Tidak case-sensitive. Kombinasikan dengan `AND` atau `OR`.</p>
                             </div>
                           </div>
+                          <svg className="w-5 h-5 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
                         </div>
                       </div>
                       <div className="flex items-center">
@@ -1546,7 +1630,7 @@ const HistoryDropdown = () => (
               {/* Table Content */}
               <div className={`overflow-x-auto transition-all duration-200 ${isTableExpanded ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}>
                 <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
+                  <thead className="bg-gray-50 sticky top-0 z-10">
                     <tr className="text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                       <th className="px-6 py-3 w-1/6">Kode</th>
                       <th className="px-6 py-3 w-3/6">Uraian</th>
@@ -1558,7 +1642,6 @@ const HistoryDropdown = () => (
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {displayedData.map((row, rowIndex) => {
-                      const indent = row.__level * 20;
                       const showExpandCollapse = row.__hasChildren || row.__isDataGroup;
                       const isGroup = row.__isGroup;
                       const paguRevisi = row[2];
@@ -1566,7 +1649,7 @@ const HistoryDropdown = () => (
                       return (
                         <tr key={`${row.__path}-${rowIndex}`} className={`hover:bg-gray-50 ${isGroup ? 'bg-gray-50' : ''}`}>
                           <td className="px-6 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
-                            <div className="flex items-center" style={{ paddingLeft: `${indent}px` }}>
+                            <div className="flex items-center">
                               {showExpandCollapse && <button onClick={() => toggleNode(row.__path, row.__isDataGroup)} className="mr-2 w-4">{row.__isExpanded ? '▼' : '▶'}</button>}
                               {!showExpandCollapse && <div className="w-6"></div>}
                               <span>{row[0]}</span>
@@ -1707,23 +1790,6 @@ const HistoryDropdown = () => (
                                     {hasNoDateActivities && <option value="no-date">Tanpa Tanggal</option>}
                                 </select>
                             </div>
-                            <div className="space-y-1">
-                                <label htmlFor="activity-status-filter" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                                    Status
-                                </label>
-                                <select
-                                    id="activity-status-filter"
-                                    value={selectedStatus}
-                                    onChange={handleStatusFilterChange}
-                                    className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                >
-                                    <option value="all">Semua Status</option>
-                                    <option value="Komitmen">Komitmen</option>
-                                    <option value="Outstanding">Outstanding</option>
-                                    <option value="Terbayar">Terbayar</option>
-                                    <option value="tanpa-status">Tanpa Status</option>
-                                </select>
-                            </div>
                             <button
                                 type="button"
                                 onClick={handleResetFilters}
@@ -1741,6 +1807,32 @@ const HistoryDropdown = () => (
                                 />
                                 <span>Tampilkan semua kegiatan</span>
                             </label>
+                            <div className="space-y-2">
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                                    Status
+                                </label>
+                                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                                    {(['all', 'komitmen', 'outstanding', 'terbayar'] as const).map(status => {
+                                        const label = {
+                                            'all': 'Semua',
+                                            'komitmen': 'Komitmen',
+                                            'outstanding': 'Outstanding',
+                                            'terbayar': 'Terbayar'
+                                        }[status];
+                                        return (
+                                            <label key={status} className="flex items-center space-x-2 text-sm cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                                    checked={selectedStatus.has(status)}
+                                                    onChange={() => handleStatusChange(status)}
+                                                />
+                                                <span>{label}</span>
+                                            </label>
+                                        );
+                                    })}
+                                </div>
+                            </div>
                         </div>
 
                         {totalActivities > 0 ? (
@@ -1844,6 +1936,17 @@ const HistoryDropdown = () => (
                                                                 );
                                                             })}
                                                         </tbody>
+                                                        <tfoot className="bg-gray-50 font-medium">
+                                                            <tr>
+                                                                <td className="px-4 py-3 text-right" colSpan={2}>Total {group.label}</td>
+                                                                <td className="px-4 py-3 text-right">
+                                                                    {formatCurrency(group.activities.reduce((sum, activity) => 
+                                                                        sum + activity.allocations.reduce((allocSum, alloc) => allocSum + (alloc.jumlah || 0), 0),
+                                                                    0))}
+                                                                </td>
+                                                                <td colSpan={3}></td>
+                                                            </tr>
+                                                        </tfoot>
                                                     </table>
                                                 </div>
                                             </div>
@@ -2094,133 +2197,63 @@ const HistoryDropdown = () => (
 
                 {/* Form Alokasi Anggaran */}
                 <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm mt-6">
-                  <div className="mb-6">
-                    <h3 className="text-base font-semibold text-gray-900">Alokasi Anggaran</h3>
-                    <p className="mt-1 text-sm text-gray-500">Tambahkan detail alokasi anggaran untuk kegiatan ini</p>
-                  </div>
-                  
-                  <div className="space-y-6">
-                    <div className="grid grid-cols-12 gap-4">
-                      {/* Kode Anggaran */}
-                      <div className="col-span-12 sm:col-span-4">
-                        <label htmlFor="kode-anggaran" className="block text-sm font-medium text-gray-700 mb-1">Kode</label>
-                        <div className="relative">
-                          <select
-                            id="kode-anggaran"
-                            value={newAllocation.kode}
-                            onChange={(e) => {
-                              const selectedOption = e.target.options[e.target.selectedIndex];
-                              const uraian = selectedOption.getAttribute('data-uraian') || '';
-                              setNewAllocation({
-                                ...newAllocation, 
-                                kode: e.target.value,
-                                uraian: uraian
-                              });
-                            }}
-                            className="block w-full p-2.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white"
-                          >
-                            <option value="">Pilih Kode Akun</option>
-                            {result?.finalData
-                              .filter((row): row is [string, string, ...any] => 
-                                Array.isArray(row) && 
-                                row.length > 1 && 
-                                typeof row[0] === 'string' && 
-                                typeof row[1] === 'string'
-                              )
-                              .filter(([kode]) => kode && kode.trim() !== '')
-                              .map(([kode, uraian], index) => (
-                                <option 
-                                  key={`${kode}-${index}`} 
-                                  value={kode}
-                                  data-uraian={uraian}
-                                >
-                                  {kode}
-                                </option>
-                              ))}
-                          </select>
-                        </div>
-                      </div>
-                      
-                      {/* Uraian */}
-                      <div className="col-span-12 sm:col-span-8">
-                        <label htmlFor="uraian" className="block text-sm font-medium text-gray-700 mb-1">Uraian</label>
+                  {/* Alokasi Anggaran Searchable Dropdown */}
+                  <div className="space-y-1.5">
+                    <label className="block text-sm font-medium text-gray-700">Alokasi Anggaran</label>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+                      {/* Searchable Kode Input */}
+                      <div className="md:col-span-2 relative">
                         <input
-                          id="uraian"
                           type="text"
-                          value={newAllocation.uraian || ''}
-                          onChange={(e) => setNewAllocation({...newAllocation, uraian: e.target.value})}
-                          className="block w-full min-w-[300px] p-2.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                          placeholder="Deskripsi alokasi"
-                          style={{ minWidth: '100%' }}
+                          placeholder="Cari kode atau uraian akun..."
+                          value={allocationSearch}
+                          onChange={(e) => {
+                            setAllocationSearch(e.target.value);
+                            setIsAllocationDropdownOpen(true);
+                          }}
+                          onFocus={() => setIsAllocationDropdownOpen(true)}
+                          className="block w-full p-2.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                        />
+                        {isAllocationDropdownOpen && filteredAllocations.length > 0 && (
+                          <div ref={allocationDropdownRef} className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                            {filteredAllocations.map((item, index) => (
+                              <div
+                                key={index}
+                                onClick={() => handleSelectAllocation(item[0], item[1])}
+                                className="p-2.5 hover:bg-blue-50 cursor-pointer text-sm"
+                              >
+                                <p className="font-medium text-gray-800">{item[1]}</p>
+                                <p className="text-xs text-gray-500">{item[0]}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Jumlah Input */}
+                      <div className="relative">
+                        <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500 sm:text-sm">Rp</span>
+                        <input
+                          type="text"
+                          value={formatNumber(String(newAllocation.jumlah))}
+                          onChange={handleNumberChange}
+                          className="block w-full p-2.5 pl-8 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm text-right"
+                          placeholder="0"
                         />
                       </div>
-                      
-                      {/* Jumlah */}
-                      <div className="col-span-12 sm:col-span-4">
-                        <label htmlFor="jumlah" className="block text-sm font-medium text-gray-700 mb-1">Jumlah (Rp)</label>
-                        <div className="relative">
-                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <span className="text-gray-500 sm:text-sm">Rp</span>
-                          </div>
-                          <input
-                            id="jumlah"
-                            type="text"
-                            value={newAllocation.formattedJumlah}
-                            onChange={handleNumberChange}
-                            className="pl-10 block w-full p-2.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                            placeholder="0"
-                            onKeyDown={(e) => {
-                              // Allow: backspace, delete, tab, escape, enter
-                              if ([8, 9, 27, 13].includes(e.keyCode) ||
-                                // Allow: Ctrl+A, Command+A
-                                (e.keyCode === 65 && (e.ctrlKey === true || e.metaKey === true)) ||
-                                // Allow: Ctrl+C, Command+C
-                                (e.keyCode === 67 && (e.ctrlKey === true || e.metaKey === true)) ||
-                                // Allow: Ctrl+V, Command+V
-                                (e.keyCode === 86 && (e.ctrlKey === true || e.metaKey === true)) ||
-                                // Allow: Ctrl+X, Command+X
-                                (e.keyCode === 88 && (e.ctrlKey === true || e.metaKey === true)) ||
-                                // Allow: home, end, left, right, down, up
-                                (e.keyCode >= 35 && e.keyCode <= 40)) {
-                                return;
-                              }
-                              // Allow only numbers
-                              if ((e.keyCode < 48 || e.keyCode > 57) && (e.keyCode < 96 || e.keyCode > 105)) {
-                                e.preventDefault();
-                              }
-                            }}
-                            style={{ minWidth: '120px' }}
-                            inputMode="numeric"
-                          />
-                        </div>
-                      </div>
-                      
-                      {/* Tombol Tambah */}
-                      <div className="col-span-12 sm:col-span-2 flex items-end">
-                        <button
-                          type="button"
-                          onClick={handleAddAllocation}
-                          disabled={!newAllocation.kode || !newAllocation.jumlah}
-                          className="w-full h-10 inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        >
-                          <svg className="-ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
-                          </svg>
-                          Tambah
-                        </button>
-                      </div>
                     </div>
-                    
-                    {/* Validasi Error */}
-                    {(!newAllocation.kode || !newAllocation.jumlah) && (
-                      <p className="text-xs text-red-600 -mt-2">
-                        {!newAllocation.kode && !newAllocation.jumlah 
-                          ? "Kode dan jumlah harus diisi" 
-                          : !newAllocation.kode 
-                            ? "Kode harus diisi" 
-                            : "Jumlah harus diisi"}
-                      </p>
+                    {newAllocation.kode && (
+                        <div className="mt-2 p-3 bg-gray-50 border border-gray-200 rounded-md text-sm space-y-1">
+                            <p><span className="font-semibold w-20 inline-block">Kode:</span> {newAllocation.kode}</p>
+                            <p><span className="font-semibold w-20 inline-block">Uraian:</span> {newAllocation.uraian}</p>
+                            <p><span className="font-semibold w-20 inline-block">Pagu:</span> {formatCurrency(newAllocation.pagu ?? 0)}</p>
+                            <p><span className="font-semibold w-20 inline-block">Sisa:</span> {formatCurrency(newAllocation.sisa ?? 0)}</p>
+                        </div>
                     )}
+                    {allocationError && <p className="text-red-600 text-sm mt-2">{allocationError}</p>}
+                    <div className="flex justify-end mt-2">
+                        <button onClick={handleAddAllocation} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md">Tambah Alokasi</button>
+                    </div>
                   </div>
                   
                   {/* Daftar Alokasi */}

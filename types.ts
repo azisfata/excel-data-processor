@@ -3,7 +3,7 @@ export type ExcelData = ExcelRow[];
 
 export interface BudgetAllocation {
   kode: string;
-  uraian?: string;
+  uraian: string;
   jumlah: number;
 }
 
