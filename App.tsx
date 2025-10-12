@@ -37,7 +37,7 @@ const App: React.FC = () => {
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
   const [newActivity, setNewActivity] = useState<Omit<Activity, 'id'>>({ 
     nama: '', 
-    status: 'Rencana', 
+    status: 'Komitmen', 
     allocations: [],
     attachments: [],
     tanggal_pelaksanaan: ''
@@ -151,8 +151,18 @@ const HistoryDropdown = () => (
                     onClick={() => loadHistoricalResult(item.id)}
                     className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900 pr-8"
                   >
-                    <div className="font-medium truncate">{item.fileName}</div>
-                    <div className="text-xs text-gray-500">{item.formattedDate}</div>
+                    <div className="font-medium truncate">
+                      {item.reportType || 'Laporan'}{' '}
+                      {item.reportDate
+                        ? new Date(item.reportDate).toLocaleDateString('id-ID', {
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric',
+                            timeZone: 'UTC',
+                          })
+                        : ''}
+                    </div>
+                    <div className="text-xs text-gray-500">Diproses: {item.formattedDate}</div>
                   </button>
                   <div 
                     className="absolute right-2 top-1/2 -translate-y-1/2 z-50"
@@ -182,15 +192,7 @@ const HistoryDropdown = () => (
     </div>
   );
 
-  const LastUpdatedBadge = () => (
-    <div className="flex items-center space-x-2">
-      <div className="text-xs text-gray-600 bg-gray-100 px-3 py-1.5 rounded-md">
-        <div>Diperbarui:</div>
-        <div className="whitespace-nowrap font-medium">{lastUpdated || 'Belum ada data'}</div>
-      </div>
-      <HistoryDropdown />
-    </div>
-  );
+
 
   // Load history from Supabase
   const loadHistory = useCallback(async () => {
@@ -903,7 +905,7 @@ const HistoryDropdown = () => (
   const handleEditActivity = (activity: Activity) => {
     setNewActivity({
       nama: activity.nama,
-      status: activity.status || 'Rencana',
+      status: activity.status || 'Komitmen',
       allocations: [...activity.allocations],
       attachments: activity.attachments ?? [],
       tanggal_pelaksanaan: activity.tanggal_pelaksanaan || ''
@@ -917,7 +919,7 @@ const HistoryDropdown = () => (
   };
 
   const handleCancelEdit = () => {
-    setNewActivity({ nama: '', allocations: [], status: 'Rencana', attachments: [], tanggal_pelaksanaan: '' });
+    setNewActivity({ nama: '', allocations: [], status: 'Komitmen', attachments: [], tanggal_pelaksanaan: '' });
     setActivityAttachments([]);
     setNewAttachmentFiles([]);
     setAttachmentsToRemove(new Set());
@@ -1303,7 +1305,7 @@ const HistoryDropdown = () => (
             {/* Header */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-lg shadow-sm border border-gray-200">
               <div>
-                <h2 className="text-xl font-bold text-gray-800">Anggaran Biro Digitalisasi dan Pengelolaan Informasi</h2>
+                <h2 className="text-xl font-bold text-gray-800">Realisasi Anggaran Unit Kerja</h2>
                 {latestReportMeta.reportDate ? (
                   <p className="text-sm text-gray-600">
                     Laporan {latestReportMeta.reportType ?? 'Tidak diketahui'} ·{' '}
@@ -1319,7 +1321,7 @@ const HistoryDropdown = () => (
                 )}
               </div>
               <div className="flex flex-col md:flex-row md:items-center gap-3 w-full md:w-auto">
-                {lastUpdated && <LastUpdatedBadge />}
+                <HistoryDropdown />
                 <div className="relative group">
                   <button
                     onClick={() => document.getElementById('file-upload-hidden')?.click()}
@@ -1717,7 +1719,7 @@ const HistoryDropdown = () => (
                                     className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                 >
                                     <option value="all">Semua Status</option>
-                                    <option value="Rencana">Rencana</option>
+                                    <option value="Komitmen">Komitmen</option>
                                     <option value="Outstanding">Outstanding</option>
                                     <option value="Terbayar">Terbayar</option>
                                     <option value="tanpa-status">Tanpa Status</option>
@@ -1971,7 +1973,7 @@ const HistoryDropdown = () => (
                         aria-describedby="status-description"
                       >
                         <option value="" disabled>Pilih Status</option>
-                        <option value="Rencana">Rencana</option>
+                        <option value="Komitmen">Komitmen</option>
                         <option value="Outstanding">Outstanding</option>
                         <option value="Terbayar">Terbayar</option>
                       </select>
