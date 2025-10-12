@@ -84,7 +84,7 @@ const App: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
   const [result, setResult] = useState<ProcessingResult | null>(null);
   const [hierarchicalData, setHierarchicalData] = useState<any[]>([]);
-  const [filteredData, setFilteredData] = useState<any[]>([]);
+  const [displayedData, setDisplayedData] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [maxDepth, setMaxDepth] = useState(7);
   const [isTableExpanded, setIsTableExpanded] = useState(true);
@@ -1017,7 +1017,7 @@ const HistoryDropdown = () => (
       const processedHierarchy = withExpanded(hierarchy);
       const flatData = flattenTree(processedHierarchy);
       setHierarchicalData(flatData);
-      setFilteredData(flatData);
+      setDisplayedData(flatData);
     }
   }, [result, expandedNodes, maxDepth]);
 
@@ -1064,7 +1064,7 @@ const HistoryDropdown = () => (
   // --- Search Logic ---
   useEffect(() => {
     if (!searchTerm.trim()) {
-      setFilteredData(hierarchicalData);
+      setDisplayedData(hierarchicalData);
       return;
     }
     if (maxDepth < 8) setMaxDepth(8);
@@ -1078,7 +1078,7 @@ const HistoryDropdown = () => (
         return andTerms.every(term => kode.includes(term) || uraian.includes(term));
       });
     });
-    setFilteredData(filtered);
+    setDisplayedData(filtered);
   }, [searchTerm, hierarchicalData, maxDepth]);
 
   // --- Render Logic ---
@@ -1402,12 +1402,11 @@ const HistoryDropdown = () => (
                     <div className="relative">
                       <select
                         className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                        defaultValue="akrual"
-                        disabled
+                        defaultValue="realisasi-laporan"
                       >
-                        <option value="akrual">Akrual</option>
-                        <option value="akrual-outstanding">Akrual + Outstanding</option>
-                        <option value="akrual-outstanding-komitmen">Akrual + Outstanding + Komitmen</option>
+                        <option value="realisasi-laporan">Realisasi (Sesuai Laporan)</option>
+                        <option value="realisasi-outstanding">Realisasi + Outstanding</option>
+                        <option value="realisasi-komitmen">Realisasi + Outstanding + Komitmen</option>
                       </select>
                       <span className="absolute inset-y-0 right-3 flex items-center text-gray-400 text-xs italic pointer-events-none">
                         coming soon
@@ -1558,7 +1557,7 @@ const HistoryDropdown = () => (
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredData.map((row, rowIndex) => {
+                    {displayedData.map((row, rowIndex) => {
                       const indent = row.__level * 20;
                       const showExpandCollapse = row.__hasChildren || row.__isDataGroup;
                       const isGroup = row.__isGroup;
@@ -1586,19 +1585,19 @@ const HistoryDropdown = () => (
                         <td colSpan={2} className="px-6 py-2 text-sm text-gray-900">Total Hasil Pencarian</td>
                         <td className="px-6 py-2 text-right text-sm text-gray-900">
                           {(() => {
-                            const dataRows = filteredData.filter(row => !row.__hasChildren && !row.__isDataGroup);
+                            const dataRows = displayedData.filter(row => !row.__hasChildren && !row.__isDataGroup);
                             return dataRows.reduce((sum, row) => sum + (Number(row[2]) || 0), 0).toLocaleString('id-ID');
                           })()}
                         </td>
                         <td className="px-6 py-2 text-right text-sm text-gray-900">
                           {(() => {
-                            const dataRows = filteredData.filter(row => !row.__hasChildren && !row.__isDataGroup);
+                            const dataRows = displayedData.filter(row => !row.__hasChildren && !row.__isDataGroup);
                             return dataRows.reduce((sum, row) => sum + (Number(row[6]) || 0), 0).toLocaleString('id-ID');
                           })()}
                         </td>
                         <td className="px-6 py-2 text-right text-sm text-gray-900">
                           {(() => {
-                            const dataRows = filteredData.filter(row => !row.__hasChildren && !row.__isDataGroup);
+                            const dataRows = displayedData.filter(row => !row.__hasChildren && !row.__isDataGroup);
                             const totalPagu = dataRows.reduce((sum, row) => sum + (Number(row[2]) || 0), 0);
                             const totalRealisasi = dataRows.reduce((sum, row) => sum + (Number(row[6]) || 0), 0);
                             return totalPagu > 0 ? `${((totalRealisasi / totalPagu) * 100).toFixed(2)}%` : '0%';
@@ -1606,7 +1605,7 @@ const HistoryDropdown = () => (
                         </td>
                         <td className="px-6 py-2 text-right text-sm text-gray-900">
                           {(() => {
-                            const dataRows = filteredData.filter(row => !row.__hasChildren && !row.__isDataGroup);
+                            const dataRows = displayedData.filter(row => !row.__hasChildren && !row.__isDataGroup);
                             const totalPagu = dataRows.reduce((sum, row) => sum + (Number(row[2]) || 0), 0);
                             const totalRealisasi = dataRows.reduce((sum, row) => sum + (Number(row[6]) || 0), 0);
                             return (totalPagu - totalRealisasi).toLocaleString('id-ID');
