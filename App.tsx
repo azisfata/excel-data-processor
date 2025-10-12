@@ -61,8 +61,24 @@ const App: React.FC = () => {
   const [activitySearchTerm, setActivitySearchTerm] = useState('');
   const [activitiesPerPage, setActivitiesPerPage] = useState<number | 'all'>(10);
   const [activitiesPage, setActivitiesPage] = useState(1);
+  const [latestReportMeta, setLatestReportMeta] = useState<{ reportType: string | null; reportMonth: number | null; reportYear: number | null }>({
+    reportType: null,
+    reportMonth: null,
+    reportYear: null,
+  });
+  const [showUploadMetadataModal, setShowUploadMetadataModal] = useState(false);
+  const [pendingUploadFile, setPendingUploadFile] = useState<File | null>(null);
+  const [uploadReportType, setUploadReportType] = useState<'Akrual' | 'SP2D'>('Akrual');
+  const [uploadReportDate, setUploadReportDate] = useState('');
+  const [uploadMetadataError, setUploadMetadataError] = useState('');
   const currentYear = useMemo(() => new Date().getFullYear(), []);
   const currentMonthIndex = useMemo(() => new Date().getMonth(), []);
+  const getAttachmentDownloadUrl = useCallback(
+    (attachment: ActivityAttachment) =>
+      `/api/activities/${attachment.activityId}/attachments/${attachment.attachmentId}/download`,
+    []
+  );
+  const isInlinePreview = useCallback((fileName: string) => /\.(pdf|png|jpe?g|gif)$/i.test(fileName), []);
 
   // State for file processing
   const [isProcessing, setIsProcessing] = useState(false);
@@ -95,7 +111,7 @@ const App: React.FC = () => {
   };
   
   // State for expanded nodes
-  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+  const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
 const Spinner = () => (
   <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -181,15 +197,20 @@ const HistoryDropdown = () => (
   const loadHistory = useCallback(async () => {
     try {
       const historyData = await supabaseService.getAllProcessedResults();
-      setHistory(historyData.map(item => ({
-        id: item.id,
-        fileName: item.fileName,
-        formattedDate: item.formattedDate,
-        createdAt: item.createdAt
-      })));
+      setHistory(
+        historyData.map(item => ({
+          id: item.id,
+          fileName: item.fileName,
+          formattedDate: item.formattedDate,
+          createdAt: item.createdAt,
+          reportType: item.reportType ?? null,
+          reportMonth: item.reportMonth ?? null,
+          reportYear: item.reportYear ?? null,
+        }))
+      );
     } catch (err) {
-      console.error("Error loading history:", err);
-      setError("Gagal memuat riwayat pemrosesan.");
+      console.error('Error loading history:', err);
+      setError('Gagal memuat riwayat pemrosesan.');
     }
   }, []);
 
@@ -264,12 +285,28 @@ const HistoryDropdown = () => (
       if (error) throw error;
       if (!data) throw new Error('Data not found');
 
-      setResult(data.result);
+      const normalizedResult: ProcessingResult = {
+        finalData: data.processed_data ?? [],
+        totals: data.totals ?? [],
+        processedDataForPreview: data.processed_data?.slice(0, 100) ?? [],
+        accountNameMap: data.account_name_map
+          ? new Map(Object.entries(data.account_name_map as Record<string, string>))
+          : new Map(),
+      };
+
+      setResult(normalizedResult);
+      setFile(null);
+      setLatestReportMeta({
+        reportType: data.report_type || null,
+        reportMonth: data.report_month ?? null,
+        reportYear: data.report_year ?? null,
+      });
       setLastUpdated(new Date(data.created_at).toLocaleString('id-ID'));
       setShowHistory(false);
     } catch (err) {
-      console.error("Error loading historical result:", err);
-      setError("Gagal memuat data riwayat yang dipilih.");
+      console.error('Error loading historical result:', err);
+      setLatestReportMeta({ reportType: null, reportMonth: null, reportYear: null });
+      setError('Gagal memuat data riwayat yang dipilih.');
     }
   }, []);
 
@@ -305,6 +342,14 @@ const HistoryDropdown = () => (
         if (processedResultData) {
           setResult(processedResultData.result);
           setLastUpdated(processedResultData.lastUpdated);
+          setLatestReportMeta({
+            reportType: processedResultData.reportType,
+            reportMonth: processedResultData.reportMonth,
+            reportYear: processedResultData.reportYear,
+          });
+        } else {
+          setResult(null);
+          setLatestReportMeta({ reportType: null, reportMonth: null, reportYear: null });
         }
 
         const attachmentsLookup: Record<string, ActivityAttachment[]> = attachmentsMap ?? {};
@@ -457,6 +502,103 @@ const HistoryDropdown = () => (
       setActivitiesPerPage(Number.isNaN(parsed) ? 10 : parsed);
     }
   };
+
+  // --- File Processing ---
+  const processFile = useCallback(
+    async (fileToProcess: File, metadata: { reportType: 'Akrual' | 'SP2D'; reportDate: string }) => {
+      if (!fileToProcess) return;
+
+      setIsProcessing(true);
+      setError('');
+      setResult(null); // Clear previous result immediately
+
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          const binaryStr = event.target?.result;
+          const data = parseExcelFile(binaryStr as string | ArrayBuffer);
+          const processingResult = processExcelData(data);
+
+          const reportDate = new Date(metadata.reportDate);
+          const reportMonth = reportDate.getMonth() + 1;
+          const reportYear = reportDate.getFullYear();
+
+          await supabaseService.saveProcessedResult(processingResult, fileToProcess.name, {
+            reportType: metadata.reportType,
+            reportMonth,
+            reportYear,
+          });
+
+          // After saving, fetch the latest to ensure consistency
+          const latestData = await supabaseService.getLatestProcessedResult();
+          if (latestData) {
+            setResult(latestData.result);
+            setLastUpdated(latestData.lastUpdated);
+            setLatestReportMeta({
+              reportType: latestData.reportType,
+              reportMonth: latestData.reportMonth,
+              reportYear: latestData.reportYear,
+            });
+          }
+
+          setFile(fileToProcess);
+        } catch (err) {
+          console.error('Error processing file:', err);
+          setError('Gagal memproses file. Pastikan format file sesuai.');
+          setResult(null);
+        } finally {
+          setIsProcessing(false);
+        }
+      };
+
+      reader.onerror = () => {
+        setError('Gagal membaca file. Silakan coba lagi.');
+        setIsProcessing(false);
+      };
+
+      reader.readAsBinaryString(fileToProcess);
+    },
+    []
+  );
+
+  const handleFileSelection = useCallback((selectedFile: File | null) => {
+    if (!selectedFile) return;
+    setError('');
+    setPendingUploadFile(selectedFile);
+    setUploadReportType('Akrual');
+    setUploadReportDate(new Date().toISOString().slice(0, 10));
+    setUploadMetadataError('');
+    setShowUploadMetadataModal(true);
+  }, []);
+
+  const handleCancelUpload = useCallback(() => {
+    setShowUploadMetadataModal(false);
+    setPendingUploadFile(null);
+    setUploadMetadataError('');
+  }, []);
+
+  const handleConfirmUpload = useCallback(async () => {
+    if (!pendingUploadFile) {
+      setUploadMetadataError('Pilih file realisasi terlebih dahulu.');
+      return;
+    }
+    if (!uploadReportDate) {
+      setUploadMetadataError('Tanggal realisasi wajib diisi.');
+      return;
+    }
+    const parsedDate = new Date(uploadReportDate);
+    if (Number.isNaN(parsedDate.getTime())) {
+      setUploadMetadataError('Tanggal realisasi tidak valid.');
+      return;
+    }
+    setUploadMetadataError('');
+    setShowUploadMetadataModal(false);
+    try {
+      await processFile(pendingUploadFile, { reportType: uploadReportType, reportDate: uploadReportDate });
+    } finally {
+      setPendingUploadFile(null);
+    }
+  }, [pendingUploadFile, uploadReportDate, uploadReportType, processFile]);
 
   const formatMonthLabel = useCallback((date: Date) => {
     return date.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
@@ -897,55 +1039,13 @@ const HistoryDropdown = () => (
     }
   };
 
-  // --- File Processing ---
-  const processFile = useCallback(async (fileToProcess: File) => {
-    if (!fileToProcess) return;
-
-    setIsProcessing(true);
-    setError(null);
-    setResult(null); // Clear previous result immediately
-
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      try {
-        const binaryStr = event.target?.result;
-        const data = parseExcelFile(binaryStr as string | ArrayBuffer);
-        const processingResult = processExcelData(data);
-
-        await supabaseService.saveProcessedResult(processingResult, fileToProcess.name);
-        
-        // After saving, fetch the latest to ensure consistency
-        const latestData = await supabaseService.getLatestProcessedResult();
-        if (latestData) {
-            setResult(latestData.result);
-            setLastUpdated(latestData.lastUpdated);
-        }
-
-      } catch (err) {
-        console.error('Error processing file:', err);
-        setError('Gagal memproses file. Pastikan format file sesuai.');
-        setResult(null);
-      } finally {
-        setIsProcessing(false);
-      }
-    };
-    
-    reader.onerror = () => {
-      setError('Gagal membaca file. Silakan coba lagi.');
-      setIsProcessing(false);
-    };
-    
-    reader.readAsBinaryString(fileToProcess);
-  }, []);
-
   const onDrop = useCallback((acceptedFiles: File[]) => {
     if (acceptedFiles.length > 0) {
       const uploadedFile = acceptedFiles[0];
-      setFile(uploadedFile);
-      setError(null);
-      processFile(uploadedFile);
+      setError('');
+      handleFileSelection(uploadedFile);
     }
-  }, [processFile]);
+  }, [handleFileSelection]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -993,11 +1093,88 @@ const HistoryDropdown = () => (
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Activity Detail Modal */}
-      {selectedActivity && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-start mb-4">
+        {showUploadMetadataModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-xl w-full max-w-lg shadow-xl space-y-6 p-6">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-800">Konfirmasi Unggah Realisasi SAKTI</h2>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Pastikan memilih jenis laporan dan tanggal realisasi sebelum mengunggah.
+                  </p>
+                </div>
+                <button
+                  onClick={handleCancelUpload}
+                  className="text-gray-400 hover:text-gray-500"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
+                  </svg>
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-700">File yang dipilih</p>
+                  <p className="mt-1 text-sm text-gray-600 break-words">{pendingUploadFile?.name || '-'}</p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <label htmlFor="upload-report-type" className="text-sm font-medium text-gray-700">Jenis Laporan</label>
+                    <select
+                      id="upload-report-type"
+                      value={uploadReportType}
+                      onChange={(e) => setUploadReportType(e.target.value as 'Akrual' | 'SP2D')}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="Akrual">Akrual</option>
+                      <option value="SP2D">SP2D</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label htmlFor="upload-report-date" className="text-sm font-medium text-gray-700">Tanggal Realisasi</label>
+                    <input
+                      id="upload-report-date"
+                      type="date"
+                      value={uploadReportDate}
+                      onChange={(e) => setUploadReportDate(e.target.value)}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                {uploadMetadataError && (
+                  <p className="text-sm text-red-600">{uploadMetadataError}</p>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={handleCancelUpload}
+                  className="px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmUpload}
+                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md"
+                >
+                  Unggah
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Activity Detail Modal */}
+        {selectedActivity && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-start mb-4">
               <h2 className="text-xl font-semibold text-gray-800">Detail Kegiatan</h2>
               <button 
                 onClick={() => setSelectedActivity(null)}
@@ -1025,19 +1202,24 @@ const HistoryDropdown = () => (
                 <div>
                   <h4 className="font-medium text-gray-700 mb-2">Lampiran</h4>
                   <div className="space-y-2">
-                    {selectedActivity.attachments.map(attachment => (
-                      <div key={attachment.attachmentId} className="flex items-center justify-between text-sm border border-gray-200 rounded-md px-3 py-2 bg-gray-50">
-                        <span className="text-gray-600 break-all pr-4">{attachment.fileName}</span>
-                        <a
-                          href={attachment.filePath}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center px-3 py-1.5 border border-blue-500 text-blue-600 rounded-md hover:bg-blue-50 transition"
-                        >
-                          Unduh
-                        </a>
-                      </div>
-                    ))}
+                    {selectedActivity.attachments.map(attachment => {
+                      const inlinePreview = isInlinePreview(attachment.fileName);
+                      const href = inlinePreview ? attachment.filePath : getAttachmentDownloadUrl(attachment);
+                      return (
+                        <div key={attachment.attachmentId} className="flex items-center justify-between text-sm border border-gray-200 rounded-md px-3 py-2 bg-gray-50">
+                          <span className="text-gray-600 break-all pr-4">{attachment.fileName}</span>
+                          <a
+                            href={href}
+                            className="inline-flex items-center px-3 py-1.5 border border-blue-500 text-blue-600 rounded-md hover:bg-blue-50 transition"
+                            {...(inlinePreview
+                              ? { target: '_blank', rel: 'noopener noreferrer' }
+                              : { download: attachment.fileName })}
+                          >
+                            {inlinePreview ? 'Buka' : 'Unduh'}
+                          </a>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -1127,13 +1309,45 @@ const HistoryDropdown = () => (
           <div className="space-y-6">
             {/* Header */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-              <div>
+      <div>
                 <h2 className="text-xl font-bold text-gray-800">Anggaran Biro Digitalisasi dan Pengelolaan Informasi</h2>
-                <p className="text-sm text-gray-600">Informasi Pagu dan Realisasi</p>
+                {(latestReportMeta.reportType || latestReportMeta.reportMonth || latestReportMeta.reportYear) ? (
+                  <p className="text-sm text-gray-600">
+                    Laporan {latestReportMeta.reportType ?? 'Tidak diketahui'} ·{' '}
+                    {latestReportMeta.reportMonth ? MONTH_NAMES_ID[(latestReportMeta.reportMonth - 1 + 12) % 12] : '—'}{' '}
+                    {latestReportMeta.reportYear ?? '—'}
+                  </p>
+                ) : (
+                  <p className="text-sm text-gray-600">Informasi Pagu dan Realisasi</p>
+                )}
               </div>
-              {lastUpdated && (
-                <LastUpdatedBadge />
-              )}
+              <div className="flex flex-col md:flex-row md:items-center gap-3 w-full md:w-auto">
+                {lastUpdated && <LastUpdatedBadge />}
+                <div className="relative group">
+                  <button
+                    onClick={() => document.getElementById('file-upload-hidden')?.click()}
+                    className="inline-flex items-center justify-center px-3 py-1.5 text-sm text-white bg-indigo-600 hover:bg-indigo-700 rounded-md transition-colors"
+                  >
+                    Unggah Realisasi SAKTI
+                  </button>
+                  <div className="invisible group-hover:visible absolute right-0 mt-2 z-10 w-64 p-2 text-xs text-gray-700 bg-white border border-gray-200 rounded-md shadow-lg">
+                    Unggah file Excel hasil realisasi SAKTI level item. Pastikan format file sesuai dengan template yang disediakan.
+                  </div>
+                </div>
+                <input
+                  id="file-upload-hidden"
+                  type="file"
+                  className="hidden"
+                  accept=".xls,.xlsx"
+                  onChange={(e) => {
+                    const selected = e.target.files?.[0] ?? null;
+                    if (selected) {
+                      handleFileSelection(selected);
+                    }
+                    e.target.value = '';
+                  }}
+                />
+              </div>
             </div>
 
             {/* Totals & Progress */}
@@ -1325,21 +1539,6 @@ const HistoryDropdown = () => (
                     
                     {/* Right-aligned Upload/Download Buttons */}
                     <div className="flex space-x-1.5 w-full sm:w-auto mt-2 sm:mt-0">
-                      <div className="relative group">
-                        <button 
-                          onClick={() => document.getElementById('file-upload-hidden')?.click()} 
-                          className="inline-flex items-center justify-center px-3 py-1.5 text-xs text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors w-full sm:w-auto"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                          </svg>
-                          Unggah Realisasi SAKTI
-                        </button>
-                        <div className="invisible group-hover:visible absolute z-10 w-64 p-2 mt-1 text-xs text-gray-700 bg-white border border-gray-200 rounded-md shadow-lg">
-                          Unggah file Excel hasil realisasi SAKTI level item. Pastikan format file sesuai dengan template yang disediakan.
-                        </div>
-                      </div>
-                      <input id="file-upload-hidden" type="file" className="hidden" accept=".xls,.xlsx" onChange={(e) => e.target.files?.[0] && processFile(e.target.files[0])} />
                       <button onClick={handleDownload} className="inline-flex items-center justify-center px-3 py-1.5 text-xs text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors w-1/2 sm:w-auto">Unduh Hasil</button>
                     </div>
                   </div>
@@ -1547,108 +1746,112 @@ const HistoryDropdown = () => (
                         </div>
 
                         {totalActivities > 0 ? (
-                            <div className="space-y-8">
-                                {paginatedActivityGroups.map(group => (
-                                    <div key={group.key} className="space-y-3">
-                                        <div className="flex items-center justify-between">
-                                            <h3 className="text-lg font-semibold text-gray-800">{group.label}</h3>
-                                            <span className="text-xs text-gray-500">
-                                                {totalActivitiesByGroup.get(group.key) ?? group.activities.length} kegiatan
-                                            </span>
-                                        </div>
-                                        <div className="overflow-hidden border border-gray-200 rounded-lg shadow-sm">
-                                            <table className="min-w-full divide-y divide-gray-200">
-                                                <thead className="bg-gray-50">
-                                                    <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                                                        <th className="px-4 py-3 w-[45%] min-w-[280px]">Nama Kegiatan</th>
-                                                        <th className="px-4 py-3 w-16 whitespace-nowrap">Tanggal</th>
-                                                        <th className="px-4 py-3 text-right w-32 whitespace-nowrap">Total Alokasi</th>
-                                                        <th className="px-4 py-3 w-24 whitespace-nowrap">Status</th>
-                                                        <th className="px-4 py-3 w-28 whitespace-nowrap">Lampiran</th>
-                                                        <th className="px-4 py-3 text-right w-24 whitespace-nowrap">Aksi</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="bg-white divide-y divide-gray-100">
-                                                    {group.activities.map(activity => {
-                                                        const scheduledDate = formatActivityDate(activity.tanggal_pelaksanaan);
-                                                        const totalAlokasi = formatCurrency(activity.allocations.reduce((sum, alloc) => sum + (alloc.jumlah || 0), 0));
-                                                        return (
-                                                            <tr
-                                                                key={activity.id}
-                                                                className="hover:bg-gray-50 transition-colors cursor-pointer"
-                                                                onClick={() => setSelectedActivity(activity)}
-                                                            >
-                                                                <td className="px-4 py-3 align-top max-w-sm">
-                                                                    <div className="flex flex-col space-y-1">
-                                                                        <span className="font-medium text-gray-900 break-words leading-snug">
-                                                                            {activity.nama}
-                                                                        </span>
-                                                                        <span className="text-xs text-gray-500">{activity.allocations.length} alokasi</span>
-                                                                    </div>
-                                                                </td>
-                                                                <td className="px-4 py-3 align-top text-sm text-gray-600 whitespace-nowrap">
-                                                                    {scheduledDate || '-'}
-                                                                </td>
-                                                                <td className="px-4 py-3 align-top text-sm text-gray-900 text-right">
-                                                                    {totalAlokasi}
-                                                                </td>
-                                                                <td className="px-4 py-3 align-top">
-                                                                    {activity.status ? (
-                                                                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
-                                                                            {activity.status}
-                                                                        </span>
-                                                                    ) : (
-                                                                        <span className="text-xs text-gray-400 italic">Belum diatur</span>
-                                                                    )}
-                                                                </td>
-                                                                <td className="px-4 py-3 align-top text-sm text-gray-600">
-                                                                    {activity.attachments && activity.attachments.length > 0 ? (
-                                                                        <div className="flex items-center space-x-2">
-                                                                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2v-7a2 2 0 00-.59-1.41l-5-5A2 2 0 0011.59 5H7a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                                                            </svg>
-                                                                            <span className="text-xs text-gray-500">{activity.attachments.length} lampiran</span>
-                                                                        </div>
-                                                                    ) : (
-                                                                        <span className="text-xs text-gray-400 italic">Tidak ada</span>
-                                                                    )}
-                                                                </td>
-                                                                <td className="px-4 py-3 align-top text-right">
-                                                                    <div className="flex justify-end space-x-2">
-                                                                        <button
-                                                                            onClick={(e) => {
-                                                                                e.stopPropagation();
-                                                                                handleEditActivity(activity);
-                                                                            }}
-                                                                            className="text-blue-500 hover:text-blue-700"
-                                                                            title="Edit kegiatan"
-                                                                        >
-                                                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-                                                                            </svg>
-                                                                        </button>
-                                                                        <button
-                                                                            onClick={(e) => {
-                                                                                e.stopPropagation();
-                                                                                handleRemoveActivity(activity.id);
-                                                                            }}
-                                                                            className="text-red-500 hover:text-red-700"
-                                                                            title="Hapus kegiatan"
-                                                                        >
-                                                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 22H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                                                                            </svg>
-                                                                        </button>
-                                                                    </div>
-                                                                </td>
+                            <>
+                                <div className="space-y-8">
+                                    {paginatedActivityGroups.map(group => (
+                                        <div key={group.key} className="space-y-3">
+                                            <div className="flex items-center justify-between">
+                                                <h3 className="text-lg font-semibold text-gray-800">{group.label}</h3>
+                                                <span className="text-xs text-gray-500">
+                                                    {totalActivitiesByGroup.get(group.key) ?? group.activities.length} kegiatan
+                                                </span>
+                                            </div>
+                                            <div className="border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+                                                <div className="overflow-x-auto">
+                                                    <table className="min-w-full md:min-w-[760px] table-fixed divide-y divide-gray-200">
+                                                        <thead className="bg-gray-50">
+                                                            <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                                                                <th className="px-4 py-3 w-[48%] min-w-[240px]">Nama Kegiatan</th>
+                                                                <th className="px-4 py-3 w-24 whitespace-nowrap">Tanggal</th>
+                                                                <th className="px-4 py-3 text-right w-32 whitespace-nowrap">Total Alokasi</th>
+                                                                <th className="px-4 py-3 w-28 whitespace-nowrap">Status</th>
+                                                                <th className="px-4 py-3 w-28 whitespace-nowrap">Lampiran</th>
+                                                                <th className="px-4 py-3 text-right w-28 whitespace-nowrap">Aksi</th>
                                                             </tr>
-                                                        );
-                                                    })}
-                                                </tbody>
-                                            </table>
+                                                        </thead>
+                                                        <tbody className="bg-white divide-y divide-gray-100">
+                                                            {group.activities.map(activity => {
+                                                                const scheduledDate = formatActivityDate(activity.tanggal_pelaksanaan);
+                                                                const totalAlokasi = formatCurrency(activity.allocations.reduce((sum, alloc) => sum + (alloc.jumlah || 0), 0));
+                                                                return (
+                                                                    <tr
+                                                                        key={activity.id}
+                                                                        className="hover:bg-gray-50 transition-colors cursor-pointer"
+                                                                        onClick={() => setSelectedActivity(activity)}
+                                                                    >
+                                                                        <td className="px-4 py-3 align-top max-w-sm">
+                                                                            <div className="flex flex-col space-y-1">
+                                                                                <span className="font-medium text-gray-900 break-words leading-snug">
+                                                                                    {activity.nama}
+                                                                                </span>
+                                                                                <span className="text-xs text-gray-500">{activity.allocations.length} alokasi</span>
+                                                                            </div>
+                                                                        </td>
+                                                                        <td className="px-4 py-3 align-top text-sm text-gray-600 whitespace-nowrap">
+                                                                            {scheduledDate || '-'}
+                                                                        </td>
+                                                                        <td className="px-4 py-3 align-top text-sm text-gray-900 text-right">
+                                                                            {totalAlokasi}
+                                                                        </td>
+                                                                        <td className="px-4 py-3 align-top">
+                                                                            {activity.status ? (
+                                                                                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
+                                                                                    {activity.status}
+                                                                                </span>
+                                                                            ) : (
+                                                                                <span className="text-xs text-gray-400 italic">Belum diatur</span>
+                                                                            )}
+                                                                        </td>
+                                                                        <td className="px-4 py-3 align-top text-sm text-gray-600">
+                                                                            {activity.attachments && activity.attachments.length > 0 ? (
+                                                                                <div className="flex items-center space-x-2">
+                                                                                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2v-7a2 2 0 00-.59-1.41l-5-5A2 2 0 0011.59 5H7a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                                                    </svg>
+                                                                                    <span className="text-xs text-gray-500">{activity.attachments.length} lampiran</span>
+                                                                                </div>
+                                                                            ) : (
+                                                                                <span className="text-xs text-gray-400 italic">Tidak ada</span>
+                                                                            )}
+                                                                        </td>
+                                                                        <td className="px-4 py-3 align-top text-right">
+                                                                            <div className="flex justify-end space-x-2">
+                                                                                <button
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        handleEditActivity(activity);
+                                                                                    }}
+                                                                                    className="text-blue-500 hover:text-blue-700"
+                                                                                    title="Edit kegiatan"
+                                                                                >
+                                                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                                                                    </svg>
+                                                                                </button>
+                                                                                <button
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        handleRemoveActivity(activity.id);
+                                                                                    }}
+                                                                                    className="text-red-500 hover:text-red-700"
+                                                                                    title="Hapus kegiatan"
+                                                                                >
+                                                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 22H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                                                                    </svg>
+                                                                                </button>
+                                                                            </div>
+                                                                        </td>
+                                                                    </tr>
+                                                                );
+                                                            })}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    ))}
+                                </div>
                                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-t border-gray-200 pt-4">
                                     <p className="text-sm text-gray-500">
                                         Menampilkan {pageRangeStart}-{pageRangeEnd} dari {totalActivities} kegiatan
@@ -1699,7 +1902,7 @@ const HistoryDropdown = () => (
                                         </div>
                                     </div>
                                 </div>
-                            </div>
+                            </>
                         ) : (
                             <p className="text-gray-500 text-center py-4">
                                 {activities.length === 0
@@ -1805,41 +2008,44 @@ const HistoryDropdown = () => (
 
                     {activityAttachments.length > 0 && (
                       <div className="space-y-2">
-                        {activityAttachments.map(attachment => {
-                          const isMarked = attachmentsToRemove.has(attachment.attachmentId);
-                          return (
-                            <div
-                              key={attachment.attachmentId}
-                              className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 border rounded-md text-sm ${isMarked ? 'border-red-300 bg-red-50' : 'border-gray-200 bg-gray-50'}`}
+                    {activityAttachments.map(attachment => {
+                      const isMarked = attachmentsToRemove.has(attachment.attachmentId);
+                      const inlinePreview = isInlinePreview(attachment.fileName);
+                      const href = inlinePreview ? attachment.filePath : getAttachmentDownloadUrl(attachment);
+                      return (
+                        <div
+                          key={attachment.attachmentId}
+                          className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 border rounded-md text-sm ${isMarked ? 'border-red-300 bg-red-50' : 'border-gray-200 bg-gray-50'}`}
+                        >
+                          <div className="space-y-1">
+                            <p className={`break-all ${isMarked ? 'line-through text-red-600' : 'text-gray-700'}`}>
+                              {attachment.fileName}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              Diunggah {new Date(attachment.uploadedAt).toLocaleString('id-ID')}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <a
+                              href={href}
+                              className="inline-flex items-center px-3 py-1.5 border border-blue-500 text-blue-600 rounded-md hover:bg-blue-100 transition"
+                              {...(inlinePreview
+                                ? { target: '_blank', rel: 'noopener noreferrer' }
+                                : { download: attachment.fileName })}
                             >
-                              <div className="space-y-1">
-                                <p className={`break-all ${isMarked ? 'line-through text-red-600' : 'text-gray-700'}`}>
-                                  {attachment.fileName}
-                                </p>
-                                <p className="text-xs text-gray-500">
-                                  Diunggah {new Date(attachment.uploadedAt).toLocaleString('id-ID')}
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <a
-                                  href={attachment.filePath}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center px-3 py-1.5 border border-blue-500 text-blue-600 rounded-md hover:bg-blue-100 transition"
-                                >
-                                  Unduh
-                                </a>
-                                <button
-                                  type="button"
-                                  onClick={() => toggleAttachmentRemoval(attachment.attachmentId)}
-                                  className={`text-xs font-medium ${isMarked ? 'text-gray-600 hover:text-gray-700' : 'text-red-600 hover:text-red-700'}`}
-                                >
-                                  {isMarked ? 'Batalkan' : 'Hapus'}
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
+                              {inlinePreview ? 'Buka' : 'Unduh'}
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => toggleAttachmentRemoval(attachment.attachmentId)}
+                              className={`text-xs font-medium ${isMarked ? 'text-gray-600 hover:text-gray-700' : 'text-red-600 hover:text-red-700'}`}
+                            >
+                              {isMarked ? 'Batalkan' : 'Hapus'}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
                       </div>
                     )}
 
@@ -2112,3 +2318,9 @@ const HistoryDropdown = () => (
 }
 
 export default App;
+
+
+
+
+
+

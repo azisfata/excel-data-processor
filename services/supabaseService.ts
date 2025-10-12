@@ -36,6 +36,9 @@ export async function getAllProcessedResults() {
       fileName: item.file_name || 'File tanpa nama',
       createdAt: item.created_at,
       formattedDate,
+      reportType: item.report_type || null,
+      reportMonth: item.report_month ?? null,
+      reportYear: item.report_year ?? null,
       result: {
         finalData: item.processed_data,
         totals: item.totals,
@@ -50,7 +53,13 @@ export async function getAllProcessedResults() {
  * Fetches the most recent processed Excel data from Supabase.
  * @returns An object containing the latest result and the update timestamp, or null if none found.
  */
-export async function getLatestProcessedResult(): Promise<{ result: ProcessingResult; lastUpdated: string } | null> {
+export async function getLatestProcessedResult(): Promise<{
+  result: ProcessingResult;
+  lastUpdated: string;
+  reportType: string | null;
+  reportMonth: number | null;
+  reportYear: number | null;
+} | null> {
   const { data, error } = await supabase
     .from('processed_results')
     .select('*')
@@ -69,7 +78,10 @@ export async function getLatestProcessedResult(): Promise<{ result: ProcessingRe
       processedDataForPreview: data.processed_data?.slice(0, 100) || [],
       accountNameMap: data.account_name_map ? new Map(Object.entries(data.account_name_map)) : new Map()
     },
-    lastUpdated: new Date(data.created_at).toLocaleString('id-ID')
+    lastUpdated: new Date(data.created_at).toLocaleString('id-ID'),
+    reportType: data.report_type || null,
+    reportMonth: data.report_month ?? null,
+    reportYear: data.report_year ?? null
   };
 }
 
@@ -78,7 +90,11 @@ export async function getLatestProcessedResult(): Promise<{ result: ProcessingRe
  * @param result The processing result object.
  * @param fileName The name of the original file.
  */
-export async function saveProcessedResult(result: ProcessingResult, fileName: string): Promise<void> {
+export async function saveProcessedResult(
+  result: ProcessingResult,
+  fileName: string,
+  options: { reportType: string; reportMonth: number; reportYear: number }
+): Promise<void> {
   // Convert Map to plain object for storage
   const accountNameMapObj = result.accountNameMap ? 
     Object.fromEntries(result.accountNameMap) : {};
@@ -90,7 +106,10 @@ export async function saveProcessedResult(result: ProcessingResult, fileName: st
         file_name: fileName,
         processed_data: result.finalData,
         totals: result.totals,
-        account_name_map: accountNameMapObj
+        account_name_map: accountNameMapObj,
+        report_type: options.reportType,
+        report_month: options.reportMonth,
+        report_year: options.reportYear
       },
     ]);
 
@@ -302,3 +321,4 @@ export async function saveSetting(key: string, value: string): Promise<void> {
         throw new Error('Gagal menyimpan pengaturan.');
     }
 }
+

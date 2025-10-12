@@ -1,0 +1,37 @@
+
+  const handleFileSelection = useCallback((selectedFile: File | null) => {
+    if (!selectedFile) return;
+    if (!selectedFile) return;
+    setError("");
+    setPendingUploadFile(selectedFile);
+    setUploadReportType('Akrual');
+    setUploadReportDate(new Date().toISOString().slice(0, 10));
+    setUploadMetadataError('');
+    setShowUploadMetadataModal(true);
+  const handleCancelUpload = useCallback(() => {
+    setShowUploadMetadataModal(false);
+    setPendingUploadFile(null);
+    setUploadMetadataError('');
+  }, []);
+
+  const handleConfirmUpload = useCallback(async () => {
+    if (!pendingUploadFile) {
+      setUploadMetadataError('Pilih file realisasi terlebih dahulu.');
+      return;
+    }
+    if (!uploadReportDate) {
+      setUploadMetadataError('Tanggal realisasi wajib diisi.');
+      return;
+    }
+    const parsedDate = new Date(uploadReportDate);
+    if (Number.isNaN(parsedDate.getTime())) {
+      setUploadMetadataError('Tanggal realisasi tidak valid.');
+      return;
+    }
+    setUploadMetadataError('');
+    setShowUploadMetadataModal(false);
+    try {
+      await processFile(pendingUploadFile, { reportType: uploadReportType, reportDate: uploadReportDate });
+    } finally {
+      setPendingUploadFile(null);
+    }
