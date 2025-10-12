@@ -7,6 +7,23 @@ import * as supabaseService from './services/supabaseService';
 import * as attachmentService from './services/activityAttachmentService';
 import { supabase } from './utils/supabase';
 
+const MONTH_NAMES_ID = [
+  'Januari',
+  'Februari',
+  'Maret',
+  'April',
+  'Mei',
+  'Juni',
+  'Juli',
+  'Agustus',
+  'September',
+  'Oktober',
+  'November',
+  'Desember'
+];
+
+const PAGE_SIZE_OPTIONS = [5, 10, 50, 100, 'all'] as const;
+
 // --- Icon Components ---
 const UploadIcon = () => (
   <svg className="w-8 h-8 mb-4 text-gray-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 16">
@@ -37,6 +54,15 @@ const App: React.FC = () => {
   const [activityAttachments, setActivityAttachments] = useState<ActivityAttachment[]>([]);
   const [newAttachmentFiles, setNewAttachmentFiles] = useState<File[]>([]);
   const [attachmentsToRemove, setAttachmentsToRemove] = useState<Set<string>>(new Set());
+  const [selectedYear, setSelectedYear] = useState<number | 'all'>(() => new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState<number | 'all' | 'no-date'>(() => new Date().getMonth());
+  const [showAllActivities, setShowAllActivities] = useState(false);
+  const [selectedStatus, setSelectedStatus] = useState<string>('all');
+  const [activitySearchTerm, setActivitySearchTerm] = useState('');
+  const [activitiesPerPage, setActivitiesPerPage] = useState<number | 'all'>(10);
+  const [activitiesPage, setActivitiesPage] = useState(1);
+  const currentYear = useMemo(() => new Date().getFullYear(), []);
+  const currentMonthIndex = useMemo(() => new Date().getMonth(), []);
 
   // State for file processing
   const [isProcessing, setIsProcessing] = useState(false);
@@ -46,9 +72,9 @@ const App: React.FC = () => {
   const [filteredData, setFilteredData] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [maxDepth, setMaxDepth] = useState(7);
-  const [isTableExpanded, setIsTableExpanded] = useState(false);
+  const [isTableExpanded, setIsTableExpanded] = useState(true);
   const [showAccountSummary, setShowAccountSummary] = useState(true);
-  const [showActivities, setShowActivities] = useState(false);
+  const [showActivities, setShowActivities] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState<any[]>([]);
   const [lastUpdated, setLastUpdated] = useState('');
@@ -389,6 +415,277 @@ const HistoryDropdown = () => (
     });
   };
 
+  const handleYearFilterChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const value = event.target.value;
+    setSelectedYear(value === 'all' ? 'all' : Number(value));
+  };
+
+  const handleMonthFilterChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const value = event.target.value;
+    if (value === 'all' || value === 'no-date') {
+      setSelectedMonth(value);
+    } else {
+      const monthNumber = Number(value);
+      if (!Number.isNaN(monthNumber)) {
+        setSelectedMonth(monthNumber);
+      }
+    }
+    setShowAllActivities(false);
+  };
+
+  const handleStatusFilterChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    setSelectedStatus(event.target.value);
+  };
+
+  const handleResetFilters = () => {
+    setSelectedYear(currentYear);
+    setSelectedMonth(currentMonthIndex);
+    setShowAllActivities(false);
+    setSelectedStatus('all');
+  };
+
+  const handleShowAllToggle = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setShowAllActivities(event.target.checked);
+  };
+
+  const handlePageSizeChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const value = event.target.value;
+    if (value === 'all') {
+      setActivitiesPerPage('all');
+    } else {
+      const parsed = Number(value);
+      setActivitiesPerPage(Number.isNaN(parsed) ? 10 : parsed);
+    }
+  };
+
+  const formatMonthLabel = useCallback((date: Date) => {
+    return date.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+  }, []);
+
+  const formatActivityDate = useCallback((value?: string) => {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+  }, []);
+
+  const availableYears = useMemo(() => {
+    const years = new Set<number>();
+    activities.forEach(activity => {
+      if (!activity.tanggal_pelaksanaan) return;
+      const date = new Date(activity.tanggal_pelaksanaan);
+      if (!Number.isNaN(date.getTime())) {
+        years.add(date.getFullYear());
+      }
+    });
+    if (!years.size) {
+      years.add(currentYear);
+    } else if (!years.has(currentYear)) {
+      years.add(currentYear);
+    }
+    return Array.from(years).sort((a, b) => b - a);
+  }, [activities, currentYear]);
+
+  const hasNoDateActivities = useMemo(
+    () => activities.some(activity => !activity.tanggal_pelaksanaan || Number.isNaN(new Date(activity.tanggal_pelaksanaan).getTime())),
+    [activities]
+  );
+
+  const monthOptions = useMemo(
+    () => MONTH_NAMES_ID.map((label, index) => ({ label, value: index })),
+    []
+  );
+
+  const activitiesByMonth = useMemo(() => {
+    if (!activities.length) return [];
+
+    type GroupBucket = {
+      key: string;
+      label: string;
+      sortKey: number;
+      year: number | null;
+      month: number | null;
+      isNoDate: boolean;
+      activities: Activity[];
+    };
+
+    const groupMap = new Map<string, GroupBucket>();
+
+    activities.forEach(activity => {
+      const rawDate = activity.tanggal_pelaksanaan;
+      const parsedDate = rawDate ? new Date(rawDate) : null;
+      const hasValidDate = parsedDate instanceof Date && !Number.isNaN(parsedDate.getTime());
+      const label = hasValidDate ? formatMonthLabel(parsedDate) : 'Tanpa Tanggal';
+      const sortKey = hasValidDate
+        ? new Date(parsedDate.getFullYear(), parsedDate.getMonth(), 1).getTime()
+        : Number.NEGATIVE_INFINITY;
+      const key = hasValidDate
+        ? `${parsedDate.getFullYear()}-${parsedDate.getMonth()}`
+        : 'no-date';
+
+      if (!groupMap.has(key)) {
+        groupMap.set(key, {
+          key,
+          label,
+          sortKey,
+          year: hasValidDate ? parsedDate.getFullYear() : null,
+          month: hasValidDate ? parsedDate.getMonth() : null,
+          isNoDate: !hasValidDate,
+          activities: []
+        });
+      }
+
+      groupMap.get(key)!.activities.push(activity);
+    });
+
+    const grouped = Array.from(groupMap.values());
+
+    grouped.forEach(group => {
+      group.activities.sort((a, b) => {
+        const dateA = a.tanggal_pelaksanaan ? new Date(a.tanggal_pelaksanaan).getTime() : 0;
+        const dateB = b.tanggal_pelaksanaan ? new Date(b.tanggal_pelaksanaan).getTime() : 0;
+
+        if (dateA && dateB) {
+          return dateB - dateA;
+        }
+        if (dateA) return -1;
+        if (dateB) return 1;
+        return a.nama.localeCompare(b.nama);
+      });
+    });
+
+    grouped.sort((a, b) => {
+      if (a.sortKey === b.sortKey) {
+        return a.label.localeCompare(b.label);
+      }
+      return b.sortKey - a.sortKey;
+    });
+
+    return grouped;
+  }, [activities, formatMonthLabel]);
+
+  const filteredActivityGroups = useMemo(() => {
+    if (!activitiesByMonth.length) return [];
+
+    const normalizedSearch = activitySearchTerm.trim().toLowerCase();
+    const matchesSearch = (activity: Activity) =>
+      !normalizedSearch || activity.nama.toLowerCase().includes(normalizedSearch);
+    const matchesStatus = (activity: Activity) =>
+      selectedStatus === 'all' ||
+      (activity.status ? activity.status.toLowerCase() === selectedStatus.toLowerCase() : selectedStatus === 'tanpa-status');
+
+    const baseGroups = showAllActivities
+      ? activitiesByMonth
+      : activitiesByMonth.filter(group => {
+          if (selectedMonth === 'no-date') {
+            return group.isNoDate;
+          }
+
+          if (group.isNoDate) {
+            return selectedMonth === 'all' && selectedYear === 'all';
+          }
+
+          const matchesYear = selectedYear === 'all' || group.year === selectedYear;
+          const matchesMonth = selectedMonth === 'all' || group.month === selectedMonth;
+
+          return matchesYear && matchesMonth;
+        });
+
+    const filtered = baseGroups
+      .map(group => ({
+        ...group,
+        activities: group.activities.filter(activity => matchesSearch(activity) && matchesStatus(activity)),
+      }))
+      .filter(group => group.activities.length > 0);
+
+    if (!filtered.length && normalizedSearch) {
+      const fallback = activitiesByMonth
+        .map(group => ({
+          ...group,
+          activities: group.activities.filter(activity => matchesSearch(activity) && matchesStatus(activity)),
+        }))
+        .filter(group => group.activities.length > 0);
+
+      return fallback;
+    }
+
+    return filtered;
+  }, [activitiesByMonth, selectedMonth, selectedYear, showAllActivities, activitySearchTerm, selectedStatus]);
+
+  const flattenedActivities = useMemo(
+    () =>
+      filteredActivityGroups.flatMap(group =>
+        group.activities.map(activity => ({
+          groupKey: group.key,
+          groupLabel: group.label,
+          activity,
+        }))
+      ),
+    [filteredActivityGroups]
+  );
+
+  const totalActivities = flattenedActivities.length;
+  const totalPages =
+    totalActivities === 0 || activitiesPerPage === 'all'
+      ? 1
+      : Math.ceil(totalActivities / activitiesPerPage);
+
+  useEffect(() => {
+    setActivitiesPage(prev => {
+      const safeTotalPages = totalPages || 1;
+      return prev > safeTotalPages ? safeTotalPages : prev;
+    });
+  }, [totalPages]);
+
+  useEffect(() => {
+    setActivitiesPage(1);
+  }, [selectedYear, selectedMonth, selectedStatus, activitySearchTerm, showAllActivities, activitiesPerPage]);
+
+  const paginatedActivityGroups = useMemo(() => {
+    if (!flattenedActivities.length) return [];
+    const slice =
+      activitiesPerPage === 'all'
+        ? flattenedActivities
+        : flattenedActivities.slice(
+            (activitiesPage - 1) * activitiesPerPage,
+            (activitiesPage - 1) * activitiesPerPage + activitiesPerPage
+          );
+    const map = new Map<string, { key: string; label: string; activities: Activity[] }>();
+
+    slice.forEach(item => {
+      if (!map.has(item.groupKey)) {
+        map.set(item.groupKey, {
+          key: item.groupKey,
+          label: item.groupLabel,
+          activities: [],
+        });
+      }
+      map.get(item.groupKey)!.activities.push(item.activity);
+    });
+
+    return Array.from(map.values());
+  }, [flattenedActivities, activitiesPage, activitiesPerPage]);
+
+  const pageRangeStart =
+    totalActivities === 0
+      ? 0
+      : activitiesPerPage === 'all'
+        ? 1
+        : (activitiesPage - 1) * activitiesPerPage + 1;
+  const pageRangeEnd =
+    totalActivities === 0
+      ? 0
+      : activitiesPerPage === 'all'
+        ? totalActivities
+        : Math.min(activitiesPage * activitiesPerPage, totalActivities);
+  const totalActivitiesByGroup = useMemo(() => {
+    const map = new Map<string, number>();
+    filteredActivityGroups.forEach(group => {
+      map.set(group.key, group.activities.length);
+    });
+    return map;
+  }, [filteredActivityGroups]);
+
   const handleAddActivity = async () => {
     if (!newActivity.nama || newActivity.allocations.length === 0) return;
     setIsSaving(true);
@@ -714,7 +1011,7 @@ const HistoryDropdown = () => (
             
             <div className="space-y-4">
               <div>
-                <h3 className="text-lg font-medium text-gray-900">{selectedActivity.nama}</h3>
+                <h3 className="text-lg font-medium text-gray-900 break-words">{selectedActivity.nama}</h3>
                 {selectedActivity.status && (
                   <div className="mt-1">
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
@@ -872,19 +1169,38 @@ const HistoryDropdown = () => (
             {/* Level 7 Account Totals */}
             {level7Totals.length > 0 && (
               <div className="bg-white shadow-md rounded-lg overflow-hidden border border-gray-200">
-                <div 
-                  className="p-4 bg-gray-50 border-b border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors duration-200 flex justify-between items-center"
-                  onClick={() => setShowAccountSummary(!showAccountSummary)}
-                >
-                  <h3 className="text-lg font-medium text-gray-800">Rekapitulasi per Akun</h3>
-                  <svg 
-                    className={`w-5 h-5 text-gray-500 transform transition-transform duration-200 ${showAccountSummary ? 'rotate-180' : ''}`} 
-                    fill="none" 
-                    viewBox="0 0 24 24" 
-                    stroke="currentColor"
+                <div className="p-4 bg-gray-50 border-b border-gray-200 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                  <div 
+                    className="flex items-center justify-between cursor-pointer hover:bg-gray-100 transition-colors duration-200 rounded-md px-2 py-1"
+                    onClick={() => setShowAccountSummary(!showAccountSummary)}
                   >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
+                    <h3 className="text-lg font-medium text-gray-800">Rekapitulasi per Akun</h3>
+                    <svg 
+                      className={`w-5 h-5 text-gray-500 transform transition-transform duration-200 ${showAccountSummary ? 'rotate-180' : ''}`} 
+                      fill="none" 
+                      viewBox="0 0 24 24" 
+                      stroke="currentColor"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Tampilkan Anggaran</span>
+                    <div className="relative">
+                      <select
+                        className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                        defaultValue="akrual"
+                        disabled
+                      >
+                        <option value="akrual">Akrual</option>
+                        <option value="akrual-outstanding">Akrual + Outstanding</option>
+                        <option value="akrual-outstanding-komitmen">Akrual + Outstanding + Komitmen</option>
+                      </select>
+                      <span className="absolute inset-y-0 right-3 flex items-center text-gray-400 text-xs italic pointer-events-none">
+                        coming soon
+                      </span>
+                    </div>
+                  </div>
                 </div>
                 {showAccountSummary && (
                   <div className="p-6 space-y-6">
@@ -1133,65 +1449,263 @@ const HistoryDropdown = () => (
                     </div>
                 </div>
                 <div className={`transition-all duration-200 ${showActivities ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}>
-                    <div className="p-6">
-                        {activities.length > 0 ? (
-                            <div className="space-y-4">
-                                {activities.map(activity => (
-                                    <div 
-                                        key={activity.id} 
-                                        className="border rounded-lg p-4 hover:bg-gray-50 cursor-pointer transition-colors"
-                                        onClick={() => setSelectedActivity(activity)}
-                                    >
-                                        <div className="flex justify-between items-start">
-                                            <div>
-                                                <h3 className="font-medium text-gray-900">{activity.nama}</h3>
-                                                <p className="text-sm text-gray-500">
-                                                    {activity.allocations.length} alokasi • Total: {formatCurrency(activity.allocations.reduce((sum, alloc) => sum + (alloc.jumlah || 0), 0))}
-                                                    {activity.status && ` • Status: ${activity.status}`}
-                                                </p>
-                                                {activity.attachments && activity.attachments.length > 0 && (
-                                                    <div className="mt-1 text-xs text-gray-500 flex items-center space-x-2">
-                                                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2v-7a2 2 0 00-.59-1.41l-5-5A2 2 0 0011.59 5H7a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                                        </svg>
-                                                        <span className="truncate">
-                                                            {activity.attachments.length} lampiran
-                                                        </span>
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <div className="flex space-x-2">
-                                                <button 
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleEditActivity(activity);
-                                                    }}
-                                                    className="text-blue-500 hover:text-blue-700"
-                                                    title="Edit kegiatan"
-                                                >
-                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-                                                    </svg>
-                                                </button>
-                                                <button 
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleRemoveActivity(activity.id);
-                                                    }}
-                                                    className="text-red-500 hover:text-red-700"
-                                                    title="Hapus kegiatan"
-                                                >
-                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 22H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                                                    </svg>
-                                                </button>
-                                            </div>
+                    <div className="p-6 space-y-6">
+                        <div className="flex flex-wrap items-end gap-4">
+                            <div className="space-y-1 flex-1 min-w-[220px]">
+                                <label htmlFor="activity-search" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                                    Cari Nama Kegiatan
+                                </label>
+                                <div className="relative">
+                                    <div className="pointer-events-none absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400">
+                                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35m1.6-4.65a6 6 0 11-12 0 6 6 0 0112 0z" />
+                                        </svg>
+                                    </div>
+                                    <input
+                                        id="activity-search"
+                                        type="text"
+                                        value={activitySearchTerm}
+                                        onChange={(e) => setActivitySearchTerm(e.target.value)}
+                                        placeholder="Masukkan nama kegiatan..."
+                                        className="w-full border border-gray-300 rounded-md px-3 py-2 pl-9 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    />
+                                </div>
+                            </div>
+                            <div className="space-y-1">
+                                <label htmlFor="activity-year-filter" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                                    Tahun
+                                </label>
+                                <select
+                                    id="activity-year-filter"
+                                    value={selectedYear.toString()}
+                                    onChange={handleYearFilterChange}
+                                    disabled={showAllActivities}
+                                    className={`border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${showAllActivities ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''}`}
+                                >
+                                    <option value="all">Semua Tahun</option>
+                                    {availableYears.map(year => (
+                                        <option key={year} value={year.toString()}>
+                                            {year}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="space-y-1">
+                                <label htmlFor="activity-month-filter" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                                    Bulan
+                                </label>
+                                <select
+                                    id="activity-month-filter"
+                                    value={selectedMonth.toString()}
+                                    onChange={handleMonthFilterChange}
+                                    disabled={showAllActivities}
+                                    className={`border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${showAllActivities ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''}`}
+                                >
+                                    <option value="all">Semua Bulan</option>
+                                    {monthOptions.map(option => (
+                                        <option key={option.value} value={option.value.toString()}>
+                                            {option.label}
+                                        </option>
+                                    ))}
+                                    {hasNoDateActivities && <option value="no-date">Tanpa Tanggal</option>}
+                                </select>
+                            </div>
+                            <div className="space-y-1">
+                                <label htmlFor="activity-status-filter" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                                    Status
+                                </label>
+                                <select
+                                    id="activity-status-filter"
+                                    value={selectedStatus}
+                                    onChange={handleStatusFilterChange}
+                                    className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                >
+                                    <option value="all">Semua Status</option>
+                                    <option value="Rencana">Rencana</option>
+                                    <option value="Outstanding">Outstanding</option>
+                                    <option value="Terbayar">Terbayar</option>
+                                    <option value="tanpa-status">Tanpa Status</option>
+                                </select>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={handleResetFilters}
+                                className="text-sm text-blue-600 hover:text-blue-700 underline decoration-dotted disabled:text-gray-400 disabled:no-underline"
+                                disabled={showAllActivities}
+                            >
+                                Bulan sekarang
+                            </button>
+                            <label className="flex items-center space-x-2 text-sm text-gray-600">
+                                <input
+                                    type="checkbox"
+                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                    checked={showAllActivities}
+                                    onChange={handleShowAllToggle}
+                                />
+                                <span>Tampilkan semua kegiatan</span>
+                            </label>
+                        </div>
+
+                        {totalActivities > 0 ? (
+                            <div className="space-y-8">
+                                {paginatedActivityGroups.map(group => (
+                                    <div key={group.key} className="space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <h3 className="text-lg font-semibold text-gray-800">{group.label}</h3>
+                                            <span className="text-xs text-gray-500">
+                                                {totalActivitiesByGroup.get(group.key) ?? group.activities.length} kegiatan
+                                            </span>
+                                        </div>
+                                        <div className="overflow-hidden border border-gray-200 rounded-lg shadow-sm">
+                                            <table className="min-w-full divide-y divide-gray-200">
+                                                <thead className="bg-gray-50">
+                                                    <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                                                        <th className="px-4 py-3 w-[45%] min-w-[280px]">Nama Kegiatan</th>
+                                                        <th className="px-4 py-3 w-16 whitespace-nowrap">Tanggal</th>
+                                                        <th className="px-4 py-3 text-right w-32 whitespace-nowrap">Total Alokasi</th>
+                                                        <th className="px-4 py-3 w-24 whitespace-nowrap">Status</th>
+                                                        <th className="px-4 py-3 w-28 whitespace-nowrap">Lampiran</th>
+                                                        <th className="px-4 py-3 text-right w-24 whitespace-nowrap">Aksi</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="bg-white divide-y divide-gray-100">
+                                                    {group.activities.map(activity => {
+                                                        const scheduledDate = formatActivityDate(activity.tanggal_pelaksanaan);
+                                                        const totalAlokasi = formatCurrency(activity.allocations.reduce((sum, alloc) => sum + (alloc.jumlah || 0), 0));
+                                                        return (
+                                                            <tr
+                                                                key={activity.id}
+                                                                className="hover:bg-gray-50 transition-colors cursor-pointer"
+                                                                onClick={() => setSelectedActivity(activity)}
+                                                            >
+                                                                <td className="px-4 py-3 align-top max-w-sm">
+                                                                    <div className="flex flex-col space-y-1">
+                                                                        <span className="font-medium text-gray-900 break-words leading-snug">
+                                                                            {activity.nama}
+                                                                        </span>
+                                                                        <span className="text-xs text-gray-500">{activity.allocations.length} alokasi</span>
+                                                                    </div>
+                                                                </td>
+                                                                <td className="px-4 py-3 align-top text-sm text-gray-600 whitespace-nowrap">
+                                                                    {scheduledDate || '-'}
+                                                                </td>
+                                                                <td className="px-4 py-3 align-top text-sm text-gray-900 text-right">
+                                                                    {totalAlokasi}
+                                                                </td>
+                                                                <td className="px-4 py-3 align-top">
+                                                                    {activity.status ? (
+                                                                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
+                                                                            {activity.status}
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-xs text-gray-400 italic">Belum diatur</span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-4 py-3 align-top text-sm text-gray-600">
+                                                                    {activity.attachments && activity.attachments.length > 0 ? (
+                                                                        <div className="flex items-center space-x-2">
+                                                                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2v-7a2 2 0 00-.59-1.41l-5-5A2 2 0 0011.59 5H7a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                                            </svg>
+                                                                            <span className="text-xs text-gray-500">{activity.attachments.length} lampiran</span>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <span className="text-xs text-gray-400 italic">Tidak ada</span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-4 py-3 align-top text-right">
+                                                                    <div className="flex justify-end space-x-2">
+                                                                        <button
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                handleEditActivity(activity);
+                                                                            }}
+                                                                            className="text-blue-500 hover:text-blue-700"
+                                                                            title="Edit kegiatan"
+                                                                        >
+                                                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                                                            </svg>
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                handleRemoveActivity(activity.id);
+                                                                            }}
+                                                                            className="text-red-500 hover:text-red-700"
+                                                                            title="Hapus kegiatan"
+                                                                        >
+                                                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 22H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                                                            </svg>
+                                                                        </button>
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
                                         </div>
                                     </div>
                                 ))}
+                                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-t border-gray-200 pt-4">
+                                    <p className="text-sm text-gray-500">
+                                        Menampilkan {pageRangeStart}-{pageRangeEnd} dari {totalActivities} kegiatan
+                                    </p>
+                                    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                                        <div className="flex items-center space-x-2">
+                                            <span className="text-sm text-gray-500">Baris per halaman</span>
+                                            <select
+                                                value={String(activitiesPerPage)}
+                                                onChange={handlePageSizeChange}
+                                                className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            >
+                                                {PAGE_SIZE_OPTIONS.map(option => (
+                                                    <option key={option} value={String(option)}>
+                                                        {option === 'all' ? 'Semua' : option}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="flex items-center space-x-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => setActivitiesPage(prev => Math.max(1, prev - 1))}
+                                                disabled={activitiesPage === 1 || activitiesPerPage === 'all'}
+                                                className={`px-3 py-1.5 rounded-md border text-sm ${
+                                                    activitiesPage === 1 || activitiesPerPage === 'all'
+                                                        ? 'text-gray-400 border-gray-200 cursor-not-allowed'
+                                                        : 'text-gray-700 border-gray-300 hover:bg-gray-100'
+                                                }`}
+                                            >
+                                                Sebelumnya
+                                            </button>
+                                            <span className="text-sm text-gray-600">
+                                                Halaman {activitiesPage} dari {totalPages}
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setActivitiesPage(prev => Math.min(totalPages, prev + 1))}
+                                                disabled={activitiesPage === totalPages || activitiesPerPage === 'all'}
+                                                className={`px-3 py-1.5 rounded-md border text-sm ${
+                                                    activitiesPage === totalPages || activitiesPerPage === 'all'
+                                                        ? 'text-gray-400 border-gray-200 cursor-not-allowed'
+                                                        : 'text-gray-700 border-gray-300 hover:bg-gray-100'
+                                                }`}
+                                            >
+                                                Berikutnya
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         ) : (
-                            <p className="text-gray-500 text-center py-4">Belum ada kegiatan. Tambahkan kegiatan baru untuk memulai.</p>
+                            <p className="text-gray-500 text-center py-4">
+                                {activities.length === 0
+                                  ? 'Belum ada kegiatan. Tambahkan kegiatan baru untuk memulai.'
+                                  : 'Tidak ada kegiatan untuk filter yang dipilih.'}
+                            </p>
                         )}
                     </div>
                 </div>
