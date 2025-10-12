@@ -73,6 +73,7 @@ const App: React.FC = () => {
   const [uploadReportType, setUploadReportType] = useState<'Akrual' | 'SP2D'>('Akrual');
   const [uploadReportDate, setUploadReportDate] = useState('');
   const [uploadMetadataError, setUploadMetadataError] = useState('');
+  const [budgetView, setBudgetView] = useState('realisasi-laporan');
   const currentYear = useMemo(() => new Date().getFullYear(), []);
   const currentMonthIndex = useMemo(() => new Date().getMonth(), []);
   const getAttachmentDownloadUrl = useCallback(
@@ -99,20 +100,117 @@ const App: React.FC = () => {
   const [error, setError] = useState('');
   const [isInitializing, setIsInitializing] = useState(false);
 
+  const activeData = useMemo(() => {
+    if (!result?.finalData) return [];
+
+    if (budgetView === 'realisasi-laporan') {
+        return result.finalData;
+    }
+
+    const allocationMap = new Map<string, number>();
+    const targetStatuses = budgetView === 'realisasi-outstanding'
+        ? ['outstanding']
+        : ['outstanding', 'komitmen'];
+
+    activities
+        .filter(activity => targetStatuses.includes((activity.status || '').toLowerCase()))
+        .forEach(activity => {
+            activity.allocations.forEach(alloc => {
+                const compositeKey = `${alloc.kode}||${alloc.uraian}`;
+                allocationMap.set(compositeKey, (allocationMap.get(compositeKey) || 0) + alloc.jumlah);
+            });
+        });
+
+    if (allocationMap.size === 0) {
+        return result.finalData;
+    }
+
+    return result.finalData.map(row => {
+        const rowKode = row[0];
+        const rowUraian = row[1];
+        const compositeKey = `${rowKode}||${rowUraian}`;
+        const additionalAmount = allocationMap.get(compositeKey);
+
+        if (additionalAmount) {
+            const newRow = [...row];
+            const newRealisasi = (Number(newRow[6]) || 0) + additionalAmount;
+            newRow[6] = newRealisasi;
+            return newRow;
+        }
+        return row;
+    });
+
+  }, [budgetView, result, activities]);
+
+  const activeTotals = useMemo(() => {
+    if (!activeData || activeData.length === 0) return [0, 0, 0, 0, 0];
+
+    const columnsToSum = [2, 3, 4, 5, 6]; // Pagu, Lock, Periode Lalu, Periode Ini, s.d. Periode
+    return columnsToSum.map(colIndex =>
+        activeData.reduce((sum, row) => sum + (Number(row[colIndex]) || 0), 0)
+    );
+  }, [activeData]);
+
+  const additionalTotals = useMemo(() => {
+    let totalOutstanding = 0;
+    let totalKomitmen = 0;
+
+    activities.forEach(activity => {
+        const activityTotal = activity.allocations.reduce((sum, alloc) => sum + alloc.jumlah, 0);
+        if ((activity.status || '').toLowerCase() === 'outstanding') {
+            totalOutstanding += activityTotal;
+        }
+        if ((activity.status || '').toLowerCase() === 'komitmen') {
+            totalKomitmen += activityTotal;
+        }
+    });
+
+    return { outstanding: totalOutstanding, komitmen: totalKomitmen };
+  }, [activities]);
+
   // State for allocation search
   const [allocationSearch, setAllocationSearch] = useState('');
   const [isAllocationDropdownOpen, setIsAllocationDropdownOpen] = useState(false);
   const allocationDropdownRef = useRef<HTMLDivElement>(null);
+
+  const comprehensiveAllocationMap = useMemo(() => {
+    const allocationMap = new Map<string, number>();
+    activities
+        .filter(activity => ['outstanding', 'komitmen'].includes((activity.status || '').toLowerCase()))
+        .forEach(activity => {
+            activity.allocations.forEach(alloc => {
+                const compositeKey = `${alloc.kode}||${alloc.uraian}`;
+                allocationMap.set(compositeKey, (allocationMap.get(compositeKey) || 0) + alloc.jumlah);
+            });
+        });
+    return allocationMap;
+  }, [activities]);
 
   const filteredAllocations = useMemo(() => {
     if (!allocationSearch) return [];
     if (!result?.finalData) return [];
 
     const searchLower = allocationSearch.toLowerCase();
-    return result.finalData.filter(item => 
-      item[0].toLowerCase().includes(searchLower) || item[1].toLowerCase().includes(searchLower)
-    ).slice(0, 50); // Limit to 50 results for performance
-  }, [allocationSearch, result?.finalData]);
+    
+    return result.finalData
+        .filter(item =>
+            (item[0] || '').toLowerCase().includes(searchLower) || (item[1] || '').toLowerCase().includes(searchLower)
+        )
+        .map(row => {
+            const pagu = Number(row[2]) || 0;
+            const realisasiLaporan = Number(row[6]) || 0;
+            const compositeKey = `${row[0]}||${row[1]}`;
+            const totalAlokasiTambahan = comprehensiveAllocationMap.get(compositeKey) || 0;
+            const sisa = pagu - (realisasiLaporan + totalAlokasiTambahan);
+            
+            return {
+                kode: row[0],
+                uraian: row[1],
+                sisa: sisa
+            };
+        })
+        .slice(0, 50); // Limit to 50 results for performance
+  }, [allocationSearch, result?.finalData, comprehensiveAllocationMap]);
 
   const handleSelectAllocation = (kode: string, uraian: string) => {
     const selectedRow = result?.finalData.find(row => row[0] === kode && row[1] === uraian);
@@ -1039,61 +1137,90 @@ const HistoryDropdown = () => (
 
   // --- Data & Hierarchy Logic ---
   const progressPercentage = useMemo(() => {
-    if (!result || typeof result.totals[0] !== 'number' || result.totals[0] <= 0) return 0;
-    if (typeof result.totals[4] !== 'number') return 0;
-    return (result.totals[4] / result.totals[0]) * 100;
-  }, [result]);
+    if (!activeTotals || typeof activeTotals[0] !== 'number' || activeTotals[0] <= 0) return 0;
+    if (typeof activeTotals[4] !== 'number') return 0;
+    return (activeTotals[4] / activeTotals[0]) * 100;
+  }, [activeTotals]);
 
   // Calculate level 7 account totals
   const level7Totals = useMemo(() => {
     if (!result) return [];
-    
-    const totalsMap = new Map();
-    
-    // Process all rows to find level 7 accounts
-    result.finalData.forEach(row => {
-      const kode = row[0];
-      if (typeof kode === 'string') {
-        const parts = kode.split('.');
-        if (parts.length === 7) { // Level 7 account code
-          const accountCode = parts[6];
-          const paguRevisi = Number(row[2]) || 0;
-          const realisasi = Number(row[6]) || 0;
-          
-          if (totalsMap.has(accountCode)) {
-            const current = totalsMap.get(accountCode);
-            current.paguRevisi += paguRevisi;
-            current.realisasi += realisasi;
-          } else {
-            // Use accountNameMap to get the account name if available
-            const accountName = result.accountNameMap?.get(accountCode) || row[1] || `Akun ${accountCode}`;
-            totalsMap.set(accountCode, {
-              code: accountCode,
-              uraian: accountName,
-              paguRevisi,
-              realisasi,
-              persentase: 0,
-              sisa: 0
-            });
-          }
-        }
-      }
+
+    const outstandingMap = new Map<string, number>();
+    const komitmenMap = new Map<string, number>();
+
+    activities.forEach(activity => {
+        const status = (activity.status || '').toLowerCase();
+        if (status !== 'outstanding' && status !== 'komitmen') return;
+
+        activity.allocations.forEach(alloc => {
+            const codeParts = alloc.kode.split('.');
+            if (codeParts.length >= 7) {
+                const level7Code = codeParts[6];
+                if (status === 'outstanding') {
+                    outstandingMap.set(level7Code, (outstandingMap.get(level7Code) || 0) + alloc.jumlah);
+                } else if (status === 'komitmen') {
+                    komitmenMap.set(level7Code, (komitmenMap.get(level7Code) || 0) + alloc.jumlah);
+                }
+            }
+        });
     });
-    
-    // Calculate percentages and remaining
-    const totals = Array.from(totalsMap.values()).map(item => ({
-      ...item,
-      persentase: item.paguRevisi > 0 ? (item.realisasi / item.paguRevisi) * 100 : 0,
-      sisa: item.paguRevisi - item.realisasi
-    }));
-    
-    // Sort by account code
+
+    const totalsMap = new Map();
+    result.finalData.forEach(row => {
+        const kode = row[0];
+        if (typeof kode === 'string') {
+            const parts = kode.split('.');
+            if (parts.length === 7) {
+                const accountCode = parts[6];
+                const paguRevisi = Number(row[2]) || 0;
+                const realisasiLaporan = Number(row[6]) || 0;
+
+                if (totalsMap.has(accountCode)) {
+                    const current = totalsMap.get(accountCode);
+                    current.paguRevisi += paguRevisi;
+                    current.realisasiLaporan += realisasiLaporan;
+                } else {
+                    const accountName = result.accountNameMap?.get(accountCode) || row[1] || `Akun ${accountCode}`;
+                    totalsMap.set(accountCode, {
+                        code: accountCode,
+                        uraian: accountName,
+                        paguRevisi,
+                        realisasiLaporan,
+                    });
+                }
+            }
+        }
+    });
+
+    const totals = Array.from(totalsMap.values()).map(item => {
+        const outstandingAmount = outstandingMap.get(item.code) || 0;
+        const komitmenAmount = komitmenMap.get(item.code) || 0;
+
+        let finalRealisasi = item.realisasiLaporan;
+        if (budgetView === 'realisasi-outstanding' || budgetView === 'realisasi-komitmen') {
+            finalRealisasi += outstandingAmount;
+        }
+        if (budgetView === 'realisasi-komitmen') {
+            finalRealisasi += komitmenAmount;
+        }
+
+        return {
+            ...item,
+            realisasi: finalRealisasi,
+            outstanding: outstandingAmount,
+            komitmen: komitmenAmount,
+            persentase: item.paguRevisi > 0 ? (finalRealisasi / item.paguRevisi) * 100 : 0,
+            sisa: item.paguRevisi - finalRealisasi
+        };
+    });
+
     return totals.sort((a, b) => a.code.localeCompare(b.code));
-  }, [result]);
+  }, [result, activities, budgetView]);
 
   useEffect(() => {
-    if (result) {
-      const hierarchy = createHierarchy(result.processedDataForPreview);
+    if (activeData) {
+      const hierarchy = createHierarchy(activeData.slice(0, 100)); // Use activeData for preview
       const withExpanded = (nodes: any[], currentLevel = 0): any[] => nodes.map(node => {
         const shouldExpand = currentLevel < maxDepth - 1;
         const isExpanded = expandedNodes[node.fullPath] ?? shouldExpand;
@@ -1104,7 +1231,7 @@ const HistoryDropdown = () => (
       setHierarchicalData(flatData);
       setDisplayedData(flatData);
     }
-  }, [result, expandedNodes, maxDepth]);
+  }, [activeData, expandedNodes, maxDepth]);
 
   const toggleNode = useCallback((path: string, isDataGroup = false) => {
     setExpandedNodes(prev => ({ ...prev, [path]: !prev[path], ...(isDataGroup ? { [`${path}-data`]: !prev[path] } : {}) }));
@@ -1442,16 +1569,18 @@ const HistoryDropdown = () => (
                   {/* Pagu Revisi, Realisasi, Sisa Anggaran Cards */}
                   <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 text-center">
                     <p className="text-sm font-medium text-gray-500 mb-1">Pagu Revisi</p>
-                    <p className="text-lg font-semibold text-gray-900">{(result.totals[0] || 0).toLocaleString('id-ID')}</p>
+                    <p className="text-lg font-semibold text-gray-900">{formatCurrency(activeTotals[0] || 0)}</p>
                   </div>
                   <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 text-center">
                     <p className="text-sm font-medium text-gray-500 mb-1">Realisasi</p>
-                    <p className="text-lg font-semibold text-gray-900">{(result.totals[4] || 0).toLocaleString('id-ID')}</p>
+                    <p className="text-lg font-semibold text-gray-900">{formatCurrency(activeTotals[4] || 0)}</p>
                   </div>
                   <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 text-center">
                     <p className="text-sm font-medium text-gray-500 mb-1">Sisa Anggaran</p>
-                    <p className="text-lg font-semibold text-gray-900">{(Number(result.totals[0] || 0) - Number(result.totals[4] || 0)).toLocaleString('id-ID')}</p>
+                    <p className="text-lg font-semibold text-gray-900">{formatCurrency((activeTotals[0] || 0) - (activeTotals[4] || 0))}</p>
                   </div>
+
+
                 </div>
                 <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm">
                   <div className="max-w-3xl mx-auto">
@@ -1460,6 +1589,21 @@ const HistoryDropdown = () => (
                       <span className="text-sm font-semibold text-indigo-700">{progressPercentage.toFixed(2)}%</span>
                     </div>
                     <div className="w-full bg-gray-100 rounded-full h-2.5"><div className="bg-gradient-to-r from-indigo-500 to-indigo-600 h-full rounded-full" style={{ width: `${progressPercentage}%` }}/></div>
+                    {/* Additional Totals Display */}
+                    {(budgetView === 'realisasi-outstanding' || budgetView === 'realisasi-komitmen') && (additionalTotals.outstanding > 0 || additionalTotals.komitmen > 0) && (
+                        <div className="mt-3 flex justify-center items-center gap-x-6 gap-y-2 flex-wrap">
+                            {(budgetView === 'realisasi-outstanding' || budgetView === 'realisasi-komitmen') && additionalTotals.outstanding > 0 && (
+                                <div className="text-sm text-gray-600">
+                                    <span className="font-semibold text-yellow-800">Outstanding:</span> {formatCurrency(additionalTotals.outstanding)}
+                                </div>
+                            )}
+                            {budgetView === 'realisasi-komitmen' && additionalTotals.komitmen > 0 && (
+                                <div className="text-sm text-gray-600">
+                                    <span className="font-semibold text-orange-800">Komitmen:</span> {formatCurrency(additionalTotals.komitmen)}
+                                </div>
+                            )}
+                        </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1488,15 +1632,13 @@ const HistoryDropdown = () => (
                     <div className="relative">
                       <select
                         className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                        defaultValue="realisasi-laporan"
+                        value={budgetView}
+                        onChange={(e) => setBudgetView(e.target.value)}
                       >
                         <option value="realisasi-laporan">Realisasi (Sesuai Laporan)</option>
                         <option value="realisasi-outstanding">Realisasi + Outstanding</option>
                         <option value="realisasi-komitmen">Realisasi + Outstanding + Komitmen</option>
                       </select>
-                      <span className="absolute inset-y-0 right-3 flex items-center text-gray-400 text-xs italic pointer-events-none">
-                        coming soon
-                      </span>
                     </div>
                   </div>
                 </div>
@@ -1526,21 +1668,32 @@ const HistoryDropdown = () => (
                               ></div>
                             </div>
                             
-                            <div className="grid grid-cols-3 gap-1 text-xs">
-                              <div>
-                                <p className="text-gray-500">Pagu</p>
-                                <p className="font-medium">{item.paguRevisi?.toLocaleString('id-ID') || '0'}</p>
-                              </div>
-                              <div className="text-center">
-                                <p className="text-gray-500">Realisasi</p>
-                                <p className="font-medium">{item.realisasi?.toLocaleString('id-ID') || '0'}</p>
-                              </div>
-                              <div className="text-center">
-                                <p className="text-gray-500">Sisa</p>
-                                <p className="font-medium">{(item.paguRevisi - item.realisasi)?.toLocaleString('id-ID') || '0'}</p>
-                              </div>
-                            </div>
-                          </div>
+                                                          <div className="grid grid-cols-3 gap-1 text-xs">
+                                                            <div>
+                                                              <p className="text-gray-500">Pagu</p>
+                                                              <p className="font-medium">{item.paguRevisi?.toLocaleString('id-ID') || '0'}</p>
+                                                            </div>
+                                                            <div className="text-center">
+                                                              <p className="text-gray-500">Realisasi</p>
+                                                              <p className="font-medium">{item.realisasi?.toLocaleString('id-ID') || '0'}</p>
+                                                            </div>
+                                                            <div className="text-right">
+                                                              <p className="text-gray-500">Sisa</p>
+                                                              <p className="font-medium">{item.sisa?.toLocaleString('id-ID') || '0'}</p>
+                                                            </div>
+                                                          </div>
+                                                          
+                                                          {/* Conditional display for outstanding/komitmen per account */}
+                                                          {(budgetView === 'realisasi-outstanding' || budgetView === 'realisasi-komitmen') && item.outstanding > 0 && (
+                                                              <div className="mt-2 pt-2 border-t border-gray-100 text-xs">
+                                                                  <p className="text-gray-500">Outstanding: <span className="font-medium text-yellow-800">{formatCurrency(item.outstanding)}</span></p>
+                                                              </div>
+                                                          )}
+                                                          {budgetView === 'realisasi-komitmen' && item.komitmen > 0 && (
+                                                              <div className="mt-1 pt-1 border-t border-gray-100 text-xs">
+                                                                  <p className="text-gray-500">Komitmen: <span className="font-medium text-orange-800">{formatCurrency(item.komitmen)}</span></p>
+                                                              </div>
+                                                          )}                          </div>
                         </div>
                       ))}
                     </div>
@@ -2219,11 +2372,19 @@ const HistoryDropdown = () => (
                             {filteredAllocations.map((item, index) => (
                               <div
                                 key={index}
-                                onClick={() => handleSelectAllocation(item[0], item[1])}
-                                className="p-2.5 hover:bg-blue-50 cursor-pointer text-sm"
+                                onClick={() => handleSelectAllocation(item.kode, item.uraian)}
+                                className="p-2.5 hover:bg-blue-50 cursor-pointer text-sm border-b border-gray-100"
                               >
-                                <p className="font-medium text-gray-800">{item[1]}</p>
-                                <p className="text-xs text-gray-500">{item[0]}</p>
+                                <div className="flex justify-between items-center">
+                                    <div>
+                                        <p className="font-medium text-gray-800">{item.uraian}</p>
+                                        <p className="text-xs text-gray-500">{item.kode}</p>
+                                    </div>
+                                    <div className="text-right flex-shrink-0 ml-4">
+                                        <p className="text-xs text-gray-500">Sisa</p>
+                                        <p className="font-semibold text-gray-800">{formatCurrency(item.sisa)}</p>
+                                    </div>
+                                </div>
                               </div>
                             ))}
                           </div>
