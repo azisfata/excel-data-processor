@@ -6,6 +6,8 @@ import { createHierarchy, flattenTree } from './utils/hierarchy';
 import * as supabaseService from './services/supabaseService';
 import * as attachmentService from './services/activityAttachmentService';
 import { supabase } from './utils/supabase';
+import { fetchAiResponse, type AiChatMessage as AiRequestMessage } from './services/aiService';
+import { getProcessedReport, type ProcessedReportResponse } from './services/reportService';
 
 const MONTH_NAMES_ID = [
   'Januari',
@@ -24,6 +26,38 @@ const MONTH_NAMES_ID = [
 
 const PAGE_SIZE_OPTIONS = [5, 10, 50, 100, 'all'] as const;
 
+type AiMessage = {
+  id: string;
+  sender: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+};
+
+const INITIAL_AI_MESSAGE_ID = 'assistant-initial';
+
+const AI_QUICK_PROMPTS = [
+  'Berapa total realisasi anggaran saat ini?',
+  'Status kegiatan outstanding terbaru?',
+  'Sebutkan 5 kegiatan dengan alokasi terbesar.',
+  'Berapa jumlah lampiran yang sudah diunggah?'
+] as const;
+
+const formatCurrency = (amount: number): string => {
+  return new Intl.NumberFormat('id-ID', { 
+    style: 'currency', 
+    currency: 'IDR',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0 
+  }).format(amount);
+};
+
+const generateMessageId = (): string => {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return (crypto as Crypto & { randomUUID: () => string }).randomUUID();
+  }
+  return `msg-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+};
+
 // --- Icon Components ---
 const UploadIcon = () => (
   <svg className="w-8 h-8 mb-4 text-gray-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 16">
@@ -31,16 +65,25 @@ const UploadIcon = () => (
   </svg>
 );
 
+
+
+
 const App: React.FC = () => {
   // State for activity management
   const [activities, setActivities] = useState<Activity[]>([]);
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
   const [newActivity, setNewActivity] = useState<Omit<Activity, 'id'>>({ 
     nama: '', 
-    status: 'Komitmen', 
+    status: 'Rencana', 
     allocations: [],
     attachments: [],
-    tanggal_pelaksanaan: ''
+    tanggal_pelaksanaan: '',
+    tujuan_kegiatan: '',
+    kl_unit_terkait: '',
+    penanggung_jawab: '',
+    capaian: '',
+    pending_issue: '',
+    rencana_tindak_lanjut: ''
   });
   const [isEditing, setIsEditing] = useState(false);
   const [editingActivityId, setEditingActivityId] = useState<string | null>(null);
@@ -99,6 +142,12 @@ const App: React.FC = () => {
   const [lastUpdated, setLastUpdated] = useState('');
   const [error, setError] = useState('');
   const [isInitializing, setIsInitializing] = useState(false);
+  const [aiMessages, setAiMessages] = useState<AiMessage[]>([]);
+  const [aiInput, setAiInput] = useState('');
+  const [isAiProcessing, setIsAiProcessing] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [reportDataset, setReportDataset] = useState<ProcessedReportResponse | null>(null);
+  const [reportDatasetError, setReportDatasetError] = useState<string | null>(null);
 
   const activeData = useMemo(() => {
     if (!result?.finalData) return [];
@@ -173,6 +222,12 @@ const App: React.FC = () => {
   const [isAllocationDropdownOpen, setIsAllocationDropdownOpen] = useState(false);
   const allocationDropdownRef = useRef<HTMLDivElement>(null);
 
+  const reportYear = useMemo(() => {
+    return latestReportMeta.reportDate 
+        ? new Date(latestReportMeta.reportDate).getFullYear() 
+        : new Date().getFullYear();
+  }, [latestReportMeta.reportDate]);
+
   const comprehensiveAllocationMap = useMemo(() => {
     const allocationMap = new Map<string, number>();
     activities
@@ -206,22 +261,15 @@ const App: React.FC = () => {
             return {
                 kode: row[0],
                 uraian: row[1],
+                pagu: pagu,
                 sisa: sisa
             };
         })
         .slice(0, 50); // Limit to 50 results for performance
   }, [allocationSearch, result?.finalData, comprehensiveAllocationMap]);
 
-  const handleSelectAllocation = (kode: string, uraian: string) => {
-    const selectedRow = result?.finalData.find(row => row[0] === kode && row[1] === uraian);
-    if (selectedRow) {
-        const pagu = Number(selectedRow[2]) || 0;
-        const realisasi = Number(selectedRow[6]) || 0;
-        const sisa = pagu - realisasi;
-        setNewAllocation(prev => ({ ...prev, kode, uraian, pagu, sisa }));
-    } else {
-        setNewAllocation(prev => ({ ...prev, kode, uraian, pagu: 0, sisa: 0 }));
-    }
+  const handleSelectAllocation = (item: { kode: string, uraian: string, pagu: number, sisa: number }) => {
+    setNewAllocation(prev => ({ ...prev, kode: item.kode, uraian: item.uraian, pagu: item.pagu, sisa: item.sisa }));
     setAllocationSearch('');
     setIsAllocationDropdownOpen(false);
   };
@@ -240,17 +288,189 @@ const App: React.FC = () => {
   
   // Refs
   const historyRef = useRef<HTMLDivElement>(null);
+  const aiChatContainerRef = useRef<HTMLDivElement>(null);
   
-  // Format currency helper function
-  const formatCurrency = (amount: number): string => {
-    return new Intl.NumberFormat('id-ID', { 
-      style: 'currency', 
-      currency: 'IDR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0 
-    }).format(amount);
-  };
-  
+  const buildAiDataSnapshot = useCallback((): string => {
+    const totalActivitiesCount = activities.length;
+    const activitiesWithTotals = activities.map(activity => ({
+      activity,
+      total: activity.allocations.reduce((sum, alloc) => sum + (alloc.jumlah || 0), 0)
+    }));
+    const totalAllocationAmount = activitiesWithTotals.reduce((sum, item) => sum + item.total, 0);
+    const datasetSummary = reportDataset?.summary ?? null;
+    const datasetTotals = datasetSummary?.columnTotals ?? {};
+
+    const totalPagu = (datasetTotals['Pagu Revisi'] ?? activeTotals[0]) || 0;
+    const totalRealisasi = (datasetTotals['s.d. Periode'] ?? activeTotals[4]) || 0;
+    const sisaAnggaran = totalPagu - totalRealisasi;
+    const attachmentsCount = activities.reduce(
+      (sum, activity) => sum + (activity.attachments?.length || 0),
+      0
+    );
+    const statusKeys: Array<'rencana' | 'komitmen' | 'outstanding' | 'terbayar'> = ['rencana', 'komitmen', 'outstanding', 'terbayar'];
+    const statusSummary = statusKeys
+      .map(status => {
+        const count = activities.filter(activity => (activity.status || '').toLowerCase() === status).length;
+        const label = status.charAt(0).toUpperCase() + status.slice(1);
+        return `${label}: ${count}`;
+      })
+      .join(', ');
+
+    const topActivities = activitiesWithTotals
+      .filter(item => item.total > 0)
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 5);
+
+    const columnSummary = [
+      { label: 'Pagu Revisi', value: totalPagu },
+      { label: 'Lock Anggaran', value: (datasetTotals['Lock Pagu'] ?? activeTotals[1]) || 0 },
+      { label: 'Realisasi Periode Lalu', value: (datasetTotals['Periode Lalu'] ?? activeTotals[2]) || 0 },
+      { label: 'Realisasi Periode Ini', value: (datasetTotals['Periode Ini'] ?? activeTotals[3]) || 0 },
+      { label: 'Realisasi s.d. Periode', value: totalRealisasi }
+    ];
+
+    const datasetTopByPagu = datasetSummary?.topByPagu ?? [];
+    const datasetTopKode = datasetSummary?.topKodeByRealisasi ?? [];
+
+    const datasetColumns = reportDataset?.columns ?? [];
+    const kodeIdx = datasetColumns.indexOf('Kode');
+    const uraianIdx = datasetColumns.indexOf('Uraian');
+    const paguIdx = datasetColumns.indexOf('Pagu Revisi');
+    const realisasiIdx = datasetColumns.indexOf('s.d. Periode');
+
+    const datasetRowCount =
+      datasetSummary?.rowCount ?? (reportDataset?.rows ? Math.max(reportDataset.rows.length - 1, 0) : 0);
+
+    const uniqueCodesCount =
+      datasetSummary?.uniqueCodes ??
+      (reportDataset?.rows && kodeIdx !== -1
+        ? new Set(
+            reportDataset.rows.slice(1).map(row => String(row[kodeIdx] ?? '')).filter(Boolean)
+          ).size
+        : 0);
+
+    const uniqueDescriptionsCount =
+      datasetSummary?.uniqueDescriptions ??
+      (reportDataset?.rows && uraianIdx !== -1
+        ? new Set(
+            reportDataset.rows.slice(1).map(row => String(row[uraianIdx] ?? '')).filter(Boolean)
+          ).size
+        : 0);
+
+    const sampleRows =
+      reportDataset?.rows && reportDataset.rows.length > 1
+        ? reportDataset.rows.slice(1, Math.min(reportDataset.rows.length, 11))
+        : [];
+
+    const lines: string[] = [
+      `- Total kegiatan terdaftar: ${totalActivitiesCount}`,
+      `- Total alokasi kegiatan: ${formatCurrency(totalAllocationAmount)}`,
+      `- Realisasi kumulatif: ${formatCurrency(totalRealisasi)} dari pagu ${formatCurrency(totalPagu)} (sisa ${formatCurrency(sisaAnggaran)})`,
+      `- Sebaran status kegiatan: ${statusSummary}`,
+      `- Total lampiran kegiatan: ${attachmentsCount} berkas`
+    ];
+
+    if (datasetRowCount > 0) {
+      lines.push(
+        `- Laporan "laporan_processed (1).xlsx": ${datasetRowCount} baris (${uniqueCodesCount} kode unik, ${uniqueDescriptionsCount} uraian)`
+      );
+    }
+
+    lines.push('- Ringkasan kolom laporan:');
+    columnSummary.forEach(item => {
+      lines.push(`   - ${item.label}: ${formatCurrency(item.value)}`);
+    });
+
+    if (topActivities.length > 0) {
+      lines.push('- Kegiatan dengan alokasi terbesar:');
+      topActivities.forEach(item => {
+        const statusLabel = item.activity.status ? ` (status ${item.activity.status})` : '';
+        lines.push(`   - ${item.activity.nama}: ${formatCurrency(item.total)}${statusLabel}`);
+      });
+    }
+
+    if (datasetTopByPagu.length > 0) {
+      lines.push('- Uraian laporan dengan pagu terbesar:');
+      datasetTopByPagu.slice(0, 5).forEach(item => {
+        lines.push(
+          `   - ${item.kode} ${item.uraian}: Pagu ${formatCurrency(item.pagu)}, Realisasi ${formatCurrency(item.realisasi)}`
+        );
+      });
+    }
+
+    if (datasetTopKode.length > 0) {
+      lines.push('- Kode dengan realisasi tertinggi:');
+      datasetTopKode.slice(0, 5).forEach(item => {
+        lines.push(`   - ${item.kode}: Realisasi ${formatCurrency(item.total)}`);
+      });
+    }
+
+    if (sampleRows.length > 0 && kodeIdx !== -1 && uraianIdx !== -1) {
+      lines.push('- Sampel baris laporan_processed:');
+      sampleRows.forEach(row => {
+        const kode = String(row[kodeIdx] ?? '').trim();
+        const uraian = String(row[uraianIdx] ?? '').trim();
+        const pagu = paguIdx !== -1 ? Number(row[paguIdx]) || 0 : 0;
+        const realisasi = realisasiIdx !== -1 ? Number(row[realisasiIdx]) || 0 : 0;
+        lines.push(
+          `   - ${kode || '(tanpa kode)'} ${uraian ? `- ${uraian}` : ''} | Pagu ${formatCurrency(pagu)}, Realisasi ${formatCurrency(realisasi)}`
+        );
+      });
+    }
+
+    return lines.join('\n');
+  }, [activities, activeTotals, reportDataset]);
+
+  const buildAiIntro = useCallback((): string => {
+    const snapshot = buildAiDataSnapshot();
+    return [
+      'Halo! Saya asisten AI anggaran Anda.',
+      'Ringkasan data terkini:',
+      snapshot,
+      'Silakan ajukan pertanyaan tentang realisasi, alokasi, status kegiatan, atau lampiran.'
+    ].join('\n');
+  }, [buildAiDataSnapshot]);
+
+  const buildAiSystemPrompt = useCallback((): string => {
+    const snapshot = buildAiDataSnapshot();
+    return [
+      'Anda adalah asisten AI yang membantu analisis data anggaran di aplikasi internal. Jawab dalam bahasa Indonesia yang ringkas, spesifik, dan selalu berbasis data yang tersedia.',
+      'Gunakan ringkasan berikut sebagai konteks:',
+      snapshot,
+      'Jika informasi yang diminta ada pada ringkasan di atas, gunakan angka tersebut dalam jawaban Anda.',
+      'Hanya sampaikan keterbatasan apabila angka yang diminta benar-benar tidak hadir dalam ringkasan. Jangan pernah mengatakan Anda tidak memiliki akses data apabila ringkasan sudah menyediakannya.'
+    ].join('\n');
+  }, [buildAiDataSnapshot]);
+
+  useEffect(() => {
+    const intro = buildAiIntro();
+    setAiMessages(prev => {
+      if (prev.length === 0) {
+        return [{
+          id: INITIAL_AI_MESSAGE_ID,
+          sender: 'assistant',
+          content: intro,
+          timestamp: new Date().toISOString()
+        }];
+      }
+      if (prev[0].id === INITIAL_AI_MESSAGE_ID && prev[0].content !== intro) {
+        const [, ...rest] = prev;
+        return [{
+          ...prev[0],
+          content: intro,
+          timestamp: new Date().toISOString()
+        }, ...rest];
+      }
+      return prev;
+    });
+  }, [buildAiIntro]);
+
+  useEffect(() => {
+    if (aiChatContainerRef.current) {
+      aiChatContainerRef.current.scrollTop = aiChatContainerRef.current.scrollHeight;
+    }
+  }, [aiMessages]);
+
   // State for expanded nodes
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
 const Spinner = () => (
@@ -516,8 +736,24 @@ const HistoryDropdown = () => (
   }, []);
 
   useEffect(() => {
+    async function loadReportDataset() {
+      try {
+        const dataset = await getProcessedReport();
+        setReportDataset(dataset);
+        setReportDatasetError(null);
+      } catch (err) {
+        console.error('Error fetching laporan_processed dataset:', err);
+        setReportDataset(null);
+        setReportDatasetError('Gagal memuat data laporan_processed.');
+      }
+    }
+
+    loadReportDataset();
+  }, []);
+
+  useEffect(() => {
     if (showActivityForm && !isEditing) {
-      setNewActivity({ nama: '', allocations: [], status: 'Komitmen', attachments: [], tanggal_pelaksanaan: '' });
+      setNewActivity({ nama: '', allocations: [], status: 'Rencana', attachments: [], tanggal_pelaksanaan: '', tujuan_kegiatan: '', kl_unit_terkait: '', penanggung_jawab: '', capaian: '', pending_issue: '', rencana_tindak_lanjut: '' });
       setActivityAttachments([]);
       setNewAttachmentFiles([]);
       setAttachmentsToRemove(new Set());
@@ -606,6 +842,87 @@ const HistoryDropdown = () => (
       }
       return next;
     });
+  };
+
+  // --- AI Assistant Handlers ---
+  const sendAiPrompt = async (prompt: string) => {
+    const trimmed = prompt.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    const userMessage: AiMessage = {
+      id: generateMessageId(),
+      sender: 'user',
+      content: trimmed,
+      timestamp: new Date().toISOString()
+    };
+
+    const conversationWithUser = [...aiMessages, userMessage];
+
+    setAiMessages(conversationWithUser);
+    setIsAiProcessing(true);
+    setAiError(null);
+
+    const sanitizedHistory = conversationWithUser.filter(message => message.id !== INITIAL_AI_MESSAGE_ID);
+    const recentHistory = sanitizedHistory.slice(-12);
+    const systemPrompt = buildAiSystemPrompt();
+
+    const payload: AiRequestMessage[] = [
+      { role: 'system', content: systemPrompt },
+      ...recentHistory.map(message => ({
+        role: message.sender,
+        content: message.content
+      }))
+    ];
+
+    try {
+      const aiReply = await fetchAiResponse(payload);
+      const assistantMessage: AiMessage = {
+        id: generateMessageId(),
+        sender: 'assistant',
+        content: aiReply,
+        timestamp: new Date().toISOString()
+      };
+      setAiMessages(prev => [...prev, assistantMessage]);
+    } catch (err) {
+      console.error('AI assistant error:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Terjadi kesalahan saat memanggil layanan AI.';
+      setAiError(errorMessage);
+      const fallbackMessage: AiMessage = {
+        id: generateMessageId(),
+        sender: 'assistant',
+        content: errorMessage.includes('API key')
+          ? 'Konfigurasi API key AI belum lengkap. Periksa variabel lingkungan dan coba lagi.'
+          : 'Maaf, terjadi kendala saat menghubungi layanan AI. Silakan coba beberapa saat lagi.',
+        timestamp: new Date().toISOString()
+      };
+      setAiMessages(prev => [...prev, fallbackMessage]);
+    } finally {
+      setIsAiProcessing(false);
+    }
+  };
+
+  const handleAiSubmit = async (event?: React.FormEvent<HTMLFormElement>) => {
+    event?.preventDefault();
+    if (isAiProcessing) {
+      return;
+    }
+    const text = aiInput.trim();
+    if (!text) {
+      return;
+    }
+    setAiInput('');
+    await sendAiPrompt(text);
+  };
+
+  const handleQuickPrompt = (prompt: string) => {
+    if (isAiProcessing) {
+      setAiInput(prompt);
+      return;
+    }
+    setAiInput('');
+    void sendAiPrompt(prompt);
   };
 
   const handleYearFilterChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
@@ -1007,7 +1324,11 @@ const HistoryDropdown = () => (
   }, [paginatedActivityGroups]);
 
   const handleAddActivity = async () => {
-    if (!newActivity.nama || newActivity.allocations.length === 0) return;
+    setError(''); // Clear previous errors
+    if (!newActivity.nama || !newActivity.tanggal_pelaksanaan) {
+      setError('Nama kegiatan dan tanggal pelaksanaan wajib diisi.');
+      return;
+    }
     setIsSaving(true);
     try {
       let savedActivity: Activity;
@@ -1066,7 +1387,7 @@ const HistoryDropdown = () => (
         setActivities(prev => [...prev, activityWithAttachments]);
       }
 
-      setNewActivity({ nama: '', allocations: [], status: 'Komitmen', attachments: [], tanggal_pelaksanaan: '' });
+      setNewActivity({ nama: '', allocations: [], status: 'Rencana', attachments: [], tanggal_pelaksanaan: '', tujuan_kegiatan: '', kl_unit_terkait: '', penanggung_jawab: '', capaian: '', pending_issue: '', rencana_tindak_lanjut: '' });
       setActivityAttachments([]);
       setNewAttachmentFiles([]);
       setAttachmentsToRemove(new Set());
@@ -1088,10 +1409,16 @@ const HistoryDropdown = () => (
   const handleEditActivity = (activity: Activity) => {
     setNewActivity({
       nama: activity.nama,
-      status: activity.status || 'Komitmen',
+      status: activity.status || 'Rencana',
       allocations: [...activity.allocations],
       attachments: activity.attachments ?? [],
-      tanggal_pelaksanaan: activity.tanggal_pelaksanaan || ''
+      tanggal_pelaksanaan: activity.tanggal_pelaksanaan || '',
+      tujuan_kegiatan: activity.tujuan_kegiatan || '',
+      kl_unit_terkait: activity.kl_unit_terkait || '',
+      penanggung_jawab: activity.penanggung_jawab || '',
+      capaian: activity.capaian || '',
+      pending_issue: activity.pending_issue || '',
+      rencana_tindak_lanjut: activity.rencana_tindak_lanjut || ''
     });
     setActivityAttachments(activity.attachments ?? []);
     setNewAttachmentFiles([]);
@@ -1102,7 +1429,7 @@ const HistoryDropdown = () => (
   };
 
   const handleCancelEdit = () => {
-    setNewActivity({ nama: '', allocations: [], status: 'Komitmen', attachments: [], tanggal_pelaksanaan: '' });
+    setNewActivity({ nama: '', allocations: [], status: 'Rencana', attachments: [], tanggal_pelaksanaan: '', tujuan_kegiatan: '', kl_unit_terkait: '', penanggung_jawab: '', capaian: '', pending_issue: '', rencana_tindak_lanjut: '' });
     setActivityAttachments([]);
     setNewAttachmentFiles([]);
     setAttachmentsToRemove(new Set());
@@ -1406,6 +1733,30 @@ const HistoryDropdown = () => (
                 )}
               </div>
 
+              {/* Rencana Details */}
+              {selectedActivity.tujuan_kegiatan && (
+                <div>
+                  <h4 className="font-medium text-gray-700 mb-2">Detail Rencana</h4>
+                  <div className="text-sm space-y-2 text-gray-800">
+                    <p><span className="font-semibold">Tujuan:</span> {selectedActivity.tujuan_kegiatan}</p>
+                    <p><span className="font-semibold">K/L/Unit Terkait:</span> {selectedActivity.kl_unit_terkait}</p>
+                    <p><span className="font-semibold">Penanggung Jawab:</span> {selectedActivity.penanggung_jawab}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Capaian Details */}
+              {selectedActivity.capaian && (
+                <div>
+                  <h4 className="font-medium text-gray-700 mb-2">Detail Realisasi</h4>
+                  <div className="text-sm space-y-2 text-gray-800">
+                    <p><span className="font-semibold">Capaian:</span> {selectedActivity.capaian}</p>
+                    <p><span className="font-semibold">Pending Issue:</span> {selectedActivity.pending_issue}</p>
+                    <p><span className="font-semibold">Tindak Lanjut:</span> {selectedActivity.rencana_tindak_lanjut}</p>
+                  </div>
+                </div>
+              )}
+
               {selectedActivity.attachments && selectedActivity.attachments.length > 0 && (
                 <div>
                   <h4 className="font-medium text-gray-700 mb-2">Lampiran</h4>
@@ -1565,24 +1916,23 @@ const HistoryDropdown = () => (
             {/* Totals & Progress */}
             <div className="bg-white shadow-md rounded-lg overflow-hidden border border-gray-200">
               <div className="p-6 space-y-6">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  {/* Pagu Revisi, Realisasi, Sisa Anggaran Cards */}
-                  <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 text-center">
-                    <p className="text-sm font-medium text-gray-500 mb-1">Pagu Revisi</p>
-                    <p className="text-lg font-semibold text-gray-900">{formatCurrency(activeTotals[0] || 0)}</p>
-                  </div>
-                  <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 text-center">
-                    <p className="text-sm font-medium text-gray-500 mb-1">Realisasi</p>
-                    <p className="text-lg font-semibold text-gray-900">{formatCurrency(activeTotals[4] || 0)}</p>
-                  </div>
-                  <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 text-center">
-                    <p className="text-sm font-medium text-gray-500 mb-1">Sisa Anggaran</p>
-                    <p className="text-lg font-semibold text-gray-900">{formatCurrency((activeTotals[0] || 0) - (activeTotals[4] || 0))}</p>
-                  </div>
-
-
-                </div>
-                <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm">
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                                                  {/* Pagu Revisi */}
+                                                  <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 border-t-4 border-t-blue-500">
+                                                    <p className="text-sm font-medium text-gray-500">Pagu Revisi</p>
+                                                    <p className="mt-1 text-2xl font-semibold text-gray-900">{formatCurrency(activeTotals[0] || 0)}</p>
+                                                  </div>
+                                                  {/* Realisasi */}
+                                                  <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 border-t-4 border-t-green-500">
+                                                    <p className="text-sm font-medium text-gray-500">Realisasi</p>
+                                                    <p className="mt-1 text-2xl font-semibold text-gray-900">{formatCurrency(activeTotals[4] || 0)}</p>
+                                                  </div>
+                                                  {/* Sisa Anggaran */}
+                                                  <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 border-t-4 border-t-gray-400">
+                                                    <p className="text-sm font-medium text-gray-500">Sisa Anggaran</p>
+                                                    <p className="mt-1 text-2xl font-semibold text-gray-900">{formatCurrency((activeTotals[0] || 0) - (activeTotals[4] || 0))}</p>
+                                                  </div>
+                                                </div>                <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm">
                   <div className="max-w-3xl mx-auto">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-medium text-gray-700">Capaian Realisasi</span>
@@ -1683,17 +2033,39 @@ const HistoryDropdown = () => (
                                                             </div>
                                                           </div>
                                                           
-                                                          {/* Conditional display for outstanding/komitmen per account */}
-                                                          {(budgetView === 'realisasi-outstanding' || budgetView === 'realisasi-komitmen') && item.outstanding > 0 && (
-                                                              <div className="mt-2 pt-2 border-t border-gray-100 text-xs">
-                                                                  <p className="text-gray-500">Outstanding: <span className="font-medium text-yellow-800">{formatCurrency(item.outstanding)}</span></p>
-                                                              </div>
-                                                          )}
-                                                          {budgetView === 'realisasi-komitmen' && item.komitmen > 0 && (
-                                                              <div className="mt-1 pt-1 border-t border-gray-100 text-xs">
-                                                                  <p className="text-gray-500">Komitmen: <span className="font-medium text-orange-800">{formatCurrency(item.komitmen)}</span></p>
-                                                              </div>
-                                                          )}                          </div>
+                                                                                        {/* Conditional display for outstanding/komitmen per account */}
+                                                          
+                                                                                        {(budgetView !== 'realisasi-laporan') && (item.outstanding > 0 || item.komitmen > 0) && (
+                                                          
+                                                                                          <div className="mt-2 pt-2 border-t border-gray-100 flex justify-around text-xs text-center">
+                                                          
+                                                                                              {(budgetView === 'realisasi-outstanding' || budgetView === 'realisasi-komitmen') && item.outstanding > 0 && (
+                                                          
+                                                                                                  <div>
+                                                          
+                                                                                                      <p className="text-gray-500">Outstanding</p>
+                                                          
+                                                                                                      <p className="font-medium text-yellow-800">{formatCurrency(item.outstanding)}</p>
+                                                          
+                                                                                                  </div>
+                                                          
+                                                                                              )}
+                                                          
+                                                                                              {budgetView === 'realisasi-komitmen' && item.komitmen > 0 && (
+                                                          
+                                                                                                  <div>
+                                                          
+                                                                                                      <p className="text-gray-500">Komitmen</p>
+                                                          
+                                                                                                      <p className="font-medium text-orange-800">{formatCurrency(item.komitmen)}</p>
+                                                          
+                                                                                                  </div>
+                                                          
+                                                                                              )}
+                                                          
+                                                                                          </div>
+                                                          
+                                                                                        )}                          </div>
                         </div>
                       ))}
                     </div>
@@ -1751,7 +2123,7 @@ const HistoryDropdown = () => (
                               <p className="font-semibold text-gray-900 border-b pb-1 mb-2">Panduan Pencarian</p>
                               <p><code className="text-blue-600">ATK AND 521211</code>: Mencari baris yang mengandung KEDUA kata.</p>
                               <p><code className="text-blue-600">ATK OR 521211</code>: Mencari baris yang mengandung SALAH SATU kata.</p>
-                              <p className="text-xs text-gray-500 mt-2">• Tidak case-sensitive. Kombinasikan dengan `AND` atau `OR`.</p>
+                              <p className="text-xs text-gray-500 mt-2">- Tidak case-sensitive. Kombinasikan dengan `AND` atau `OR`.</p>
                             </div>
                           </div>
                           <svg className="w-5 h-5 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -1800,7 +2172,7 @@ const HistoryDropdown = () => (
                       const paguRevisi = row[2];
                       const sdPeriode = row[6];
                       return (
-                        <tr key={`${row.__path}-${rowIndex}`} className={`hover:bg-gray-50 ${isGroup ? 'bg-gray-50' : ''}`}>
+                        <tr key={`${row.__path}-${rowIndex}`} className={`transition-colors ${isGroup ? 'bg-gray-100 font-medium' : 'odd:bg-white even:bg-slate-50'} hover:bg-blue-50`}>
                           <td className="px-6 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
                             <div className="flex items-center">
                               {showExpandCollapse && <button onClick={() => toggleNode(row.__path, row.__isDataGroup)} className="mr-2 w-4">{row.__isExpanded ? '▼' : '▶'}</button>}
@@ -1965,9 +2337,10 @@ const HistoryDropdown = () => (
                                     Status
                                 </label>
                                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                                    {(['all', 'komitmen', 'outstanding', 'terbayar'] as const).map(status => {
+                                    {(['all', 'rencana', 'komitmen', 'outstanding', 'terbayar'] as const).map(status => {
                                         const label = {
                                             'all': 'Semua',
+                                            'rencana': 'Rencana',
                                             'komitmen': 'Komitmen',
                                             'outstanding': 'Outstanding',
                                             'terbayar': 'Terbayar'
@@ -2019,7 +2392,7 @@ const HistoryDropdown = () => (
                                                                 return (
                                                                     <tr
                                                                         key={activity.id}
-                                                                        className="hover:bg-gray-50 transition-colors cursor-pointer"
+                                                                        className="odd:bg-white even:bg-slate-50 hover:bg-blue-50 transition-colors cursor-pointer"
                                                                         onClick={() => setSelectedActivity(activity)}
                                                                     >
                                                                         <td className="px-4 py-3 align-top max-w-sm">
@@ -2170,6 +2543,147 @@ const HistoryDropdown = () => (
           </div>
         )}
 
+        {/* AI Assistant Panel */}
+        <div className="mt-8">
+          <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-800">Asisten AI Anggaran</h2>
+                <p className="text-sm text-gray-500">
+                  Ajukan pertanyaan terkait realisasi, alokasi kegiatan, atau lampiran yang sudah diunggah.
+                </p>
+              </div>
+              <div className="hidden sm:flex items-center gap-2 text-xs text-gray-500">
+                <svg className="h-4 w-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20 10 10 0 000-20z" />
+                </svg>
+                <span>AI memanfaatkan data laporan dan lampiran di projek ini.</span>
+              </div>
+            </div>
+
+            {reportDatasetError && (
+              <div className="mt-3 rounded-md border border-yellow-200 bg-yellow-50 px-3 py-2 text-xs text-yellow-700">
+                {reportDatasetError}
+              </div>
+            )}
+
+            <div
+              ref={aiChatContainerRef}
+              className="mt-4 h-80 overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-4"
+            >
+              {aiMessages.length === 0 && (
+                <div className="text-sm text-gray-500 text-center">
+                  Percakapan akan muncul di sini setelah Anda mengirim pertanyaan.
+                </div>
+              )}
+              {aiMessages.map(message => {
+                const isUser = message.sender === 'user';
+                const timestamp = new Date(message.timestamp).toLocaleTimeString('id-ID', {
+                  hour: '2-digit',
+                  minute: '2-digit'
+                });
+
+                return (
+                  <div key={message.id} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+                    <div
+                      className={`max-w-[85%] rounded-lg px-4 py-3 text-sm whitespace-pre-line shadow-sm ${
+                        isUser
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-white border border-gray-200 text-gray-800'
+                      }`}
+                    >
+                      <div className="mb-1 flex items-center justify-between gap-3">
+                        <span className="text-xs font-semibold uppercase tracking-wide">
+                          {isUser ? 'Anda' : 'AI Anggaran'}
+                        </span>
+                        <span className={`text-[10px] ${isUser ? 'text-white/80' : 'text-gray-400'}`}>
+                          {timestamp}
+                        </span>
+                      </div>
+                      <p>{message.content}</p>
+                    </div>
+                  </div>
+                );
+              })}
+              {isAiProcessing && (
+                <div className="flex justify-start">
+                  <div className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-700">
+                    <svg
+                      className="h-4 w-4 animate-spin text-blue-500"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V2a10 10 0 1010 10h-2a8 8 0 11-16 0z"
+                      ></path>
+                    </svg>
+                    <span>Sedang memproses...</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <form onSubmit={handleAiSubmit} className="mt-4">
+              <label htmlFor="ai-message" className="sr-only">
+                Kirim pertanyaan ke asisten AI
+              </label>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+                <textarea
+                  id="ai-message"
+                  value={aiInput}
+                  onChange={(event) => setAiInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && !event.shiftKey) {
+                      event.preventDefault();
+                      handleAiSubmit();
+                    }
+                  }}
+                  placeholder="Contoh: Berapa total realisasi anggaran saat ini?"
+                  className="min-h-[88px] flex-1 resize-none rounded-lg border border-gray-300 bg-white p-3 text-sm text-gray-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-gray-100"
+                  disabled={isAiProcessing}
+                />
+                <button
+                  type="submit"
+                  className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={isAiProcessing || !aiInput.trim()}
+                >
+                  {isAiProcessing ? 'Menunggu...' : 'Kirim'}
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-gray-400">
+                Tekan Enter untuk mengirim. Gunakan Shift + Enter untuk baris baru.
+              </p>
+            </form>
+
+            {aiError && (
+              <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">
+                {aiError}
+              </div>
+            )}
+
+            <div className="mt-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Contoh pertanyaan</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {AI_QUICK_PROMPTS.map(prompt => (
+                  <button
+                    key={prompt}
+                    type="button"
+                    onClick={() => handleQuickPrompt(prompt)}
+                    className="rounded-full border border-blue-200 px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={isAiProcessing}
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Add Activity Modal */}
         {showActivityForm && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
@@ -2216,6 +2730,24 @@ const HistoryDropdown = () => (
                     )}
                   </div>
 
+                  <div className="space-y-1.5">
+                    <label htmlFor="tanggal-pelaksanaan" className="block text-sm font-medium text-gray-700">
+                      Tanggal Pelaksanaan <span className="text-red-500">*</span>
+                    </label>
+                    <div className="mt-1 relative rounded-md shadow-sm">
+                      <input
+                        id="tanggal-pelaksanaan"
+                        type="date"
+                        value={newActivity.tanggal_pelaksanaan || ''}
+                        onChange={(e) => setNewActivity({...newActivity, tanggal_pelaksanaan: e.target.value})}
+                        min={`${reportYear}-01-01`}
+                        max={`${reportYear}-12-31`}
+                        className="block w-full p-2.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      />
+                    </div>
+                    <p className="mt-1 text-xs text-gray-500">Hanya bisa memilih tanggal pada tahun laporan ({reportYear}).</p>
+                  </div>
+
                   {/* Status */}
                   <div className="space-y-1.5">
                     <label htmlFor="status-kegiatan" className="block text-sm font-medium text-gray-700">Status Kegiatan</label>
@@ -2228,6 +2760,7 @@ const HistoryDropdown = () => (
                         aria-describedby="status-description"
                       >
                         <option value="" disabled>Pilih Status</option>
+                        <option value="Rencana">Rencana</option>
                         <option value="Komitmen">Komitmen</option>
                         <option value="Outstanding">Outstanding</option>
                         <option value="Terbayar">Terbayar</option>
@@ -2239,21 +2772,6 @@ const HistoryDropdown = () => (
                       </div>
                     </div>
                     <p id="status-description" className="mt-1 text-xs text-gray-500">Pilih status terkini dari kegiatan ini</p>
-                  </div>
-
-                  {/* Tanggal Pelaksanaan */}
-                  <div className="space-y-1.5">
-                    <label htmlFor="tanggal-pelaksanaan" className="block text-sm font-medium text-gray-700">Tanggal Pelaksanaan</label>
-                    <div className="mt-1 relative rounded-md shadow-sm">
-                      <input
-                        id="tanggal-pelaksanaan"
-                        type="date"
-                        value={newActivity.tanggal_pelaksanaan || ''}
-                        onChange={(e) => setNewActivity({...newActivity, tanggal_pelaksanaan: e.target.value})}
-                        className="block w-full p-2.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                      />
-                    </div>
-                    <p className="mt-1 text-xs text-gray-500">Pilih tanggal pelaksanaan kegiatan</p>
                   </div>
 
                   {/* Lampiran */}
@@ -2346,17 +2864,14 @@ const HistoryDropdown = () => (
                     </div>
                   </div>
 
-                </div>
-
-                {/* Form Alokasi Anggaran */}
-                <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm mt-6">
-                  {/* Alokasi Anggaran Searchable Dropdown */}
-                  <div className="space-y-1.5">
-                    <label className="block text-sm font-medium text-gray-700">Alokasi Anggaran</label>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
-                      {/* Searchable Kode Input */}
-                      <div className="md:col-span-2 relative">
+                  {/* Alokasi Anggaran */}
+                  <div className="space-y-4 pt-4 border-t">
+                    <h3 className="text-md font-semibold text-gray-800">Alokasi Anggaran</h3>
+                    <div>
+                      <label htmlFor="kode-akun-search" className="block text-sm font-medium text-gray-700 mb-1">Akun</label>
+                      <div className="relative">
                         <input
+                          id="kode-akun-search"
                           type="text"
                           placeholder="Cari kode atau uraian akun..."
                           value={allocationSearch}
@@ -2372,29 +2887,41 @@ const HistoryDropdown = () => (
                             {filteredAllocations.map((item, index) => (
                               <div
                                 key={index}
-                                onClick={() => handleSelectAllocation(item.kode, item.uraian)}
+                                onClick={() => handleSelectAllocation(item)}
                                 className="p-2.5 hover:bg-blue-50 cursor-pointer text-sm border-b border-gray-100"
                               >
                                 <div className="flex justify-between items-center">
-                                    <div>
-                                        <p className="font-medium text-gray-800">{item.uraian}</p>
-                                        <p className="text-xs text-gray-500">{item.kode}</p>
-                                    </div>
-                                    <div className="text-right flex-shrink-0 ml-4">
-                                        <p className="text-xs text-gray-500">Sisa</p>
-                                        <p className="font-semibold text-gray-800">{formatCurrency(item.sisa)}</p>
-                                    </div>
+                                  <div>
+                                    <p className="font-medium text-gray-800">{item.uraian}</p>
+                                    <p className="text-xs text-gray-500">{item.kode}</p>
+                                  </div>
+                                  <div className="text-right flex-shrink-0 ml-4">
+                                    <p className="text-xs text-gray-500">Sisa</p>
+                                    <p className="font-semibold text-gray-800">{formatCurrency(item.sisa)}</p>
+                                  </div>
                                 </div>
                               </div>
                             ))}
                           </div>
                         )}
                       </div>
+                    </div>
 
-                      {/* Jumlah Input */}
+                    {newAllocation.kode && (
+                      <div className="p-3 bg-gray-50 border border-gray-200 rounded-md text-sm space-y-1">
+                        <p><span className="font-semibold w-20 inline-block">Kode:</span> {newAllocation.kode}</p>
+                        <p><span className="font-semibold w-20 inline-block">Uraian:</span> {newAllocation.uraian}</p>
+                        <p><span className="font-semibold w-20 inline-block">Pagu:</span> {formatCurrency(newAllocation.pagu ?? 0)}</p>
+                        <p><span className="font-semibold w-20 inline-block">Sisa:</span> {formatCurrency(newAllocation.sisa ?? 0)}</p>
+                      </div>
+                    )}
+
+                    <div>
+                      <label htmlFor="jumlah-alokasi" className="block text-sm font-medium text-gray-700 mb-1">Jumlah Alokasi</label>
                       <div className="relative">
                         <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500 sm:text-sm">Rp</span>
                         <input
+                          id="jumlah-alokasi"
                           type="text"
                           value={formatNumber(String(newAllocation.jumlah))}
                           onChange={handleNumberChange}
@@ -2403,30 +2930,24 @@ const HistoryDropdown = () => (
                         />
                       </div>
                     </div>
-                    {newAllocation.kode && (
-                        <div className="mt-2 p-3 bg-gray-50 border border-gray-200 rounded-md text-sm space-y-1">
-                            <p><span className="font-semibold w-20 inline-block">Kode:</span> {newAllocation.kode}</p>
-                            <p><span className="font-semibold w-20 inline-block">Uraian:</span> {newAllocation.uraian}</p>
-                            <p><span className="font-semibold w-20 inline-block">Pagu:</span> {formatCurrency(newAllocation.pagu ?? 0)}</p>
-                            <p><span className="font-semibold w-20 inline-block">Sisa:</span> {formatCurrency(newAllocation.sisa ?? 0)}</p>
-                        </div>
-                    )}
-                    {allocationError && <p className="text-red-600 text-sm mt-2">{allocationError}</p>}
-                    <div className="flex justify-end mt-2">
-                        <button onClick={handleAddAllocation} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md">Tambah Alokasi</button>
+
+                    {allocationError && <p className="text-red-600 text-sm">{allocationError}</p>}
+
+                    <div className="flex justify-end">
+                      <button onClick={handleAddAllocation} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md">Tambah Alokasi</button>
                     </div>
                   </div>
-                  
+
                   {/* Daftar Alokasi */}
                   {newActivity.allocations.length > 0 && (
-                    <div className="mt-6">
-                      <div className="flex items-center justify-between mb-3">
+                    <div className="space-y-3 pt-4 border-t">
+                      <div className="flex items-center justify-between">
                         <h4 className="text-sm font-medium text-gray-900">Daftar Alokasi</h4>
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                           {newActivity.allocations.length} item
                         </span>
                       </div>
-                      
+
                       <div className="overflow-hidden border border-gray-200 rounded-lg">
                         <table className="min-w-full divide-y divide-gray-200">
                           <thead className="bg-gray-50">
@@ -2480,7 +3001,38 @@ const HistoryDropdown = () => (
                       </div>
                     </div>
                   )}
+
+                  {/* Additional Details Section */}
+                  <div className="space-y-4 pt-4 border-t">
+                      <h3 className="text-md font-semibold text-gray-800">Detail Tambahan</h3>
+                      <div>
+                        <label htmlFor="tujuan-kegiatan" className="block text-sm font-medium text-gray-700">Tujuan Kegiatan</label>
+                        <textarea id="tujuan-kegiatan" value={newActivity.tujuan_kegiatan} onChange={(e) => setNewActivity({...newActivity, tujuan_kegiatan: e.target.value})} rows={3} className="mt-1 block w-full p-2.5 border border-gray-300 rounded-md sm:text-sm"></textarea>
+                      </div>
+                      <div>
+                        <label htmlFor="kl-unit-terkait" className="block text-sm font-medium text-gray-700">K/L/Unit Terkait</label>
+                        <input id="kl-unit-terkait" type="text" value={newActivity.kl_unit_terkait} onChange={(e) => setNewActivity({...newActivity, kl_unit_terkait: e.target.value})} className="mt-1 block w-full p-2.5 border border-gray-300 rounded-md sm:text-sm" />
+                      </div>
+                      <div>
+                        <label htmlFor="penanggung-jawab" className="block text-sm font-medium text-gray-700">Penanggung Jawab</label>
+                        <input id="penanggung-jawab" type="text" value={newActivity.penanggung_jawab} onChange={(e) => setNewActivity({...newActivity, penanggung_jawab: e.target.value})} className="mt-1 block w-full p-2.5 border border-gray-300 rounded-md sm:text-sm" />
+                      </div>
+                      <div>
+                        <label htmlFor="capaian" className="block text-sm font-medium text-gray-700">Capaian</label>
+                        <textarea id="capaian" value={newActivity.capaian} onChange={(e) => setNewActivity({...newActivity, capaian: e.target.value})} rows={3} className="mt-1 block w-full p-2.5 border border-gray-300 rounded-md sm:text-sm"></textarea>
+                      </div>
+                      <div>
+                        <label htmlFor="pending-issue" className="block text-sm font-medium text-gray-700">Pending Issue</label>
+                        <textarea id="pending-issue" value={newActivity.pending_issue} onChange={(e) => setNewActivity({...newActivity, pending_issue: e.target.value})} rows={3} className="mt-1 block w-full p-2.5 border border-gray-300 rounded-md sm:text-sm"></textarea>
+                      </div>
+                      <div>
+                        <label htmlFor="rencana-tindak-lanjut" className="block text-sm font-medium text-gray-700">Rencana Tindak Lanjut</label>
+                        <textarea id="rencana-tindak-lanjut" value={newActivity.rencana_tindak_lanjut} onChange={(e) => setNewActivity({...newActivity, rencana_tindak_lanjut: e.target.value})} rows={3} className="mt-1 block w-full p-2.5 border border-gray-300 rounded-md sm:text-sm"></textarea>
+                      </div>
+                  </div>
+
                 </div>
+
               </div>
               
               {/* Modal Footer */}
