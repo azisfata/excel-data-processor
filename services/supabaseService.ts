@@ -53,6 +53,7 @@ export async function getAllProcessedResults() {
  * @returns An object containing the latest result and the update timestamp, or null if none found.
  */
 export async function getLatestProcessedResult(): Promise<{
+  id: string;
   result: ProcessingResult;
   lastUpdated: string;
   reportType: string | null;
@@ -70,6 +71,38 @@ export async function getLatestProcessedResult(): Promise<{
   }
 
   return {
+    id: data.id,
+    result: {
+      finalData: data.processed_data,
+      totals: data.totals,
+      processedDataForPreview: data.processed_data?.slice(0, 100) || [],
+      accountNameMap: data.account_name_map ? new Map(Object.entries(data.account_name_map)) : new Map()
+    },
+    lastUpdated: new Date(data.created_at).toLocaleString('id-ID'),
+    reportType: data.report_type || null,
+    reportDate: data.report_date || null
+  };
+}
+
+export async function getProcessedResultById(id: string): Promise<{
+  id: string;
+  result: ProcessingResult;
+  lastUpdated: string;
+  reportType: string | null;
+  reportDate: string | null;
+} | null> {
+  const { data, error } = await supabase
+    .from('processed_results')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (error || !data) {
+    return null;
+  }
+
+  return {
+    id: data.id,
     result: {
       finalData: data.processed_data,
       totals: data.totals,

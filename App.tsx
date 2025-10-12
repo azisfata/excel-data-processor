@@ -57,6 +57,27 @@ const generateMessageId = (): string => {
   return `msg-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 };
 
+const sanitizeModelOutput = (raw: string): string => {
+  if (!raw) return '';
+  const cleaned = raw.replace(/<[\uFF5C\|].*?>/g, '').trim();
+  return cleaned || raw.trim();
+};
+
+const escapeHtml = (value: string): string =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+const formatMessageContent = (text: string): string => {
+  const escaped = escapeHtml(text);
+  const withBold = escaped.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  const withLineBreaks = withBold.replace(/\n/g, '<br />');
+  return withLineBreaks;
+};
+
 // --- Icon Components ---
 const UploadIcon = () => (
   <svg className="w-8 h-8 mb-4 text-gray-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 16">
@@ -145,6 +166,23 @@ const App: React.FC = () => {
   const [aiInput, setAiInput] = useState('');
   const [isAiProcessing, setIsAiProcessing] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const applyProcessedResult = useCallback((data: {
+    id: string;
+    result: ProcessingResult;
+    lastUpdated: string;
+    reportType: string | null;
+    reportDate: string | null;
+  }) => {
+    setResult(data.result);
+    setLastUpdated(data.lastUpdated);
+    setLatestReportMeta({
+      reportType: data.reportType,
+      reportDate: data.reportDate,
+    });
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('lastSelectedHistoryId', data.id);
+    }
+  }, []);
 
   const activeData = useMemo(() => {
     if (!result?.finalData) return [];
@@ -327,15 +365,23 @@ const App: React.FC = () => {
       .filter(row => Array.isArray(row) && row.length >= 7)
       .map(row => {
         const kode = String(row[0] ?? '').trim();
+        const kodePrefixMatch = kode.match(/[A-Z]+\.[\dA-Z]+\.[\dA-Z]+\.[\dA-Z]+\.[\dA-Z]+\.[\dA-Z]+\.(\d{6})/);
         const uraian = String(row[1] ?? '').trim();
         const pagu = Number(row[2]) || 0;
         const realisasi = Number(row[6]) || 0;
-        return { kode, uraian, pagu, realisasi };
+        return {
+          kode,
+          uraian,
+          pagu,
+          realisasi,
+          kodeShort: kodePrefixMatch ? kodePrefixMatch[1] : ''
+        };
       });
 
     const realizedEntries = budgetEntries.filter(entry => entry.realisasi > 0);
 
-    const topBudgetRows = realizedEntries
+    const topBudgetRows = (realizedEntries.length ? realizedEntries : budgetEntries)
+      .slice()
       .sort((a, b) => {
         if (b.realisasi !== a.realisasi) {
           return b.realisasi - a.realisasi;
@@ -368,58 +414,34 @@ const App: React.FC = () => {
     if (topBudgetRows.length > 0) {
       lines.push('- Akun dengan realisasi tertinggi:');
       topBudgetRows.forEach(row => {
-        lines.push(`   - ${row.kode} ${row.uraian}: Pagu ${formatCurrency(row.pagu)}, Realisasi ${formatCurrency(row.realisasi)}`);
+        const sisa = row.pagu - row.realisasi;
+        lines.push(`   - ${row.kode} ${row.uraian}: Pagu ${formatCurrency(row.pagu)}, Realisasi ${formatCurrency(row.realisasi)}, Sisa ${formatCurrency(sisa)}`);
       });
-    } else {
-      lines.push('- Belum ada realisasi anggaran yang tercatat untuk laporan ini.');
+    }
+
+    if (budgetEntries.length > 0) {
+      lines.push('- Rincian akun anggaran (kode lengkap | kode pendek | uraian | pagu | realisasi | sisa):');
+      budgetEntries.forEach(row => {
+        const sisa = row.pagu - row.realisasi;
+        lines.push(
+          `   - ${row.kode} | ${row.kodeShort || '(tidak ada)'} | ${row.uraian} | ${formatCurrency(row.pagu)} | ${formatCurrency(row.realisasi)} | ${formatCurrency(sisa)}`
+        );
+      });
     }
 
     return lines.join('\n');
   }, [activities, activeTotals, result]);
 
-  const buildAiIntro = useCallback((): string => {
-    const snapshot = buildAiDataSnapshot();
-    return [
-      'Halo! Saya asisten AI anggaran Anda.',
-      'Ringkasan data terkini:',
-      snapshot,
-      'Silakan ajukan pertanyaan tentang realisasi, alokasi, status kegiatan, atau lampiran.'
-    ].join('\n');
-  }, [buildAiDataSnapshot]);
-
   const buildAiSystemPrompt = useCallback((): string => {
     const snapshot = buildAiDataSnapshot();
     return [
       'Anda adalah asisten AI yang membantu analisis data anggaran di aplikasi internal. Jawab dalam bahasa Indonesia yang ringkas, spesifik, dan selalu berbasis data yang tersedia.',
-      'Gunakan ringkasan berikut sebagai konteks:',
+      'Gunakan ringkasan berikut sebagai konteks. Hitung sisa anggaran dengan rumus pagu - realisasi bila diperlukan. Jika data untuk suatu kode/uraian tersedia di daftar, gunakan angka tersebut langsung.',
       snapshot,
       'Jika informasi yang diminta ada pada ringkasan di atas, gunakan angka tersebut dalam jawaban Anda.',
       'Hanya sampaikan keterbatasan apabila angka yang diminta benar-benar tidak hadir dalam ringkasan. Jangan pernah mengatakan Anda tidak memiliki akses data apabila ringkasan sudah menyediakannya.'
     ].join('\n');
   }, [buildAiDataSnapshot]);
-
-  useEffect(() => {
-    const intro = buildAiIntro();
-    setAiMessages(prev => {
-      if (prev.length === 0) {
-        return [{
-          id: INITIAL_AI_MESSAGE_ID,
-          sender: 'assistant',
-          content: intro,
-          timestamp: new Date().toISOString()
-        }];
-      }
-      if (prev[0].id === INITIAL_AI_MESSAGE_ID && prev[0].content !== intro) {
-        const [, ...rest] = prev;
-        return [{
-          ...prev[0],
-          content: intro,
-          timestamp: new Date().toISOString()
-        }, ...rest];
-      }
-      return prev;
-    });
-  }, [buildAiIntro]);
 
   useEffect(() => {
     if (aiChatContainerRef.current) {
@@ -580,6 +602,27 @@ const HistoryDropdown = () => (
       
       // Update local state directly for immediate UI update
       setHistory(prev => prev.filter(item => item.id !== id));
+
+       const storedId =
+        typeof window !== 'undefined' ? localStorage.getItem('lastSelectedHistoryId') : null;
+
+      if (storedId === id) {
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('lastSelectedHistoryId');
+        }
+        const latestData = await supabaseService.getLatestProcessedResult();
+        if (latestData) {
+          applyProcessedResult(latestData);
+        } else {
+          setResult(null);
+          setLatestReportMeta({ reportType: null, reportDate: null });
+          setLastUpdated('');
+        }
+        setAiMessages([]);
+        setAiInput('');
+        setAiError(null);
+        setFile(null);
+      }
       
       // Also refresh from server to ensure consistency
       loadHistory().catch(err => {
@@ -589,43 +632,34 @@ const HistoryDropdown = () => (
       console.error('Error in deleteHistoryItem:', err);
       setError('Gagal menghapus riwayat');
     }
-  }, [loadHistory]);
+  }, [applyProcessedResult, loadHistory]);
 
   // Load a specific historical result
   const loadHistoricalResult = useCallback(async (id: string) => {
     try {
-      const { data, error } = await supabase
-        .from('processed_results')
-        .select('*')
-        .eq('id', id)
-        .single();
+      const data = await supabaseService.getProcessedResultById(id);
+      if (!data) {
+        throw new Error('Data tidak ditemukan');
+      }
 
-      if (error) throw error;
-      if (!data) throw new Error('Data not found');
-
-      const normalizedResult: ProcessingResult = {
-        finalData: data.processed_data ?? [],
-        totals: data.totals ?? [],
-        processedDataForPreview: data.processed_data?.slice(0, 100) ?? [],
-        accountNameMap: data.account_name_map
-          ? new Map(Object.entries(data.account_name_map as Record<string, string>))
-          : new Map(),
-      };
-
-      setResult(normalizedResult);
+      applyProcessedResult(data);
       setFile(null);
-      setLatestReportMeta({
-        reportType: data.report_type || null,
-        reportDate: data.report_date || null,
-      });
-      setLastUpdated(new Date(data.created_at).toLocaleString('id-ID'));
       setShowHistory(false);
+      setAiMessages([]);
+      setAiInput('');
+      setAiError(null);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('lastSelectedHistoryId', id);
+      }
     } catch (err) {
       console.error('Error loading historical result:', err);
       setLatestReportMeta({ reportType: null, reportDate: null });
       setError('Gagal memuat data riwayat yang dipilih.');
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('lastSelectedHistoryId');
+      }
     }
-  }, []);
+  }, [applyProcessedResult]);
 
   // Close history dropdown when clicking outside
   useEffect(() => {
@@ -656,16 +690,28 @@ const HistoryDropdown = () => (
           supabaseService.getSetting('hierarchyMaxDepth')
         ]);
 
-        if (processedResultData) {
-          setResult(processedResultData.result);
-          setLastUpdated(processedResultData.lastUpdated);
-          setLatestReportMeta({
-            reportType: processedResultData.reportType,
-            reportDate: processedResultData.reportDate,
-          });
+        let selectedProcessedData = processedResultData;
+        const storedHistoryId =
+          typeof window !== 'undefined' ? localStorage.getItem('lastSelectedHistoryId') : null;
+
+        if (storedHistoryId) {
+          const storedData = await supabaseService.getProcessedResultById(storedHistoryId);
+          if (storedData) {
+            selectedProcessedData = storedData;
+          } else if (typeof window !== 'undefined') {
+            localStorage.removeItem('lastSelectedHistoryId');
+          }
+        }
+
+        if (selectedProcessedData) {
+          applyProcessedResult(selectedProcessedData);
         } else {
           setResult(null);
           setLatestReportMeta({ reportType: null, reportDate: null });
+          setLastUpdated('');
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('lastSelectedHistoryId');
+          }
         }
 
         const attachmentsLookup: Record<string, ActivityAttachment[]> = attachmentsMap ?? {};
@@ -689,7 +735,7 @@ const HistoryDropdown = () => (
       }
     }
     loadInitialData();
-  }, []);
+  }, [applyProcessedResult]);
 
   useEffect(() => {
     if (showActivityForm && !isEditing) {
@@ -818,10 +864,11 @@ const HistoryDropdown = () => (
 
     try {
       const aiReply = await fetchAiResponse(payload);
+      const cleanedReply = sanitizeModelOutput(aiReply);
       const assistantMessage: AiMessage = {
         id: generateMessageId(),
         sender: 'assistant',
-        content: aiReply,
+        content: cleanedReply,
         timestamp: new Date().toISOString()
       };
       setAiMessages(prev => [...prev, assistantMessage]);
@@ -952,12 +999,7 @@ const HistoryDropdown = () => (
           // After saving, fetch the latest to ensure consistency
           const latestData = await supabaseService.getLatestProcessedResult();
           if (latestData) {
-            setResult(latestData.result);
-            setLastUpdated(latestData.lastUpdated);
-            setLatestReportMeta({
-              reportType: latestData.reportType,
-              reportDate: latestData.reportDate,
-            });
+            applyProcessedResult(latestData);
           }
           
           // Refresh the history list to include the new entry
@@ -980,7 +1022,7 @@ const HistoryDropdown = () => (
 
       reader.readAsBinaryString(fileToProcess);
     },
-    []
+    [applyProcessedResult, loadHistory]
   );
 
   const handleFileSelection = useCallback((selectedFile: File | null) => {
@@ -2520,7 +2562,7 @@ const HistoryDropdown = () => (
                 return (
                   <div key={message.id} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
                     <div
-                      className={`max-w-[85%] rounded-lg px-4 py-3 text-sm whitespace-pre-line shadow-sm ${
+                      className={`max-w-[85%] rounded-lg px-4 py-3 text-sm shadow-sm ${
                         isUser
                           ? 'bg-blue-600 text-white'
                           : 'bg-white border border-gray-200 text-gray-800'
@@ -2534,7 +2576,10 @@ const HistoryDropdown = () => (
                           {timestamp}
                         </span>
                       </div>
-                      <p>{message.content}</p>
+                      <p
+                        className="leading-relaxed"
+                        dangerouslySetInnerHTML={{ __html: formatMessageContent(message.content) }}
+                      />
                     </div>
                   </div>
                 );
