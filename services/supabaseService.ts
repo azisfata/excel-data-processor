@@ -129,6 +129,12 @@ export async function getActivities(): Promise<Activity[]> {
             nama,
             status,
             tanggal_pelaksanaan,
+            tujuan_kegiatan,
+            kl_unit_terkait,
+            penanggung_jawab,
+            capaian,
+            pending_issue,
+            rencana_tindak_lanjut,
             allocations (
                 id,
                 kode,
@@ -148,6 +154,12 @@ export async function getActivities(): Promise<Activity[]> {
         nama: activity.nama,
         status: activity.status || 'draft',
         tanggal_pelaksanaan: activity.tanggal_pelaksanaan || null,
+        tujuan_kegiatan: activity.tujuan_kegiatan || null,
+        kl_unit_terkait: activity.kl_unit_terkait || null,
+        penanggung_jawab: activity.penanggung_jawab || null,
+        capaian: activity.capaian || null,
+        pending_issue: activity.pending_issue || null,
+        rencana_tindak_lanjut: activity.rencana_tindak_lanjut || null,
         attachments: [],
         allocations: activity.allocations.map((alloc: any) => ({
             kode: alloc.kode,
@@ -169,7 +181,13 @@ export async function addActivity(newActivity: Omit<Activity, 'id'>): Promise<Ac
         .insert({ 
             nama: newActivity.nama,
             status: newActivity.status || 'draft',  // Default status 'draft' jika tidak diset
-            tanggal_pelaksanaan: newActivity.tanggal_pelaksanaan || null
+            tanggal_pelaksanaan: newActivity.tanggal_pelaksanaan || null,
+            tujuan_kegiatan: newActivity.tujuan_kegiatan,
+            kl_unit_terkait: newActivity.kl_unit_terkait,
+            penanggung_jawab: newActivity.penanggung_jawab,
+            capaian: newActivity.capaian,
+            pending_issue: newActivity.pending_issue,
+            rencana_tindak_lanjut: newActivity.rencana_tindak_lanjut
         })
         .select()
         .single();
@@ -220,7 +238,13 @@ export async function updateActivity(id: string, updatedActivity: Omit<Activity,
         .update({ 
             nama: updatedActivity.nama,
             status: updatedActivity.status || 'draft',
-            tanggal_pelaksanaan: updatedActivity.tanggal_pelaksanaan || null
+            tanggal_pelaksanaan: updatedActivity.tanggal_pelaksanaan || null,
+            tujuan_kegiatan: updatedActivity.tujuan_kegiatan,
+            kl_unit_terkait: updatedActivity.kl_unit_terkait,
+            penanggung_jawab: updatedActivity.penanggung_jawab,
+            capaian: updatedActivity.capaian,
+            pending_issue: updatedActivity.pending_issue,
+            rencana_tindak_lanjut: updatedActivity.rencana_tindak_lanjut
         })
         .match({ id });
 

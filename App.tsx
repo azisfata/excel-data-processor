@@ -7,7 +7,6 @@ import * as supabaseService from './services/supabaseService';
 import * as attachmentService from './services/activityAttachmentService';
 import { supabase } from './utils/supabase';
 import { fetchAiResponse, type AiChatMessage as AiRequestMessage } from './services/aiService';
-import { getProcessedReport, type ProcessedReportResponse } from './services/reportService';
 
 const MONTH_NAMES_ID = [
   'Januari',
@@ -146,8 +145,6 @@ const App: React.FC = () => {
   const [aiInput, setAiInput] = useState('');
   const [isAiProcessing, setIsAiProcessing] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
-  const [reportDataset, setReportDataset] = useState<ProcessedReportResponse | null>(null);
-  const [reportDatasetError, setReportDatasetError] = useState<string | null>(null);
 
   const activeData = useMemo(() => {
     if (!result?.finalData) return [];
@@ -297,11 +294,8 @@ const App: React.FC = () => {
       total: activity.allocations.reduce((sum, alloc) => sum + (alloc.jumlah || 0), 0)
     }));
     const totalAllocationAmount = activitiesWithTotals.reduce((sum, item) => sum + item.total, 0);
-    const datasetSummary = reportDataset?.summary ?? null;
-    const datasetTotals = datasetSummary?.columnTotals ?? {};
-
-    const totalPagu = (datasetTotals['Pagu Revisi'] ?? activeTotals[0]) || 0;
-    const totalRealisasi = (datasetTotals['s.d. Periode'] ?? activeTotals[4]) || 0;
+    const totalRealisasi = activeTotals[4] || 0;
+    const totalPagu = activeTotals[0] || 0;
     const sisaAnggaran = totalPagu - totalRealisasi;
     const attachmentsCount = activities.reduce(
       (sum, activity) => sum + (activity.attachments?.length || 0),
@@ -322,45 +316,33 @@ const App: React.FC = () => {
       .slice(0, 5);
 
     const columnSummary = [
-      { label: 'Pagu Revisi', value: totalPagu },
-      { label: 'Lock Anggaran', value: (datasetTotals['Lock Pagu'] ?? activeTotals[1]) || 0 },
-      { label: 'Realisasi Periode Lalu', value: (datasetTotals['Periode Lalu'] ?? activeTotals[2]) || 0 },
-      { label: 'Realisasi Periode Ini', value: (datasetTotals['Periode Ini'] ?? activeTotals[3]) || 0 },
-      { label: 'Realisasi s.d. Periode', value: totalRealisasi }
+      { label: 'Pagu Revisi', value: activeTotals[0] || 0 },
+      { label: 'Lock Anggaran', value: activeTotals[1] || 0 },
+      { label: 'Realisasi Periode Lalu', value: activeTotals[2] || 0 },
+      { label: 'Realisasi Periode Ini', value: activeTotals[3] || 0 },
+      { label: 'Realisasi s.d. Periode', value: activeTotals[4] || 0 }
     ];
 
-    const datasetTopByPagu = datasetSummary?.topByPagu ?? [];
-    const datasetTopKode = datasetSummary?.topKodeByRealisasi ?? [];
+    const budgetEntries = (result?.finalData ?? [])
+      .filter(row => Array.isArray(row) && row.length >= 7)
+      .map(row => {
+        const kode = String(row[0] ?? '').trim();
+        const uraian = String(row[1] ?? '').trim();
+        const pagu = Number(row[2]) || 0;
+        const realisasi = Number(row[6]) || 0;
+        return { kode, uraian, pagu, realisasi };
+      });
 
-    const datasetColumns = reportDataset?.columns ?? [];
-    const kodeIdx = datasetColumns.indexOf('Kode');
-    const uraianIdx = datasetColumns.indexOf('Uraian');
-    const paguIdx = datasetColumns.indexOf('Pagu Revisi');
-    const realisasiIdx = datasetColumns.indexOf('s.d. Periode');
+    const realizedEntries = budgetEntries.filter(entry => entry.realisasi > 0);
 
-    const datasetRowCount =
-      datasetSummary?.rowCount ?? (reportDataset?.rows ? Math.max(reportDataset.rows.length - 1, 0) : 0);
-
-    const uniqueCodesCount =
-      datasetSummary?.uniqueCodes ??
-      (reportDataset?.rows && kodeIdx !== -1
-        ? new Set(
-            reportDataset.rows.slice(1).map(row => String(row[kodeIdx] ?? '')).filter(Boolean)
-          ).size
-        : 0);
-
-    const uniqueDescriptionsCount =
-      datasetSummary?.uniqueDescriptions ??
-      (reportDataset?.rows && uraianIdx !== -1
-        ? new Set(
-            reportDataset.rows.slice(1).map(row => String(row[uraianIdx] ?? '')).filter(Boolean)
-          ).size
-        : 0);
-
-    const sampleRows =
-      reportDataset?.rows && reportDataset.rows.length > 1
-        ? reportDataset.rows.slice(1, Math.min(reportDataset.rows.length, 11))
-        : [];
+    const topBudgetRows = realizedEntries
+      .sort((a, b) => {
+        if (b.realisasi !== a.realisasi) {
+          return b.realisasi - a.realisasi;
+        }
+        return b.pagu - a.pagu;
+      })
+      .slice(0, 5);
 
     const lines: string[] = [
       `- Total kegiatan terdaftar: ${totalActivitiesCount}`,
@@ -369,12 +351,6 @@ const App: React.FC = () => {
       `- Sebaran status kegiatan: ${statusSummary}`,
       `- Total lampiran kegiatan: ${attachmentsCount} berkas`
     ];
-
-    if (datasetRowCount > 0) {
-      lines.push(
-        `- Laporan "laporan_processed (1).xlsx": ${datasetRowCount} baris (${uniqueCodesCount} kode unik, ${uniqueDescriptionsCount} uraian)`
-      );
-    }
 
     lines.push('- Ringkasan kolom laporan:');
     columnSummary.forEach(item => {
@@ -389,37 +365,17 @@ const App: React.FC = () => {
       });
     }
 
-    if (datasetTopByPagu.length > 0) {
-      lines.push('- Uraian laporan dengan pagu terbesar:');
-      datasetTopByPagu.slice(0, 5).forEach(item => {
-        lines.push(
-          `   - ${item.kode} ${item.uraian}: Pagu ${formatCurrency(item.pagu)}, Realisasi ${formatCurrency(item.realisasi)}`
-        );
+    if (topBudgetRows.length > 0) {
+      lines.push('- Akun dengan realisasi tertinggi:');
+      topBudgetRows.forEach(row => {
+        lines.push(`   - ${row.kode} ${row.uraian}: Pagu ${formatCurrency(row.pagu)}, Realisasi ${formatCurrency(row.realisasi)}`);
       });
-    }
-
-    if (datasetTopKode.length > 0) {
-      lines.push('- Kode dengan realisasi tertinggi:');
-      datasetTopKode.slice(0, 5).forEach(item => {
-        lines.push(`   - ${item.kode}: Realisasi ${formatCurrency(item.total)}`);
-      });
-    }
-
-    if (sampleRows.length > 0 && kodeIdx !== -1 && uraianIdx !== -1) {
-      lines.push('- Sampel baris laporan_processed:');
-      sampleRows.forEach(row => {
-        const kode = String(row[kodeIdx] ?? '').trim();
-        const uraian = String(row[uraianIdx] ?? '').trim();
-        const pagu = paguIdx !== -1 ? Number(row[paguIdx]) || 0 : 0;
-        const realisasi = realisasiIdx !== -1 ? Number(row[realisasiIdx]) || 0 : 0;
-        lines.push(
-          `   - ${kode || '(tanpa kode)'} ${uraian ? `- ${uraian}` : ''} | Pagu ${formatCurrency(pagu)}, Realisasi ${formatCurrency(realisasi)}`
-        );
-      });
+    } else {
+      lines.push('- Belum ada realisasi anggaran yang tercatat untuk laporan ini.');
     }
 
     return lines.join('\n');
-  }, [activities, activeTotals, reportDataset]);
+  }, [activities, activeTotals, result]);
 
   const buildAiIntro = useCallback((): string => {
     const snapshot = buildAiDataSnapshot();
@@ -733,22 +689,6 @@ const HistoryDropdown = () => (
       }
     }
     loadInitialData();
-  }, []);
-
-  useEffect(() => {
-    async function loadReportDataset() {
-      try {
-        const dataset = await getProcessedReport();
-        setReportDataset(dataset);
-        setReportDatasetError(null);
-      } catch (err) {
-        console.error('Error fetching laporan_processed dataset:', err);
-        setReportDataset(null);
-        setReportDatasetError('Gagal memuat data laporan_processed.');
-      }
-    }
-
-    loadReportDataset();
   }, []);
 
   useEffect(() => {
@@ -2560,12 +2500,6 @@ const HistoryDropdown = () => (
                 <span>AI memanfaatkan data laporan dan lampiran di projek ini.</span>
               </div>
             </div>
-
-            {reportDatasetError && (
-              <div className="mt-3 rounded-md border border-yellow-200 bg-yellow-50 px-3 py-2 text-xs text-yellow-700">
-                {reportDatasetError}
-              </div>
-            )}
 
             <div
               ref={aiChatContainerRef}

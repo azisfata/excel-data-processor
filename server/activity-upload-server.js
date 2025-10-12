@@ -5,7 +5,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs/promises';
 import fsSync from 'fs';
-import XLSX from 'xlsx';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -211,94 +210,6 @@ const upload = multer({ storage });
 const app = express();
 
 app.use(express.json());
-
-app.get('/api/reports/laporan-processed', (_req, res) => {
-  try {
-    const reportPath = path.resolve(__dirname, '../bahanUpload/laporan_processed (1).xlsx');
-
-    if (!fsSync.existsSync(reportPath)) {
-      return res.status(404).json({ error: 'Laporan tidak ditemukan.' });
-    }
-
-    const workbook = XLSX.readFile(reportPath, { cellFormula: false, cellHTML: false });
-    const sheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[sheetName];
-    const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null });
-
-    if (!rows.length) {
-      return res.status(200).json({ columns: [], rows: [], summary: null });
-    }
-
-    const [header, ...dataRows] = rows;
-    const numericColumnNames = header.filter(name => typeof name === 'string' && name !== 'Kode' && name !== 'Uraian');
-    const columnIndexMap = new Map();
-    header.forEach((name, index) => columnIndexMap.set(name, index));
-
-    const colTotals = Object.fromEntries(numericColumnNames.map(name => [name, 0]));
-    const uniqueCodes = new Set();
-    const uniqueDescriptions = new Set();
-
-    const paguRecords = [];
-    const realisasiPerKode = new Map();
-
-    for (const row of dataRows) {
-      const kode = row[columnIndexMap.get('Kode')] ?? '';
-      const uraian = row[columnIndexMap.get('Uraian')] ?? '';
-      if (kode) uniqueCodes.add(kode);
-      if (uraian) uniqueDescriptions.add(uraian);
-
-      for (const name of numericColumnNames) {
-        const idx = columnIndexMap.get(name);
-        const value = row[idx];
-        if (typeof value === 'number' && Number.isFinite(value)) {
-          colTotals[name] += value;
-        }
-      }
-
-      const paguIdx = columnIndexMap.get('Pagu Revisi');
-      const realisasiIdx = columnIndexMap.get('s.d. Periode');
-      const paguValue = typeof row[paguIdx] === 'number' ? row[paguIdx] : 0;
-      const realisasiValue = typeof row[realisasiIdx] === 'number' ? row[realisasiIdx] : 0;
-
-      paguRecords.push({
-        kode,
-        uraian,
-        pagu: paguValue,
-        realisasi: realisasiValue
-      });
-
-      if (kode) {
-        realisasiPerKode.set(kode, (realisasiPerKode.get(kode) || 0) + realisasiValue);
-      }
-    }
-
-    const topByPagu = paguRecords
-      .filter(item => item.pagu > 0)
-      .sort((a, b) => b.pagu - a.pagu)
-      .slice(0, 10);
-
-    const topKodeByRealisasi = Array.from(realisasiPerKode.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
-      .map(([kode, total]) => ({ kode, total }));
-
-    return res.json({
-      columns: header,
-      rows,
-      summary: {
-        rowCount: dataRows.length,
-        columnTotals: colTotals,
-        uniqueCodes: uniqueCodes.size,
-        uniqueDescriptions: uniqueDescriptions.size,
-        topByPagu,
-        topKodeByRealisasi
-      }
-    });
-  } catch (error) {
-    console.error('Failed to read laporan_processed file:', error);
-    res.status(500).json({ error: 'Gagal memuat data laporan_processed.' });
-  }
-});
 
 app.get('/api/activities/attachments', async (_req, res) => {
   const metadata = await readMetadata();

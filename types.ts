@@ -21,6 +21,12 @@ export interface Activity {
   nama: string;
   status?: string;
   tanggal_pelaksanaan?: string;
+  tujuan_kegiatan?: string;
+  kl_unit_terkait?: string;
+  penanggung_jawab?: string;
+  capaian?: string;
+  pending_issue?: string;
+  rencana_tindak_lanjut?: string;
   allocations: BudgetAllocation[];
   attachments: ActivityAttachment[];
 }
