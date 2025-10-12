@@ -37,8 +37,7 @@ export async function getAllProcessedResults() {
       createdAt: item.created_at,
       formattedDate,
       reportType: item.report_type || null,
-      reportMonth: item.report_month ?? null,
-      reportYear: item.report_year ?? null,
+      reportDate: item.report_date || null,
       result: {
         finalData: item.processed_data,
         totals: item.totals,
@@ -57,8 +56,7 @@ export async function getLatestProcessedResult(): Promise<{
   result: ProcessingResult;
   lastUpdated: string;
   reportType: string | null;
-  reportMonth: number | null;
-  reportYear: number | null;
+  reportDate: string | null;
 } | null> {
   const { data, error } = await supabase
     .from('processed_results')
@@ -80,8 +78,7 @@ export async function getLatestProcessedResult(): Promise<{
     },
     lastUpdated: new Date(data.created_at).toLocaleString('id-ID'),
     reportType: data.report_type || null,
-    reportMonth: data.report_month ?? null,
-    reportYear: data.report_year ?? null
+    reportDate: data.report_date || null
   };
 }
 
@@ -93,7 +90,7 @@ export async function getLatestProcessedResult(): Promise<{
 export async function saveProcessedResult(
   result: ProcessingResult,
   fileName: string,
-  options: { reportType: string; reportMonth: number; reportYear: number }
+  options: { reportType: string; reportDate: string }
 ): Promise<void> {
   // Convert Map to plain object for storage
   const accountNameMapObj = result.accountNameMap ? 
@@ -108,8 +105,7 @@ export async function saveProcessedResult(
         totals: result.totals,
         account_name_map: accountNameMapObj,
         report_type: options.reportType,
-        report_month: options.reportMonth,
-        report_year: options.reportYear
+        report_date: options.reportDate
       },
     ]);
 

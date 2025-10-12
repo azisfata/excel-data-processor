@@ -61,10 +61,9 @@ const App: React.FC = () => {
   const [activitySearchTerm, setActivitySearchTerm] = useState('');
   const [activitiesPerPage, setActivitiesPerPage] = useState<number | 'all'>(10);
   const [activitiesPage, setActivitiesPage] = useState(1);
-  const [latestReportMeta, setLatestReportMeta] = useState<{ reportType: string | null; reportMonth: number | null; reportYear: number | null }>({
+  const [latestReportMeta, setLatestReportMeta] = useState<{ reportType: string | null; reportDate: string | null }>({
     reportType: null,
-    reportMonth: null,
-    reportYear: null,
+    reportDate: null,
   });
   const [showUploadMetadataModal, setShowUploadMetadataModal] = useState(false);
   const [pendingUploadFile, setPendingUploadFile] = useState<File | null>(null);
@@ -204,8 +203,7 @@ const HistoryDropdown = () => (
           formattedDate: item.formattedDate,
           createdAt: item.createdAt,
           reportType: item.reportType ?? null,
-          reportMonth: item.reportMonth ?? null,
-          reportYear: item.reportYear ?? null,
+          reportDate: item.reportDate ?? null,
         }))
       );
     } catch (err) {
@@ -298,14 +296,13 @@ const HistoryDropdown = () => (
       setFile(null);
       setLatestReportMeta({
         reportType: data.report_type || null,
-        reportMonth: data.report_month ?? null,
-        reportYear: data.report_year ?? null,
+        reportDate: data.report_date || null,
       });
       setLastUpdated(new Date(data.created_at).toLocaleString('id-ID'));
       setShowHistory(false);
     } catch (err) {
       console.error('Error loading historical result:', err);
-      setLatestReportMeta({ reportType: null, reportMonth: null, reportYear: null });
+      setLatestReportMeta({ reportType: null, reportDate: null });
       setError('Gagal memuat data riwayat yang dipilih.');
     }
   }, []);
@@ -344,12 +341,11 @@ const HistoryDropdown = () => (
           setLastUpdated(processedResultData.lastUpdated);
           setLatestReportMeta({
             reportType: processedResultData.reportType,
-            reportMonth: processedResultData.reportMonth,
-            reportYear: processedResultData.reportYear,
+            reportDate: processedResultData.reportDate,
           });
         } else {
           setResult(null);
-          setLatestReportMeta({ reportType: null, reportMonth: null, reportYear: null });
+          setLatestReportMeta({ reportType: null, reportDate: null });
         }
 
         const attachmentsLookup: Record<string, ActivityAttachment[]> = attachmentsMap ?? {};
@@ -519,14 +515,9 @@ const HistoryDropdown = () => (
           const data = parseExcelFile(binaryStr as string | ArrayBuffer);
           const processingResult = processExcelData(data);
 
-          const reportDate = new Date(metadata.reportDate);
-          const reportMonth = reportDate.getMonth() + 1;
-          const reportYear = reportDate.getFullYear();
-
           await supabaseService.saveProcessedResult(processingResult, fileToProcess.name, {
             reportType: metadata.reportType,
-            reportMonth,
-            reportYear,
+            reportDate: metadata.reportDate,
           });
 
           // After saving, fetch the latest to ensure consistency
@@ -536,10 +527,12 @@ const HistoryDropdown = () => (
             setLastUpdated(latestData.lastUpdated);
             setLatestReportMeta({
               reportType: latestData.reportType,
-              reportMonth: latestData.reportMonth,
-              reportYear: latestData.reportYear,
+              reportDate: latestData.reportDate,
             });
           }
+          
+          // Refresh the history list to include the new entry
+          await loadHistory();
 
           setFile(fileToProcess);
         } catch (err) {
@@ -1309,13 +1302,17 @@ const HistoryDropdown = () => (
           <div className="space-y-6">
             {/* Header */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-      <div>
+              <div>
                 <h2 className="text-xl font-bold text-gray-800">Anggaran Biro Digitalisasi dan Pengelolaan Informasi</h2>
-                {(latestReportMeta.reportType || latestReportMeta.reportMonth || latestReportMeta.reportYear) ? (
+                {latestReportMeta.reportDate ? (
                   <p className="text-sm text-gray-600">
                     Laporan {latestReportMeta.reportType ?? 'Tidak diketahui'} ·{' '}
-                    {latestReportMeta.reportMonth ? MONTH_NAMES_ID[(latestReportMeta.reportMonth - 1 + 12) % 12] : '—'}{' '}
-                    {latestReportMeta.reportYear ?? '—'}
+                    {new Date(latestReportMeta.reportDate).toLocaleDateString('id-ID', {
+                      day: 'numeric',
+                      month: 'long',
+                      year: 'numeric',
+                      timeZone: 'UTC' 
+                    })}
                   </p>
                 ) : (
                   <p className="text-sm text-gray-600">Informasi Pagu dan Realisasi</p>
