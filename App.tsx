@@ -684,6 +684,7 @@ const HistoryDropdown = () => (
   // Initial data loading from Supabase
   useEffect(() => {
     async function loadInitialData() {
+      if (!user?.id) return; // Don't load if user is not logged in
       setIsInitializing(true);
       try {
         const [processedResultData, activitiesData, attachmentsMap, maxDepthSetting] = await Promise.all([
@@ -693,7 +694,7 @@ const HistoryDropdown = () => (
             console.error('Error loading attachments:', err);
             return {} as Record<string, ActivityAttachment[]>;
           }),
-          supabaseService.getSetting('hierarchyMaxDepth')
+          supabaseService.getSetting('hierarchyMaxDepth', user.id)
         ]);
 
         let selectedProcessedData = processedResultData;
@@ -741,7 +742,7 @@ const HistoryDropdown = () => (
       }
     }
     loadInitialData();
-  }, [applyProcessedResult]);
+  }, [applyProcessedResult, user?.id]);
 
   useEffect(() => {
     if (showActivityForm && !isEditing) {
@@ -992,15 +993,25 @@ const HistoryDropdown = () => (
 
       const reader = new FileReader();
       reader.onload = async (event) => {
+        if (!user?.id) {
+          setError('Sesi pengguna tidak ditemukan. Silakan login kembali.');
+          setIsProcessing(false);
+          return;
+        }
         try {
           const binaryStr = event.target?.result;
           const data = parseExcelFile(binaryStr as string | ArrayBuffer);
           const processingResult = processExcelData(data);
 
-          await supabaseService.saveProcessedResult(processingResult, fileToProcess.name, {
-            reportType: metadata.reportType,
-            reportDate: metadata.reportDate,
-          });
+          await supabaseService.saveProcessedResult(
+            processingResult, 
+            fileToProcess.name, 
+            {
+              reportType: metadata.reportType,
+              reportDate: metadata.reportDate,
+            },
+            user.id
+          );
 
           // After saving, fetch the latest to ensure consistency
           const latestData = await supabaseService.getLatestProcessedResult();
@@ -1333,7 +1344,10 @@ const HistoryDropdown = () => (
         await supabaseService.updateActivity(editingActivityId, payload);
         savedActivity = { ...payload, id: editingActivityId };
       } else {
-        savedActivity = await supabaseService.addActivity(payload);
+        if (!user?.id) {
+          throw new Error('Sesi pengguna tidak valid. Silakan login kembali.');
+        }
+        savedActivity = await supabaseService.addActivity(payload, user.id);
       }
 
       if (isEditing && editingActivityId) {
@@ -1553,10 +1567,11 @@ const HistoryDropdown = () => (
   }, []);
 
   const handleDepthChange = async (depth: number) => {
+    if (!user?.id) return;
     setMaxDepth(depth);
     setExpandedNodes({}); // Reset the expanded state
     try {
-      await supabaseService.saveSetting('hierarchyMaxDepth', depth.toString());
+      await supabaseService.saveSetting('hierarchyMaxDepth', depth.toString(), user.id);
     } catch (err) {
       setError('Gagal menyimpan pengaturan level.');
     }

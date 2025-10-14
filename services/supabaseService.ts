@@ -63,24 +63,30 @@ export async function getLatestProcessedResult(): Promise<{
     .from('processed_results')
     .select('*')
     .order('created_at', { ascending: false })
-    .limit(1)
-    .single();
+    .limit(1);
 
-  if (error || !data) {
+  if (error) {
+    console.error('Error fetching latest processed result:', error);
     return null;
   }
 
+  if (!data || data.length === 0) {
+    return null; // No results found, which is normal for a new user
+  }
+
+  const latestResult = data[0];
+
   return {
-    id: data.id,
+    id: latestResult.id,
     result: {
-      finalData: data.processed_data,
-      totals: data.totals,
-      processedDataForPreview: data.processed_data?.slice(0, 100) || [],
-      accountNameMap: data.account_name_map ? new Map(Object.entries(data.account_name_map)) : new Map()
+      finalData: latestResult.processed_data,
+      totals: latestResult.totals,
+      processedDataForPreview: latestResult.processed_data?.slice(0, 100) || [],
+      accountNameMap: latestResult.account_name_map ? new Map(Object.entries(latestResult.account_name_map)) : new Map()
     },
-    lastUpdated: new Date(data.created_at).toLocaleString('id-ID'),
-    reportType: data.report_type || null,
-    reportDate: data.report_date || null
+    lastUpdated: new Date(latestResult.created_at).toLocaleString('id-ID'),
+    reportType: latestResult.report_type || null,
+    reportDate: latestResult.report_date || null
   };
 }
 
@@ -123,7 +129,8 @@ export async function getProcessedResultById(id: string): Promise<{
 export async function saveProcessedResult(
   result: ProcessingResult,
   fileName: string,
-  options: { reportType: string; reportDate: string }
+  options: { reportType: string; reportDate: string },
+  userId: string
 ): Promise<void> {
   // Convert Map to plain object for storage
   const accountNameMapObj = result.accountNameMap ? 
@@ -138,7 +145,8 @@ export async function saveProcessedResult(
         totals: result.totals,
         account_name_map: accountNameMapObj,
         report_type: options.reportType,
-        report_date: options.reportDate
+        report_date: options.reportDate,
+        user_id: userId
       },
     ]);
 
@@ -168,7 +176,7 @@ export async function getActivities(): Promise<Activity[]> {
             capaian,
             pending_issue,
             rencana_tindak_lanjut,
-            allocations (
+            allocations ( 
                 id,
                 kode,
                 uraian,
@@ -206,9 +214,10 @@ export async function getActivities(): Promise<Activity[]> {
 /**
  * Adds a new activity and its associated allocations to the database.
  * @param newActivity The activity data to add (without an id).
+ * @param userId The ID of the user creating the activity.
  * @returns The newly created activity with its ID.
  */
-export async function addActivity(newActivity: Omit<Activity, 'id'>): Promise<Activity> {
+export async function addActivity(newActivity: Omit<Activity, 'id'>, userId: string): Promise<Activity> {
     const { data: activityData, error: activityError } = await supabase
         .from('activities')
         .insert({ 
@@ -220,9 +229,9 @@ export async function addActivity(newActivity: Omit<Activity, 'id'>): Promise<Ac
             penanggung_jawab: newActivity.penanggung_jawab,
             capaian: newActivity.capaian,
             pending_issue: newActivity.pending_issue,
-            rencana_tindak_lanjut: newActivity.rencana_tindak_lanjut
-        })
-        .select()
+            rencana_tindak_lanjut: newActivity.rencana_tindak_lanjut,
+            user_id: userId
+        })        .select()
         .single();
 
     if (activityError || !activityData) {
@@ -347,31 +356,38 @@ export async function removeActivity(id: string): Promise<void> {
  * @param key The key of the setting to retrieve.
  * @returns The value of the setting, or null if not found.
  */
-export async function getSetting(key: string): Promise<string | null> {
+export async function getSetting(key: string, userId: string): Promise<string | null> {
+    if (!userId) return null;
     const { data, error } = await supabase
         .from('user_settings')
         .select('value')
         .eq('key', key)
-        .single();
+        .eq('user_id', userId)
+        .limit(1);
 
-    if (error || !data) {
-        if (error && error.code !== 'PGRST116') {
-            console.error(`Error fetching setting '${key}':`, error);
-        }
+    if (error) {
+        console.error(`Error fetching setting '${key}':`, error);
         return null;
     }
-    return data.value;
+
+    if (!data || data.length === 0) {
+        return null; // Gracefully return null if setting not found
+    }
+
+    return data[0].value;
 }
 
 /**
- * Saves or updates a setting in the database.
+ * Saves or updates a setting in the database for a specific user.
  * @param key The key of the setting.
  * @param value The value to save.
+ * @param userId The ID of the user.
  */
-export async function saveSetting(key: string, value: string): Promise<void> {
+export async function saveSetting(key: string, value: string, userId: string): Promise<void> {
+    if (!userId) throw new Error('User ID is required to save a setting.');
     const { error } = await supabase
         .from('user_settings')
-        .upsert({ key, value, updated_at: new Date().toISOString() });
+        .upsert({ key, value, user_id: userId, updated_at: new Date().toISOString() });
 
     if (error) {
         console.error(`Error saving setting '${key}':`, error);

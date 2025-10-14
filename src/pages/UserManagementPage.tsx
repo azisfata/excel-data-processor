@@ -24,7 +24,7 @@ const UserManagementPage: React.FC = () => {
     role: 'user',
     password: ''
   });
-  const { user: currentUser, isAdmin } = useAuth();
+  const { user: currentUser, isAdmin, logout } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -196,12 +196,26 @@ const UserManagementPage: React.FC = () => {
               <h1 className="text-3xl font-bold text-gray-800">Manajemen User</h1>
               <p className="mt-2 text-gray-600">Kelola akun pengguna sistem</p>
             </div>
-            <button
-              onClick={() => handleOpenModal()}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition"
-            >
-              + Tambah User
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => navigate('/')}
+                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium rounded-lg transition"
+              >
+                Kembali ke Dasbor
+              </button>
+              <button
+                onClick={() => handleOpenModal()}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition"
+              >
+                + Tambah User
+              </button>
+              <button
+                onClick={logout}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition"
+              >
+                Logout
+              </button>
+            </div>
           </div>
         </div>
 

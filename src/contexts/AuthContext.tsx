@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { supabase } from '../../utils/supabase';
 
 interface User {
   id: string;
@@ -37,57 +38,72 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Check if user is authenticated on mount
   useEffect(() => {
+    // On initial load, try to authenticate the user from the cookie
+    const checkAuth = async () => {
+      try {
+        const response = await fetch('http://localhost:3002/api/auth/me', {
+          credentials: 'include',
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          // IMPORTANT: The /me endpoint does not return a token, so on page refresh,
+          // Supabase requests will not be authenticated until the user logs in again.
+          // This is a limitation of the current auth architecture.
+          setUser(data.user);
+        } else {
+          setUser(null);
+          if (supabase.global?.headers) {
+            delete supabase.global.headers['Authorization'];
+          }
+        }
+      } catch (error) {
+        setUser(null);
+        if (supabase.global?.headers) {
+          delete supabase.global.headers['Authorization'];
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
     checkAuth();
   }, []);
-
-  const checkAuth = async () => {
-    try {
-      const response = await fetch('http://localhost:3002/api/auth/me', {
-        credentials: 'include'
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setUser(data.user);
-      } else {
-        setUser(null);
-      }
-    } catch (error) {
-      console.error('Auth check error:', error);
-      setUser(null);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const login = async (email: string, password: string) => {
     const response = await fetch('http://localhost:3002/api/auth/login', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ email, password })
+      body: JSON.stringify({ email, password }),
     });
 
     const data = await response.json();
 
     if (!response.ok) {
+      if (supabase.global?.headers) {
+        delete supabase.global.headers['Authorization'];
+      }
       throw new Error(data.error || 'Login gagal');
     }
 
+    // CRITICAL: Set the token for Supabase BEFORE setting the user state.
+    if (!supabase.global) {
+      supabase.global = {};
+    }
+    if (!supabase.global.headers) {
+      supabase.global.headers = {};
+    }
+    supabase.global.headers['Authorization'] = `Bearer ${data.token}`;
     setUser(data.user);
   };
 
   const signup = async (email: string, password: string, name: string, unit?: string) => {
     const response = await fetch('http://localhost:3002/api/auth/signup', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ email, password, name, unit })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, name, unit }),
     });
 
     const data = await response.json();
@@ -101,12 +117,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       await fetch('http://localhost:3002/api/auth/logout', {
         method: 'POST',
-        credentials: 'include'
+        credentials: 'include',
       });
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
+      // CRITICAL: Clear the user state BEFORE clearing the token.
       setUser(null);
+      if (supabase.global?.headers) {
+        delete supabase.global.headers['Authorization'];
+      }
     }
   };
 
@@ -117,7 +137,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     signup,
     logout,
     isAuthenticated: !!user,
-    isAdmin: user?.role === 'admin'
+    isAdmin: user?.role === 'admin',
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
