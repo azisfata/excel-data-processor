@@ -1,9 +1,11 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useDropzone, type DropzoneOptions } from 'react-dropzone';
+import { useNavigate } from 'react-router-dom';
 import { ProcessingResult, Activity, ActivityAttachment, BudgetAllocation } from './types';
 import { processExcelData, downloadExcelFile, parseExcelFile } from './services/excelProcessor';
 import { createHierarchy, flattenTree } from './utils/hierarchy';
 import * as supabaseService from './services/supabaseService';
+import { useAuth } from './src/contexts/AuthContext';
 import * as attachmentService from './services/activityAttachmentService';
 import { supabase } from './utils/supabase';
 import { fetchAiResponse, type AiChatMessage as AiRequestMessage } from './services/aiService';
@@ -89,6 +91,10 @@ const UploadIcon = () => (
 
 
 const App: React.FC = () => {
+  // Auth and navigation hooks (must be called before any conditional returns)
+  const { user, logout, isAdmin } = useAuth();
+  const navigate = useNavigate();
+
   // State for activity management
   const [activities, setActivities] = useState<Activity[]>([]);
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
@@ -1608,8 +1614,47 @@ const HistoryDropdown = () => (
     return <InitializingSpinner />;
   }
 
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
+        {/* Header */}
+        <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between items-center h-16">
+              <div>
+                <h1 className="text-xl font-bold text-gray-800">Excel Data Processor</h1>
+                <p className="text-xs text-gray-500">Kelola realisasi dan kegiatan</p>
+              </div>
+              <div className="flex items-center gap-4">
+                {isAdmin && (
+                  <button
+                    onClick={() => navigate('/users')}
+                    className="px-3 py-1.5 text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-md transition"
+                  >
+                    Kelola User
+                  </button>
+                )}
+                <div className="flex items-center gap-3 border-l pl-4">
+                  <div className="text-right">
+                    <p className="text-sm font-medium text-gray-800">{user?.name}</p>
+                    <p className="text-xs text-gray-500">{user?.role}</p>
+                  </div>
+                  <button
+                    onClick={handleLogout}
+                    className="px-3 py-1.5 text-sm text-white bg-red-600 hover:bg-red-700 rounded-md transition"
+                  >
+                    Logout
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </header>
+
         {showUploadMetadataModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-xl w-full max-w-lg shadow-xl space-y-6 p-6">
