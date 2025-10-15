@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs/promises';
 import fsSync from 'fs';
+import cors from 'cors';
 import dotenv from 'dotenv';
 
 // Load environment variables
@@ -212,6 +213,28 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 const app = express();
+
+app.use(cors({
+  origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, Postman, etc.)
+    if (!origin) return callback(null, true);
+
+    const allowedOrigins = [
+      'http://localhost:5173',
+      'http://192.168.10.149:5173',
+      'http://127.0.0.1:5173',
+      process.env.CORS_ORIGIN || 'http://localhost:3000' // Production domain
+    ].filter(Boolean);
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    } else {
+      console.log('CORS blocked origin:', origin);
+      return callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true
+}));
 
 app.use(express.json());
 
