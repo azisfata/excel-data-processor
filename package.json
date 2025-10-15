@@ -11,7 +11,13 @@
     "api": "node server/activity-upload-server.js",
     "auth": "node server/auth-server.js",
     "create-admin": "node scripts/create-admin.js",
-    "check-env": "node scripts/check-env.js"
+    "check-env": "node scripts/check-env.js",
+    "start": "./start-production.sh",
+    "stop": "./stop-production.sh",
+    "pm2:logs": "pm2 logs",
+    "pm2:status": "pm2 status",
+    "pm2:restart": "pm2 restart all",
+    "pm2:stop": "pm2 stop all"
   },
   "dependencies": {
     "@google/genai": "^1.24.0",
@@ -42,6 +48,7 @@
     "autoprefixer": "^10.4.21",
     "concurrently": "^9.2.1",
     "postcss": "^8.5.6",
+    "serve": "^14.2.5",
     "tailwindcss": "^4.1.12",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
