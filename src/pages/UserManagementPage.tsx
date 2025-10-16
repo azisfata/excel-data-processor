@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { API_CONFIG } from '../config';
 
 interface User {
   id: string;
@@ -37,7 +38,7 @@ const UserManagementPage: React.FC = () => {
 
   const fetchUsers = async () => {
     try {
-      const response = await fetch('http://localhost:3002/api/users', {
+      const response = await fetch(`${API_CONFIG.AUTH_SERVER_URL}/api/users`, {
         credentials: 'include'
       });
 
@@ -96,8 +97,8 @@ const UserManagementPage: React.FC = () => {
 
     try {
       const url = editingUser
-        ? `http://localhost:3002/api/users/${editingUser.id}`
-        : 'http://localhost:3002/api/users';
+        ? `${API_CONFIG.AUTH_SERVER_URL}/api/users/${editingUser.id}`
+        : `${API_CONFIG.AUTH_SERVER_URL}/api/users`;
 
       const method = editingUser ? 'PUT' : 'POST';
 
@@ -146,7 +147,7 @@ const UserManagementPage: React.FC = () => {
     }
 
     try {
-      const response = await fetch(`http://localhost:3002/api/users/${userId}`, {
+      const response = await fetch(`${API_CONFIG.AUTH_SERVER_URL}/api/users/${userId}`, {
         method: 'DELETE',
         credentials: 'include'
       });
@@ -155,7 +156,7 @@ const UserManagementPage: React.FC = () => {
 
       if (!response.ok) {
         throw new Error(data.error || 'Gagal menghapus user');
-      }
+        }
 
       await fetchUsers();
     } catch (err: any) {

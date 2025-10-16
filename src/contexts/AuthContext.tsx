@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '../../utils/supabase';
+import { API_CONFIG } from '../config';
 
 interface User {
   id: string;
@@ -42,7 +43,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // On initial load, try to authenticate the user from the cookie
     const checkAuth = async () => {
       try {
-        const response = await fetch('http://localhost:3002/api/auth/me', {
+        const response = await fetch(`${API_CONFIG.AUTH_SERVER_URL}/api/auth/me`, {
           credentials: 'include',
         });
 
@@ -72,7 +73,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   const login = async (email: string, password: string) => {
-    const response = await fetch('http://localhost:3002/api/auth/login', {
+    const response = await fetch(`${API_CONFIG.AUTH_SERVER_URL}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -100,7 +101,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const signup = async (email: string, password: string, name: string, unit?: string) => {
-    const response = await fetch('http://localhost:3002/api/auth/signup', {
+    const response = await fetch(`${API_CONFIG.AUTH_SERVER_URL}/api/auth/signup`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password, name, unit }),
@@ -115,7 +116,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const logout = async () => {
     try {
-      await fetch('http://localhost:3002/api/auth/logout', {
+      await fetch(`${API_CONFIG.AUTH_SERVER_URL}/api/auth/logout`, {
         method: 'POST',
         credentials: 'include',
       });
