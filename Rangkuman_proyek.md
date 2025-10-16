@@ -6,7 +6,7 @@
 - **Tech Stack**: React + TypeScript (Vite), Tailwind CSS utility classes, Supabase for persistence, Google Gemini AI for analysis
 
 ## Overview
-Proyek ini adalah aplikasi web React + TypeScript untuk memproses file Excel realisasi anggaran dari Kementerian Koperasi dan UKM (Kemenkop UKM). Aplikasi ini dirancang untuk membantu dalam analisis data anggaran dengan fitur canggih termasuk AI, manajemen kegiatan, dan sistem autentikasi.
+Proyek ini adalah aplikasi web React + TypeScript untuk memproses file Excel realisasi anggaran dari Kementerian Koordinator Pembangunan Manusia dan Kebudayaan (Kemenko PMK). Aplikasi ini dirancang untuk membantu dalam analisis data anggaran dengan fitur canggih termasuk AI, manajemen kegiatan, dan sistem autentikasi.
 
 ## Teknologi Utama
 - **Frontend**: React 19.1.1, TypeScript, Vite, TailwindCSS, React Router, React Dropzone
@@ -71,7 +71,8 @@ Endpoints Auth Server:
 - `src/pages/SignupPage.tsx` - Halaman registrasi
 - `src/pages/UserManagementPage.tsx` - Halaman manajemen user (admin only)
 - `src/components/ProtectedRoute.tsx` - HOC untuk protected routes
-- `src/main.tsx` - Setup routing
+- `src/main.tsx` - Application entry point
+- `src/config.ts` - Konfigurasi aplikasi
 
 ### Services
 - `services/excelProcessor.ts` - Core Excel processing logic
@@ -92,13 +93,18 @@ Endpoints Auth Server:
 
 ### Scripts & Configuration
 - `scripts/create-admin.js` - Script untuk membuat admin pertama
+- `scripts/check-env.js` - Script untuk memvalidasi environment
+- `scripts/reset-password.js` - Script untuk reset password
 - `server/activity-upload-server.js` - Server untuk upload file (port 3001)
 - `server/auth-server.js` - Server autentikasi (port 3002)
 
-### Features
-- `features/activities/` - Modul manajemen kegiatan
-  - `features/activities/components/` - Komponen-komponen terkait kegiatan
-  - `features/activities/hooks/` - Custom hooks untuk manajemen kegiatan
+### Direktori Tambahan
+- `activity_uploads/` - Direktori untuk menyimpan file upload kegiatan
+- `bahanUpload/` - Direktori untuk menyimpan file upload sementara
+
+### File Konfigurasi dan Data Lainnya
+- `metadata.json` - File metadata untuk informasi tambahan aplikasi
+- `temp_segment.txt` - File sementara untuk segmen data
 
 ## Fitur Utama
 
@@ -637,7 +643,7 @@ Setelah itu, admin bisa mengelola user lain melalui halaman `/users`.
 3. Atau akses langsung http://localhost:5173/users
 
 ## Tujuan Proyek
-Membantu Kemenkop UKM dalam:
+Membantu Kemenko PMK dalam:
 - Mengelola dan menganalisis data realisasi anggaran
 - Mempermudah proses pelaporan dan monitoring anggaran
 - Meningkatkan efisiensi dalam pengolahan data Excel kompleks
