@@ -38,18 +38,39 @@ const UserManagementPage: React.FC = () => {
 
   const fetchUsers = async () => {
     try {
+      console.log('Fetching users from:', `${API_CONFIG.AUTH_SERVER_URL}/api/users`);
       const response = await fetch(`${API_CONFIG.AUTH_SERVER_URL}/api/users`, {
         credentials: 'include'
       });
 
+      console.log('Response status:', response.status);
+      console.log('Response headers:', [...response.headers.entries()]);
+      
+      // Cek apakah respons adalah JSON sebelum mencoba menguraikannya
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        console.error('Non-JSON response:', text);
+        throw new Error('Server mengembalikan respons yang tidak valid');
+      }
+
       if (!response.ok) {
-        throw new Error('Gagal mengambil data user');
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+        throw new Error(`Gagal mengambil data user: ${response.status}`);
       }
 
       const data = await response.json();
+      console.log('Fetched users data:', data);
       setUsers(data.users);
     } catch (err: any) {
-      setError(err.message);
+      console.error('Error in fetchUsers:', err);
+      // Cek apakah error terkait dengan parsing JSON
+      if (err.message.includes('Unexpected token') || err.message.includes('JSON')) {
+        setError('Terjadi kesalahan dalam mengambil data. Format respons tidak valid.');
+      } else {
+        setError(err.message);
+      }
     } finally {
       setLoading(false);
     }

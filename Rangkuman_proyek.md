@@ -644,9 +644,68 @@ Setelah itu, admin bisa mengelola user lain melalui halaman `/users`.
 
 ## Tujuan Proyek
 Membantu Kemenko PMK dalam:
-- Mengelola dan menganalisis data realisasi anggaran
+- Mengelara dan menganalisis data realisasi anggaran
 - Mempermudah proses pelaporan dan monitoring anggaran
 - Meningkatkan efisiensi dalam pengolahan data Excel kompleks
 - Memberikan wawasan melalui AI yang terintegrasi
+
+## Instruksi Update Website Produksi
+
+Kapan pun perlu memperbarui website produksi dengan perubahan kode terbaru, ikuti langkah-langkah berikut:
+
+### 1. Pastikan perubahan telah di-commit dan di-push
+```bash
+cd /home/fata/excel-data-processor
+git add .
+git commit -m "Update: [deskripsi perubahan]"
+git push origin main
+```
+
+### 2. Pull perubahan terbaru di server produksi
+```bash
+cd /home/fata/excel-data-processor
+git pull origin main
+```
+
+### 3. Install ulang dependencies (jika ada perubahan di package.json)
+```bash
+npm install
+```
+
+### 4. Build ulang aplikasi
+```bash
+npm run build
+```
+
+### 5. Restart layanan PM2
+```bash
+# Restart semua layanan
+npm run pm2:restart
+# atau
+pm2 restart ecosystem.config.cjs
+
+# Alternatif: restart masing-masing layanan
+pm2 restart excel-processor-frontend
+pm2 restart excel-processor-auth-server
+pm2 restart excel-processor-activity-server
+```
+
+### 6. Verifikasi status layanan
+```bash
+pm2 status
+pm2 logs
+```
+
+### 7. Prosedur rollback (jika terjadi masalah)
+Jika update menyebabkan masalah, Anda bisa kembali ke versi sebelumnya:
+```bash
+# Lihat commit sebelumnya
+git log --oneline
+
+# Kembali ke commit sebelumnya
+git checkout <commit-hash-sebelumnya>
+npm run build
+pm2 restart ecosystem.config.cjs
+```
 
 This implementation represents a **production-ready, enterprise-grade application** specifically designed for Indonesian government budget management, with robust security, sophisticated data processing capabilities, and modern web development practices.

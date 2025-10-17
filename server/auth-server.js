@@ -36,7 +36,9 @@ app.use(cors({
       'http://localhost:5173',
       'http://192.168.10.149:5173',
       'http://127.0.0.1:5173',
-      process.env.CORS_ORIGIN || 'http://localhost:3000' // Production domain
+      process.env.CORS_ORIGIN || 'http://localhost:3000', // Production domain
+      'http://sapa.kemenkopmk.go.id',  // Tambahkan domain produksi
+      'https://sapa.kemenkopmk.go.id'  // Tambahkan domain produksi HTTPS
     ].filter(Boolean);
 
     if (allowedOrigins.includes(origin)) {
@@ -70,6 +72,11 @@ const authenticateToken = (req, res, next) => {
 
 // Middleware untuk verifikasi admin
 const requireAdmin = (req, res, next) => {
+  // Pastikan user telah diverifikasi
+  if (!req.user) {
+    return res.status(401).json({ error: 'Akses tidak sah. Silakan login kembali.' });
+  }
+
   if (req.user.role !== 'admin') {
     return res.status(403).json({ error: 'Akses ditolak. Hanya admin yang dapat mengakses.' });
   }
@@ -229,6 +236,7 @@ app.post('/api/auth/logout', (req, res) => {
 // GET /api/auth/me - Get current user
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
   try {
+    console.log('Fetching user info for:', req.user.email);
     const { data: user, error } = await supabase
       .from('users')
       .select('id, email, name, unit, role, created_at')
@@ -236,9 +244,11 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
       .single();
 
     if (error || !user) {
+      console.error('Error fetching user:', error);
       return res.status(404).json({ error: 'User tidak ditemukan' });
     }
 
+    console.log('Successfully fetched user:', user.email);
     res.json({ user });
   } catch (error) {
     console.error('Get user error:', error);
@@ -249,6 +259,7 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
 // GET /api/users - Get all users (admin only)
 app.get('/api/users', authenticateToken, requireAdmin, async (req, res) => {
   try {
+    console.log('Fetching users for admin:', req.user.email);
     const { data: users, error } = await supabase
       .from('users')
       .select('id, email, name, unit, role, created_at')
@@ -259,6 +270,7 @@ app.get('/api/users', authenticateToken, requireAdmin, async (req, res) => {
       return res.status(500).json({ error: 'Gagal mengambil data user' });
     }
 
+    console.log('Successfully fetched', users?.length, 'users');
     res.json({ users });
   } catch (error) {
     console.error('Get users error:', error);
