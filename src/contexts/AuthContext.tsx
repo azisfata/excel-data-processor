@@ -8,6 +8,7 @@ interface User {
   unit: string | null;
   role: string;
   created_at?: string;
+  is_approved: boolean;
 }
 
 interface AuthContextType {
@@ -17,6 +18,7 @@ interface AuthContextType {
   signup: (email: string, password: string, name: string, unit?: string) => Promise<void>;
   logout: () => Promise<void>;
   isAuthenticated: boolean;
+  isApproved: boolean;
   isAdmin: boolean;
 }
 
@@ -48,9 +50,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
         if (response.ok) {
           const data = await response.json();
-          // IMPORTANT: The /me endpoint does not return a token, so on page refresh,
-          // Supabase requests will not be authenticated until the user logs in again.
-          // This is a limitation of the current auth architecture.
           setUser(data.user);
         } else {
           setUser(null);
@@ -137,6 +136,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     signup,
     logout,
     isAuthenticated: !!user,
+    isApproved: user?.is_approved ?? false,
     isAdmin: user?.role === 'admin',
   };
 

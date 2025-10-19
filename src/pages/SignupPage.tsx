@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 const SignupPage: React.FC = () => {
   const [formData, setFormData] = useState({
     name: '',
-    email: '',
+    username: '',
     unit: '',
     password: '',
     confirmPassword: ''
@@ -14,6 +14,7 @@ const SignupPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const { signup } = useAuth();
   const navigate = useNavigate();
+  const emailDomain = '@kemenkopmk.go.id';
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -26,9 +27,11 @@ const SignupPage: React.FC = () => {
     e.preventDefault();
     setError('');
 
+    const email = `${formData.username}${emailDomain}`;
+
     // Validasi
-    if (!formData.email.endsWith('@kemenkopmk.go.id')) {
-      setError('Hanya email dengan domain @kemenkopmk.go.id yang diperbolehkan');
+    if (!formData.username) {
+      setError('Nama pengguna email tidak boleh kosong');
       return;
     }
 
@@ -45,9 +48,13 @@ const SignupPage: React.FC = () => {
     setLoading(true);
 
     try {
-      await signup(formData.email, formData.password, formData.name, formData.unit);
-      alert('Registrasi berhasil! Silakan login.');
-      navigate('/login');
+      await signup(email, formData.password, formData.name, formData.unit);
+      // Redirect to login page with a success message state
+      navigate('/login', {
+        state: {
+          message: 'Pendaftaran berhasil! Akun Anda harus disetujui oleh admin sebelum Anda dapat login.'
+        }
+      });
     } catch (err: any) {
       setError(err.message || 'Registrasi gagal');
     } finally {
@@ -87,19 +94,24 @@ const SignupPage: React.FC = () => {
           </div>
 
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="email-username" className="block text-sm font-medium text-gray-700 mb-1">
               Email <span className="text-red-500">*</span>
             </label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              value={formData.email}
-              onChange={handleChange}
-              placeholder="nama@kemenkopmk.go.id"
-              required
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
-            />
+            <div className="flex">
+              <input
+                id="email-username"
+                name="username"
+                type="text"
+                value={formData.username}
+                onChange={handleChange}
+                placeholder="nama.pengguna"
+                required
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-l-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+              />
+              <span className="inline-flex items-center px-3 border border-l-0 border-gray-300 bg-gray-50 text-gray-500 rounded-r-lg">
+                {emailDomain}
+              </span>
+            </div>
             <p className="mt-1 text-xs text-gray-500">Hanya email @kemenkopmk.go.id yang diperbolehkan</p>
           </div>
 

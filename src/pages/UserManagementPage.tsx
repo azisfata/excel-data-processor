@@ -9,6 +9,7 @@ interface User {
   unit: string | null;
   role: string;
   created_at: string;
+  is_approved: boolean;
 }
 
 const UserManagementPage: React.FC = () => {
@@ -163,6 +164,26 @@ const UserManagementPage: React.FC = () => {
     }
   };
 
+  const handleApprove = async (userId: string) => {
+    try {
+      const response = await fetch(`http://localhost:3002/api/users/${userId}/approve`, {
+        method: 'PUT',
+        credentials: 'include'
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Gagal menyetujui user');
+      }
+
+      // Update state lokal untuk merefleksikan perubahan
+      setUsers(users.map(u => u.id === userId ? { ...u, is_approved: true } : u));
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
   const getRoleBadgeColor = (role: string) => {
     switch (role) {
       case 'admin':
@@ -174,6 +195,12 @@ const UserManagementPage: React.FC = () => {
       default:
         return 'bg-gray-100 text-gray-800';
     }
+  };
+
+  const getStatusBadgeColor = (isApproved: boolean) => {
+    return isApproved
+      ? 'bg-green-100 text-green-800'
+      : 'bg-yellow-100 text-yellow-800';
   };
 
   if (loading) {
@@ -237,10 +264,10 @@ const UserManagementPage: React.FC = () => {
                     Email
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Unit
+                    Role
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Role
+                    Status
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Terdaftar
@@ -255,16 +282,19 @@ const UserManagementPage: React.FC = () => {
                   <tr key={user.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">{user.name}</div>
+                      <div className="text-sm text-gray-500">{user.unit || ''}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-600">{user.email}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-600">{user.unit || '-'}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getRoleBadgeColor(user.role)}`}>
                         {user.role}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getStatusBadgeColor(user.is_approved)}`}>
+                        {user.is_approved ? 'Aktif' : 'Menunggu Persetujuan'}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -273,6 +303,14 @@ const UserManagementPage: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      {!user.is_approved && (
+                        <button
+                          onClick={() => handleApprove(user.id)}
+                          className="text-green-600 hover:text-green-900 mr-4"
+                        >
+                          Setujui
+                        </button>
+                      )}
                       <button
                         onClick={() => handleOpenModal(user)}
                         className="text-blue-600 hover:text-blue-900 mr-4"

@@ -115,18 +115,23 @@ app.post('/api/auth/signup', async (req, res) => {
     // Hash password
     const password_hash = await bcrypt.hash(password, 10);
 
+    // Cek apakah email termasuk dalam daftar admin
+    const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim());
+    const isAutoApprovedAdmin = adminEmails.includes(email);
+
+    const newUserPayload = {
+      email,
+      password_hash,
+      name,
+      unit: unit || null,
+      role: isAutoApprovedAdmin ? 'admin' : 'user',
+      is_approved: isAutoApprovedAdmin
+    };
+
     // Insert user baru
     const { data: newUser, error } = await supabase
       .from('users')
-      .insert([
-        {
-          email,
-          password_hash,
-          name,
-          unit: unit || null,
-          role: 'user' // Default role
-        }
-      ])
+      .insert([newUserPayload])
       .select()
       .single();
 
@@ -142,7 +147,8 @@ app.post('/api/auth/signup', async (req, res) => {
         email: newUser.email,
         name: newUser.name,
         unit: newUser.unit,
-        role: newUser.role
+        role: newUser.role,
+        is_approved: newUser.is_approved
       }
     });
   } catch (error) {
@@ -183,13 +189,18 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'Email atau password salah' });
     }
 
+    if (!user.is_approved) {
+      return res.status(403).json({ error: 'Akun Anda belum disetujui oleh admin.' });
+    }
+
     // Generate JWT token
     const token = jwt.sign(
       {
         id: user.id,
         email: user.email,
         role: user.role,
-        name: user.name
+        name: user.name,
+        isApproved: true
       },
       JWT_SECRET,
       { expiresIn: '7d' }
@@ -210,7 +221,8 @@ app.post('/api/auth/login', async (req, res) => {
         email: user.email,
         name: user.name,
         unit: user.unit,
-        role: user.role
+        role: user.role,
+        is_approved: user.is_approved
       },
       token
     });
@@ -231,12 +243,19 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
   try {
     const { data: user, error } = await supabase
       .from('users')
-      .select('id, email, name, unit, role, created_at')
+      .select('id, email, name, unit, role, created_at, is_approved')
       .eq('id', req.user.id)
       .single();
 
     if (error || !user) {
       return res.status(404).json({ error: 'User tidak ditemukan' });
+    }
+
+    // Tambahan keamanan: jika karena suatu alasan user yang belum disetujui memiliki token,
+    // tolak akses dan bersihkan cookie mereka.
+    if (!user.is_approved) {
+      res.clearCookie('auth_token');
+      return res.status(403).json({ error: 'Akun Anda belum disetujui oleh admin.' });
     }
 
     res.json({ user });
@@ -251,7 +270,7 @@ app.get('/api/users', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { data: users, error } = await supabase
       .from('users')
-      .select('id, email, name, unit, role, created_at')
+      .select('id, email, name, unit, role, created_at, is_approved')
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -266,10 +285,41 @@ app.get('/api/users', authenticateToken, requireAdmin, async (req, res) => {
   }
 });
 
+// PUT /api/users/:id/approve - Approve user (admin only)
+app.put('/api/users/:id/approve', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const { data: updatedUser, error } = await supabase
+      .from('users')
+      .update({ is_approved: true })
+      .eq('id', id)
+      .select('id, email, name, unit, role, created_at, is_approved')
+      .single();
+
+    if (error) {
+      console.error('Error approving user:', error);
+      return res.status(500).json({ error: 'Gagal menyetujui user' });
+    }
+
+    if (!updatedUser) {
+      return res.status(404).json({ error: 'User tidak ditemukan' });
+    }
+
+    res.json({
+      message: 'User berhasil disetujui',
+      user: updatedUser
+    });
+  } catch (error) {
+    console.error('Approve user error:', error);
+    res.status(500).json({ error: 'Terjadi kesalahan server' });
+  }
+});
+
 // POST /api/users - Create user (admin only)
 app.post('/api/users', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const { email, password, name, unit, role } = req.body;
+    const { email, password, name, unit, role, is_approved } = req.body;
 
     // Validasi input
     if (!email || !password || !name) {
@@ -310,10 +360,11 @@ app.post('/api/users', authenticateToken, requireAdmin, async (req, res) => {
           password_hash,
           name,
           unit: unit || null,
-          role: role || 'user'
+          role: role || 'user',
+          is_approved: true
         }
       ])
-      .select('id, email, name, unit, role, created_at')
+      .select('id, email, name, unit, role, created_at, is_approved')
       .single();
 
     if (error) {
@@ -379,12 +430,16 @@ app.put('/api/users/:id', authenticateToken, requireAdmin, async (req, res) => {
       updateData.password_hash = await bcrypt.hash(password, 10);
     }
 
+    if (typeof is_approved === 'boolean') {
+      updateData.is_approved = is_approved;
+    }
+
     // Update user
     const { data: updatedUser, error } = await supabase
       .from('users')
       .update(updateData)
       .eq('id', id)
-      .select('id, email, name, unit, role, created_at')
+      .select('id, email, name, unit, role, created_at, is_approved')
       .single();
 
     if (error) {

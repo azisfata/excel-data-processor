@@ -8,7 +8,7 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requireAdmin = false }) => {
-  const { isAuthenticated, isAdmin, loading } = useAuth();
+  const { isAuthenticated, isApproved, isAdmin, loading } = useAuth();
 
   if (loading) {
     return (
@@ -21,11 +21,13 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requireAdmin 
     );
   }
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated || !isApproved) {
+    // Jika tidak terautentikasi ATAU tidak disetujui, arahkan ke halaman login.
     return <Navigate to="/login" replace />;
   }
 
   if (requireAdmin && !isAdmin) {
+    // Jika rute memerlukan admin tetapi pengguna bukan admin, arahkan ke dasbor utama.
     return <Navigate to="/" replace />;
   }
 

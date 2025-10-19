@@ -9,11 +9,11 @@
 Proyek ini adalah aplikasi web React + TypeScript untuk memproses file Excel realisasi anggaran dari Kementerian Koperasi dan UKM (Kemenkop UKM). Aplikasi ini dirancang untuk membantu dalam analisis data anggaran dengan fitur canggih termasuk AI, manajemen kegiatan, dan sistem autentikasi.
 
 ## Teknologi Utama
-- **Frontend**: React 19.1.1, TypeScript, Vite, TailwindCSS, React Router, React Dropzone
+- **Frontend**: React ^19.1.1, TypeScript, Vite, TailwindCSS, React Router, React Dropzone
 - **Backend**: Express.js (Node.js)
 - **Database**: Supabase (PostgreSQL)
 - **AI**: Google Gemini AI (models/gemini-2.5-flash) for intelligent data analysis
-- **Library**: XLSX (Excel processing), Multer (file upload), cookie-parser, bcryptjs, @google/genai
+- **Library**: XLSX (Excel processing), Multer (file upload), cookie-parser, bcryptjs, @google/genai, concurrently, serve
 
 ## Arsitektur Aplikasi
 
@@ -65,6 +65,13 @@ Endpoints Auth Server:
   - PUT `/api/users/:id` - Update user (admin only)
   - DELETE `/api/users/:id` - Delete user (admin only)
 
+Endpoints Activity Upload Server:
+  - GET `/api/activities/attachments` - Get all activity attachments
+  - GET `/api/activities/:id/attachment` - Get attachments for a specific activity
+  - POST `/api/activities/:id/attachment` - Upload an attachment for an activity
+  - DELETE `/api/activities/:id/attachment/:attachmentId?` - Delete an attachment (or all attachments for an activity)
+  - GET `/api/activities/:id/attachments/:attachmentId/download` - Download a specific attachment
+
 ### Frontend (React)
 - `src/contexts/AuthContext.tsx` - Context untuk state autentikasi
 - `src/pages/LoginPage.tsx` - Halaman login
@@ -87,7 +94,7 @@ Endpoints Auth Server:
 - `App.tsx` - Main application component
 - `index.tsx` - Application entry point
 - `types.ts` - Type definitions
-- `vite.config.ts` - Vite build configuration
+- `vite.config.ts` - Vite build configuration (includes proxy setup for /api and /activity-uploads to the backend server at port 3001)
 - `ecosystem.config.cjs` - PM2 process configuration
 
 ### Scripts & Configuration
@@ -432,6 +439,17 @@ Aplikasi akan berjalan di:
 - **API Server**: http://localhost:3001
 - **Auth Server**: http://localhost:3002
 
+### Alur Kerja Pengembangan (Development Workflow)
+Aplikasi ini menggunakan Vite untuk server pengembangan frontend, yang dilengkapi dengan fitur **Hot Module Replacement (HMR)**.
+
+- **Tidak Perlu `npm run build` untuk Pengembangan**: Perintah `npm run build` hanya untuk membuat versi produksi. Saat pengembangan, cukup jalankan `npm run dev`.
+- **Perubahan Kode Otomatis**: Setiap kali Anda menyimpan perubahan pada file kode sumber (misalnya, file `.tsx` atau `.js`), Vite akan secara otomatis memperbarui aplikasi di browser Anda secara instan, seringkali tanpa perlu me-refresh halaman.
+- **Kapan Perlu Restart?**: Anda **hanya perlu** menghentikan (`Ctrl + C`) dan menjalankan kembali `npm run dev` jika Anda melakukan perubahan pada file-file konfigurasi, seperti:
+  - `vite.config.ts`
+  - `tailwind.config.js`
+  - `.env`
+  - Perubahan pada file server Node.js (`server/*.js`) juga memerlukan restart.
+
 ## Production Deployment
 ### Prerequisites
 1. **Node.js 18+** installed
@@ -465,6 +483,25 @@ npm start
 pm2 start ecosystem.config.js
 ```
 
+### Updating the Application
+To update the production website, you do not need to push changes to a Git repository first. The process is done directly on the server:
+1.  **Get Latest Code**: Pull the latest changes from the repository.
+    ```bash
+    git pull origin main
+    ```
+2.  **Install Dependencies**: Install or update any required packages.
+    ```bash
+    npm install
+    ```
+3.  **Rebuild Frontend**: Create a new production build of the frontend.
+    ```bash
+    npm run build
+    ```
+4.  **Restart Services**: Restart the application using PM2 to apply changes.
+    ```bash
+    npm run pm2:restart
+    ```
+
 ### Available NPM Scripts
 ```bash
 # Production Management
@@ -473,6 +510,7 @@ npm stop           # Stop all services
 npm run pm2:status # Check PM2 process status
 npm run pm2:logs   # View all logs
 npm run pm2:restart # Restart all services
+npm run pm2:stop   # Stop all PM2 services
 
 # Development
 npm run dev        # Start development servers
