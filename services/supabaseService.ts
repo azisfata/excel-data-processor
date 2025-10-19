@@ -8,10 +8,15 @@ import { ProcessingResult, Activity } from '../types';
  * Fetches all processed results from Supabase, ordered by creation date (newest first).
  * @returns An array of objects containing the result data and metadata.
  */
-export async function getAllProcessedResults() {
+export async function getAllProcessedResults(userId: string) {
+  if (!userId) {
+    return [];
+  }
+
   const { data, error } = await supabase
     .from('processed_results')
     .select('*')
+    .eq('user_id', userId)
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -52,16 +57,21 @@ export async function getAllProcessedResults() {
  * Fetches the most recent processed Excel data from Supabase.
  * @returns An object containing the latest result and the update timestamp, or null if none found.
  */
-export async function getLatestProcessedResult(): Promise<{
+export async function getLatestProcessedResult(userId: string): Promise<{
   id: string;
   result: ProcessingResult;
   lastUpdated: string;
   reportType: string | null;
   reportDate: string | null;
 } | null> {
+  if (!userId) {
+    return null;
+  }
+
   const { data, error } = await supabase
     .from('processed_results')
     .select('*')
+    .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(1);
 
@@ -90,17 +100,21 @@ export async function getLatestProcessedResult(): Promise<{
   };
 }
 
-export async function getProcessedResultById(id: string): Promise<{
+export async function getProcessedResultById(id: string, userId: string): Promise<{
   id: string;
   result: ProcessingResult;
   lastUpdated: string;
   reportType: string | null;
   reportDate: string | null;
 } | null> {
+  if (!userId) {
+    return null;
+  }
+
   const { data, error } = await supabase
     .from('processed_results')
     .select('*')
-    .eq('id', id)
+    .match({ id, user_id: userId })
     .single();
 
   if (error || !data) {
@@ -132,6 +146,10 @@ export async function saveProcessedResult(
   options: { reportType: string; reportDate: string },
   userId: string
 ): Promise<void> {
+  if (!userId) {
+    throw new Error('Sesi pengguna tidak valid. Silakan login ulang.');
+  }
+
   // Convert Map to plain object for storage
   const accountNameMapObj = result.accountNameMap ? 
     Object.fromEntries(result.accountNameMap) : {};
@@ -162,7 +180,11 @@ export async function saveProcessedResult(
  * Fetches all activities along with their nested allocations.
  * @returns An array of activities.
  */
-export async function getActivities(): Promise<Activity[]> {
+export async function getActivities(userId: string): Promise<Activity[]> {
+    if (!userId) {
+        return [];
+    }
+
     const { data, error } = await supabase
         .from('activities')
         .select(`
@@ -183,10 +205,15 @@ export async function getActivities(): Promise<Activity[]> {
                 jumlah
             )
         `)
+        .eq('user_id', userId)
         .order('created_at', { ascending: true });
 
     if (error) {
         console.error('Error fetching activities:', error);
+        return [];
+    }
+
+    if (!data) {
         return [];
     }
 
@@ -202,7 +229,7 @@ export async function getActivities(): Promise<Activity[]> {
         pending_issue: activity.pending_issue || null,
         rencana_tindak_lanjut: activity.rencana_tindak_lanjut || null,
         attachments: [],
-        allocations: activity.allocations.map((alloc: any) => ({
+        allocations: (activity.allocations || []).map((alloc: any) => ({
             kode: alloc.kode,
             uraian: alloc.uraian || '',
             jumlah: alloc.jumlah,
@@ -218,6 +245,10 @@ export async function getActivities(): Promise<Activity[]> {
  * @returns The newly created activity with its ID.
  */
 export async function addActivity(newActivity: Omit<Activity, 'id'>, userId: string): Promise<Activity> {
+    if (!userId) {
+        throw new Error('Sesi pengguna tidak valid. Silakan login ulang.');
+    }
+
     const { data: activityData, error: activityError } = await supabase
         .from('activities')
         .insert({ 
@@ -231,7 +262,8 @@ export async function addActivity(newActivity: Omit<Activity, 'id'>, userId: str
             pending_issue: newActivity.pending_issue,
             rencana_tindak_lanjut: newActivity.rencana_tindak_lanjut,
             user_id: userId
-        })        .select()
+        })
+        .select()
         .single();
 
     if (activityError || !activityData) {
@@ -273,9 +305,13 @@ export async function addActivity(newActivity: Omit<Activity, 'id'>, userId: str
  * @param updatedActivity The updated activity data.
  * @returns The updated activity.
  */
-export async function updateActivity(id: string, updatedActivity: Omit<Activity, 'id'>): Promise<Activity> {
-    // Update the activity
-    const { error: activityError } = await supabase
+export async function updateActivity(id: string, updatedActivity: Omit<Activity, 'id'>, userId: string): Promise<Activity> {
+    if (!userId) {
+        throw new Error('Sesi pengguna tidak valid. Silakan login ulang.');
+    }
+
+    // Update the activity and ensure ownership
+    const { data: updatedRows, error: activityError } = await supabase
         .from('activities')
         .update({ 
             nama: updatedActivity.nama,
@@ -288,11 +324,17 @@ export async function updateActivity(id: string, updatedActivity: Omit<Activity,
             pending_issue: updatedActivity.pending_issue,
             rencana_tindak_lanjut: updatedActivity.rencana_tindak_lanjut
         })
-        .match({ id });
+        .eq('id', id)
+        .eq('user_id', userId)
+        .select('id');
 
     if (activityError) {
         console.error('Error updating activity:', activityError);
         throw new Error('Gagal memperbarui kegiatan.');
+    }
+
+    if (!updatedRows || updatedRows.length === 0) {
+        throw new Error('Kegiatan tidak ditemukan atau Anda tidak memiliki akses.');
     }
 
     // Delete existing allocations
@@ -336,15 +378,25 @@ export async function updateActivity(id: string, updatedActivity: Omit<Activity,
  * Removes an activity from the database.
  * @param id The UUID of the activity to remove.
  */
-export async function removeActivity(id: string): Promise<void> {
-    const { error } = await supabase
+export async function removeActivity(id: string, userId: string): Promise<void> {
+    if (!userId) {
+        throw new Error('Sesi pengguna tidak valid. Silakan login ulang.');
+    }
+
+    const { data, error } = await supabase
         .from('activities')
         .delete()
-        .match({ id });
+        .eq('id', id)
+        .eq('user_id', userId)
+        .select('id');
 
     if (error) {
         console.error('Error removing activity:', error);
         throw new Error('Gagal menghapus kegiatan.');
+    }
+
+    if (!data || data.length === 0) {
+        throw new Error('Kegiatan tidak ditemukan atau Anda tidak memiliki akses.');
     }
 }
 

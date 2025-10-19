@@ -542,8 +542,13 @@ const HistoryDropdown = () => (
 
   // Load history from Supabase
   const loadHistory = useCallback(async () => {
+    if (!user?.id) {
+      setHistory([]);
+      return;
+    }
+
     try {
-      const historyData = await supabaseService.getAllProcessedResults();
+      const historyData = await supabaseService.getAllProcessedResults(user.id);
       setHistory(
         historyData.map(item => ({
           id: item.id,
@@ -558,7 +563,7 @@ const HistoryDropdown = () => (
       console.error('Error loading history:', err);
       setError('Gagal memuat riwayat pemrosesan.');
     }
-  }, []);
+  }, [user?.id]);
 
   // Delete a history item
   const deleteHistoryItem = useCallback(async (id: string) => {
@@ -572,6 +577,11 @@ const HistoryDropdown = () => (
     
     if (!isConfirmed) return;
 
+    if (!user?.id) {
+      setError('Sesi pengguna tidak valid. Silakan login ulang.');
+      return;
+    }
+
     try {
       console.log('Attempting to delete history item with ID:', id);
       
@@ -580,6 +590,7 @@ const HistoryDropdown = () => (
         .from('processed_results')
         .select('id')
         .eq('id', id)
+        .eq('user_id', user.id)
         .single();
         
       console.log('Fetch result:', { existing, fetchError });
@@ -597,7 +608,8 @@ const HistoryDropdown = () => (
       const { error: deleteError } = await supabase
         .from('processed_results')
         .delete()
-        .eq('id', id);
+        .eq('id', id)
+        .eq('user_id', user.id);
 
       if (deleteError) {
         console.error('Supabase delete error:', deleteError);
@@ -616,7 +628,7 @@ const HistoryDropdown = () => (
         if (typeof window !== 'undefined') {
           localStorage.removeItem('lastSelectedHistoryId');
         }
-        const latestData = await supabaseService.getLatestProcessedResult();
+        const latestData = await supabaseService.getLatestProcessedResult(user.id);
         if (latestData) {
           applyProcessedResult(latestData);
         } else {
@@ -638,12 +650,17 @@ const HistoryDropdown = () => (
       console.error('Error in deleteHistoryItem:', err);
       setError('Gagal menghapus riwayat');
     }
-  }, [applyProcessedResult, loadHistory]);
+  }, [applyProcessedResult, loadHistory, user?.id]);
 
   // Load a specific historical result
   const loadHistoricalResult = useCallback(async (id: string) => {
+    if (!user?.id) {
+      setError('Sesi pengguna tidak valid. Silakan login ulang.');
+      return;
+    }
+
     try {
-      const data = await supabaseService.getProcessedResultById(id);
+      const data = await supabaseService.getProcessedResultById(id, user.id);
       if (!data) {
         throw new Error('Data tidak ditemukan');
       }
@@ -665,7 +682,7 @@ const HistoryDropdown = () => (
         localStorage.removeItem('lastSelectedHistoryId');
       }
     }
-  }, [applyProcessedResult]);
+  }, [applyProcessedResult, user?.id]);
 
   // Close history dropdown when clicking outside
   useEffect(() => {
@@ -688,8 +705,8 @@ const HistoryDropdown = () => (
       setIsInitializing(true);
       try {
         const [processedResultData, activitiesData, attachmentsMap, maxDepthSetting] = await Promise.all([
-          supabaseService.getLatestProcessedResult(),
-          supabaseService.getActivities(),
+          supabaseService.getLatestProcessedResult(user.id),
+          supabaseService.getActivities(user.id),
           attachmentService.fetchActivityAttachments().catch((err) => {
             console.error('Error loading attachments:', err);
             return {} as Record<string, ActivityAttachment[]>;
@@ -702,7 +719,7 @@ const HistoryDropdown = () => (
           typeof window !== 'undefined' ? localStorage.getItem('lastSelectedHistoryId') : null;
 
         if (storedHistoryId) {
-          const storedData = await supabaseService.getProcessedResultById(storedHistoryId);
+          const storedData = await supabaseService.getProcessedResultById(storedHistoryId, user.id);
           if (storedData) {
             selectedProcessedData = storedData;
           } else if (typeof window !== 'undefined') {
@@ -742,7 +759,17 @@ const HistoryDropdown = () => (
       }
     }
     loadInitialData();
-  }, [applyProcessedResult, user?.id]);
+  }, [applyProcessedResult, user?.id, loadHistory]);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setHistory([]);
+      setActivities([]);
+      setResult(null);
+      setLatestReportMeta({ reportType: null, reportDate: null });
+      setLastUpdated('');
+    }
+  }, [user?.id]);
 
   useEffect(() => {
     if (showActivityForm && !isEditing) {
@@ -1014,7 +1041,7 @@ const HistoryDropdown = () => (
           );
 
           // After saving, fetch the latest to ensure consistency
-          const latestData = await supabaseService.getLatestProcessedResult();
+          const latestData = await supabaseService.getLatestProcessedResult(user.id);
           if (latestData) {
             applyProcessedResult(latestData);
           }
@@ -1341,7 +1368,10 @@ const HistoryDropdown = () => (
       };
 
       if (isEditing && editingActivityId) {
-        await supabaseService.updateActivity(editingActivityId, payload);
+        if (!user?.id) {
+          throw new Error('Sesi pengguna tidak valid. Silakan login ulang.');
+        }
+        await supabaseService.updateActivity(editingActivityId, payload, user.id);
         savedActivity = { ...payload, id: editingActivityId };
       } else {
         if (!user?.id) {
@@ -1444,7 +1474,10 @@ const HistoryDropdown = () => (
     if (window.confirm('Apakah Anda yakin ingin menghapus kegiatan ini?')) {
       setIsSaving(true);
       try {
-        await supabaseService.removeActivity(id);
+        if (!user?.id) {
+          throw new Error('Sesi pengguna tidak valid. Silakan login ulang.');
+        }
+        await supabaseService.removeActivity(id, user.id);
         await attachmentService.deleteActivityAttachment(id).catch(err => {
           console.warn('Failed to remove attachment for activity:', err);
         });
