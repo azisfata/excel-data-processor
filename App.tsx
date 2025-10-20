@@ -9,6 +9,8 @@ import { useAuth } from './src/contexts/AuthContext';
 import * as attachmentService from './services/activityAttachmentService';
 import { supabase } from './utils/supabase';
 import { fetchAiResponse, type AiChatMessage as AiRequestMessage } from './services/aiService';
+import FloatingAIButton from './src/components/FloatingAIButton';
+import AIChatModal from './src/components/AIChatModal';
 
 const MONTH_NAMES_ID = [
   'Januari',
@@ -172,6 +174,7 @@ const App: React.FC = () => {
   const [aiInput, setAiInput] = useState('');
   const [isAiProcessing, setIsAiProcessing] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [isHeaderAiChatOpen, setIsHeaderAiChatOpen] = useState(false);
   const applyProcessedResult = useCallback((data: {
     id: string;
     result: ProcessingResult;
@@ -367,7 +370,7 @@ const App: React.FC = () => {
       { label: 'Realisasi s.d. Periode', value: activeTotals[4] || 0 }
     ];
 
-    const budgetEntries = (result?.finalData ?? [])
+    const budgetEntries = (activeData.length ? activeData : result?.finalData ?? [])
       .filter(row => Array.isArray(row) && row.length >= 7)
       .map(row => {
         const kode = String(row[0] ?? '').trim();
@@ -436,7 +439,7 @@ const App: React.FC = () => {
     }
 
     return lines.join('\n');
-  }, [activities, activeTotals, result]);
+  }, [activities, activeTotals, result, activeData]);
 
   const buildAiSystemPrompt = useCallback((): string => {
     const snapshot = buildAiDataSnapshot();
@@ -457,6 +460,8 @@ const App: React.FC = () => {
 
   // State for expanded nodes
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
+
+  const aiSystemPrompt = useMemo(() => buildAiSystemPrompt(), [buildAiSystemPrompt]);
 const Spinner = () => (
   <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -885,12 +890,11 @@ const HistoryDropdown = () => (
     setAiError(null);
 
     const sanitizedHistory = conversationWithUser.filter(message => message.id !== INITIAL_AI_MESSAGE_ID);
-    const recentHistory = sanitizedHistory.slice(-12);
     const systemPrompt = buildAiSystemPrompt();
 
     const payload: AiRequestMessage[] = [
       { role: 'system', content: systemPrompt },
-      ...recentHistory.map(message => ({
+      ...sanitizedHistory.map(message => ({
         role: message.sender,
         content: message.content
       }))
@@ -1686,6 +1690,16 @@ const HistoryDropdown = () => (
                     Kelola User
                   </button>
                 )}
+                <button
+                  onClick={() => setIsHeaderAiChatOpen(true)}
+                  className="relative p-2 rounded-full border border-blue-200 text-blue-600 hover:bg-blue-50 transition"
+                  title="Buka AI Chat"
+                  aria-label="Buka AI Chat"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                  </svg>
+                </button>
                 <div className="flex items-center gap-3 border-l pl-4">
                   <div className="text-right">
                     <p className="text-sm font-medium text-gray-800">{user?.name}</p>
@@ -3129,11 +3143,20 @@ const HistoryDropdown = () => (
           </div>
         )}
       </main>
+      <FloatingAIButton systemPrompt={aiSystemPrompt} />
+      {isHeaderAiChatOpen && (
+        <AIChatModal
+          onClose={() => setIsHeaderAiChatOpen(false)}
+          onNewMessage={() => {}}
+          systemPrompt={aiSystemPrompt}
+        />
+      )}
     </div>
   );
 }
 
 export default App;
+
 
 
 
