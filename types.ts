@@ -37,3 +37,10 @@ export interface ProcessingResult {
   processedDataForPreview: ExcelData;
   accountNameMap: Map<string, string>;
 }
+
+export interface AiMessage {
+  id: string;
+  sender: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+}
