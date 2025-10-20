@@ -24,7 +24,8 @@ const UserManagementPage: React.FC = () => {
     email: '',
     unit: '',
     role: 'user',
-    password: ''
+    password: '',
+    is_approved: true
   });
   const { user: currentUser, isAdmin, logout } = useAuth();
   const navigate = useNavigate();
@@ -64,7 +65,8 @@ const UserManagementPage: React.FC = () => {
         email: user.email,
         unit: user.unit || '',
         role: user.role,
-        password: ''
+        password: '',
+        is_approved: user.is_approved
       });
     } else {
       setEditingUser(null);
@@ -73,7 +75,8 @@ const UserManagementPage: React.FC = () => {
         email: '',
         unit: '',
         role: 'user',
-        password: ''
+        password: '',
+        is_approved: true
       });
     }
     setShowModal(true);
@@ -87,7 +90,8 @@ const UserManagementPage: React.FC = () => {
       email: '',
       unit: '',
       role: 'user',
-      password: ''
+      password: '',
+      is_approved: true
     });
     setError('');
   };
@@ -118,6 +122,11 @@ const UserManagementPage: React.FC = () => {
 
       if (formData.password) {
         body.password = formData.password;
+      }
+
+      // always include approval flag when creating/updating from admin UI
+      if (typeof formData.is_approved === 'boolean') {
+        body.is_approved = formData.is_approved;
       }
 
       const response = await fetch(url, {
@@ -411,6 +420,20 @@ const UserManagementPage: React.FC = () => {
                   <option value="viewer">Viewer</option>
                 </select>
               </div>
+
+              {editingUser && (
+                <div>
+                  <label className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={formData.is_approved}
+                      onChange={(e) => setFormData({ ...formData, is_approved: e.target.checked })}
+                      className="h-4 w-4 rounded text-blue-600 border-gray-300 focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-gray-700">Disetujui (boleh akses aplikasi)</span>
+                  </label>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
