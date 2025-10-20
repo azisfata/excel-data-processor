@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { getAuthApiUrl } from '../config/authApi';
 
 interface User {
   id: string;
@@ -38,7 +39,7 @@ const UserManagementPage: React.FC = () => {
 
   const fetchUsers = async () => {
     try {
-      const response = await fetch('http://localhost:3002/api/users', {
+      const response = await fetch(getAuthApiUrl('auth/users'), {
         credentials: 'include'
       });
 
@@ -97,8 +98,8 @@ const UserManagementPage: React.FC = () => {
 
     try {
       const url = editingUser
-        ? `http://localhost:3002/api/users/${editingUser.id}`
-        : 'http://localhost:3002/api/users';
+        ? getAuthApiUrl(`auth/users/${editingUser.id}`)
+        : getAuthApiUrl('auth/users');
 
       const method = editingUser ? 'PUT' : 'POST';
 
@@ -147,7 +148,7 @@ const UserManagementPage: React.FC = () => {
     }
 
     try {
-      const response = await fetch(`http://localhost:3002/api/users/${userId}`, {
+      const response = await fetch(getAuthApiUrl(`auth/users/${userId}`), {
         method: 'DELETE',
         credentials: 'include'
       });
@@ -166,7 +167,7 @@ const UserManagementPage: React.FC = () => {
 
   const handleApprove = async (userId: string) => {
     try {
-      const response = await fetch(`http://localhost:3002/api/users/${userId}/approve`, {
+      const response = await fetch(getAuthApiUrl(`auth/users/${userId}/approve`), {
         method: 'PUT',
         credentials: 'include'
       });

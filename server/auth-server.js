@@ -10,10 +10,32 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const app = express();
+app.set('trust proxy', 1);
 const PORT = 3002;
 
 // JWT Secret - dalam production, simpan di environment variable
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this-in-production';
+const COOKIE_SECURE = process.env.COOKIE_SECURE
+  ? process.env.COOKIE_SECURE.toLowerCase() === 'true'
+  : process.env.NODE_ENV === 'production';
+const COOKIE_DOMAIN = process.env.COOKIE_DOMAIN
+  ? process.env.COOKIE_DOMAIN.trim() || undefined
+  : undefined;
+const COOKIE_SAME_SITE = process.env.COOKIE_SAME_SITE?.trim() || 'lax';
+
+const getBaseCookieOptions = () => {
+  const options = {
+    httpOnly: true,
+    secure: COOKIE_SECURE,
+    sameSite: COOKIE_SAME_SITE
+  };
+
+  if (COOKIE_DOMAIN) {
+    options.domain = COOKIE_DOMAIN;
+  }
+
+  return options;
+};
 
 // Supabase client (hanya untuk query database, bukan auth)
 // Menggunakan service_role key untuk bypass RLS di server-side
@@ -208,10 +230,8 @@ app.post('/api/auth/login', async (req, res) => {
 
     // Set cookie
     res.cookie('auth_token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-      sameSite: 'lax'
+      ...getBaseCookieOptions(),
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     });
 
     res.json({
@@ -234,7 +254,7 @@ app.post('/api/auth/login', async (req, res) => {
 
 // POST /api/auth/logout - Logout user
 app.post('/api/auth/logout', (req, res) => {
-  res.clearCookie('auth_token');
+  res.clearCookie('auth_token', getBaseCookieOptions());
   res.json({ message: 'Logout berhasil' });
 });
 
@@ -254,7 +274,7 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
     // Tambahan keamanan: jika karena suatu alasan user yang belum disetujui memiliki token,
     // tolak akses dan bersihkan cookie mereka.
     if (!user.is_approved) {
-      res.clearCookie('auth_token');
+      res.clearCookie('auth_token', getBaseCookieOptions());
       return res.status(403).json({ error: 'Akun Anda belum disetujui oleh admin.' });
     }
 
@@ -265,8 +285,13 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
   }
 });
 
-// GET /api/users - Get all users (admin only)
-app.get('/api/users', authenticateToken, requireAdmin, async (req, res) => {
+const userRouter = express.Router();
+
+userRouter.use(authenticateToken);
+userRouter.use(requireAdmin);
+
+// GET /users - Get all users (admin only)
+userRouter.get('/', async (req, res) => {
   try {
     const { data: users, error } = await supabase
       .from('users')
@@ -285,8 +310,8 @@ app.get('/api/users', authenticateToken, requireAdmin, async (req, res) => {
   }
 });
 
-// PUT /api/users/:id/approve - Approve user (admin only)
-app.put('/api/users/:id/approve', authenticateToken, requireAdmin, async (req, res) => {
+// PUT /users/:id/approve - Approve user (admin only)
+userRouter.put('/:id/approve', async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -316,8 +341,8 @@ app.put('/api/users/:id/approve', authenticateToken, requireAdmin, async (req, r
   }
 });
 
-// POST /api/users - Create user (admin only)
-app.post('/api/users', authenticateToken, requireAdmin, async (req, res) => {
+// POST /users - Create user (admin only)
+userRouter.post('/', async (req, res) => {
   try {
     const { email, password, name, unit, role, is_approved } = req.body;
 
@@ -382,11 +407,11 @@ app.post('/api/users', authenticateToken, requireAdmin, async (req, res) => {
   }
 });
 
-// PUT /api/users/:id - Update user (admin only)
-app.put('/api/users/:id', authenticateToken, requireAdmin, async (req, res) => {
+// PUT /users/:id - Update user (admin only)
+userRouter.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { email, password, name, unit, role } = req.body;
+    const { email, password, name, unit, role, is_approved } = req.body;
 
     // Validasi input
     if (!name) {
@@ -461,8 +486,8 @@ app.put('/api/users/:id', authenticateToken, requireAdmin, async (req, res) => {
   }
 });
 
-// DELETE /api/users/:id - Delete user (admin only)
-app.delete('/api/users/:id', authenticateToken, requireAdmin, async (req, res) => {
+// DELETE /users/:id - Delete user (admin only)
+userRouter.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -488,6 +513,9 @@ app.delete('/api/users/:id', authenticateToken, requireAdmin, async (req, res) =
     res.status(500).json({ error: 'Terjadi kesalahan server' });
   }
 });
+
+app.use('/api/users', userRouter);
+app.use('/api/auth/users', userRouter);
 
 app.listen(PORT, () => {
   console.log(`Auth server listening on port ${PORT}`);
