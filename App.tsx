@@ -10,7 +10,6 @@ import * as attachmentService from './services/activityAttachmentService';
 import { supabase } from './utils/supabase';
 import { fetchAiResponse, type AiChatMessage as AiRequestMessage } from './services/aiService';
 import FloatingAIButton from './src/components/FloatingAIButton';
-import AIChatModal from './src/components/AIChatModal';
 
 const MONTH_NAMES_ID = [
   'Januari',
@@ -174,7 +173,6 @@ const App: React.FC = () => {
   const [aiInput, setAiInput] = useState('');
   const [isAiProcessing, setIsAiProcessing] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
-  const [isHeaderAiChatOpen, setIsHeaderAiChatOpen] = useState(false);
   const applyProcessedResult = useCallback((data: {
     id: string;
     result: ProcessingResult;
@@ -333,6 +331,10 @@ const App: React.FC = () => {
   // Refs
   const historyRef = useRef<HTMLDivElement>(null);
   const aiChatContainerRef = useRef<HTMLDivElement>(null);
+  const aiAssistantPanelRef = useRef<HTMLDivElement>(null);
+  const scrollToAiPanel = useCallback(() => {
+    aiAssistantPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
   
   const buildAiDataSnapshot = useCallback((): string => {
     const totalActivitiesCount = activities.length;
@@ -1691,7 +1693,7 @@ const HistoryDropdown = () => (
                   </button>
                 )}
                 <button
-                  onClick={() => setIsHeaderAiChatOpen(true)}
+                  onClick={scrollToAiPanel}
                   className="relative p-2 rounded-full border border-blue-200 text-blue-600 hover:bg-blue-50 transition"
                   title="Buka AI Chat"
                   aria-label="Buka AI Chat"
@@ -2633,7 +2635,7 @@ const HistoryDropdown = () => (
         )}
 
         {/* AI Assistant Panel */}
-        <div className="mt-8">
+        <div ref={aiAssistantPanelRef} className="mt-8">
           <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -3143,14 +3145,7 @@ const HistoryDropdown = () => (
           </div>
         )}
       </main>
-      <FloatingAIButton systemPrompt={aiSystemPrompt} />
-      {isHeaderAiChatOpen && (
-        <AIChatModal
-          onClose={() => setIsHeaderAiChatOpen(false)}
-          onNewMessage={() => {}}
-          systemPrompt={aiSystemPrompt}
-        />
-      )}
+      <FloatingAIButton onOpenAiPanel={scrollToAiPanel} />
     </div>
   );
 }
