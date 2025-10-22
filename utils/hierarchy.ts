@@ -62,76 +62,91 @@ export function createHierarchy(data: any[]): TreeNode[] {
 }
 
 // Flattens the tree for rendering with proper indentation
-export function flattenTree(nodes: TreeNode[], result: any[] = [], parentExpanded = true, level = 0): any[] {
-  nodes.forEach(node => {
-    const isVisible = level === 0 || parentExpanded;
-    const hasChildren = Object.keys(node.children).length > 0;
-    const hasMultipleData = node.data.length > 1;
-    const isLeaf = !hasChildren && !hasMultipleData;
-    
-    // For leaf nodes with single data item
-    if (isLeaf) {
-      result.push({
-        ...node.data[0],
-        __level: node.level,
-        __isVisible: isVisible,
-        __isLeaf: true,
-        __path: node.fullPath,
-        __hasChildren: false
-      });
-    } 
-    // For nodes with multiple data items (like 521211)
-    else if (hasMultipleData) {
-      const totalPaguRevisi = node.data.reduce((sum: number, row: any) => sum + (Number(row[2]) || 0), 0);
-      const totalRealisasi = node.data.reduce((sum: number, row: any) => sum + (Number(row[6]) || 0), 0);
-      const persentaseRealisasi = totalPaguRevisi > 0 
-        ? (totalRealisasi / totalPaguRevisi) * 100 
-        : 0;
-      const sisaAnggaran = totalPaguRevisi - totalRealisasi;
-      
-      // Add parent row with financial data
-      result.push({
-        [0]: node.fullPath, // Kode
-        [1]: `[${node.name}]`, // Uraian
-        [2]: totalPaguRevisi, // Sum of Pagu Revisi
-        [6]: totalRealisasi, // Sum of REALISASI
-        __paguRevisi: totalPaguRevisi,
-        __realisasi: totalRealisasi,
-        __persentaseRealisasi: persentaseRealisasi,
-        __sisaAnggaran: sisaAnggaran,
-        __level: node.level,
-        __isVisible: isVisible,
-        __isLeaf: false,
-        __isExpanded: node.isExpanded,
-        __path: node.fullPath,
-        __hasChildren: true,
-        __isDataGroup: true,
-        __dataCount: node.data.length
-      });
+interface FlattenTreeOptions {
+  accountNameMap?: Map<string, string>;
+}
 
-      // Add child rows if expanded
-      if (node.isExpanded) {
-        node.data.forEach((row: any, index: number) => {
-          result.push({
-            ...row,
-            __level: node.level + 1,
-            __isVisible: isVisible && node.isExpanded,
-            __isLeaf: true,
-            __path: `${node.fullPath}-${index}`,
-            __hasChildren: false
-          });
-        });
-      }
+export function flattenTree(nodes: TreeNode[], options: FlattenTreeOptions = {}): any[] {
+  const result: any[] = [];
+  const { accountNameMap } = options;
+
+  const resolveGroupName = (node: TreeNode): string => {
+    if (!node.fullPath) {
+      return `[${node.name}]`;
     }
-    // For regular parent nodes
-    else {
-      // Calculate totals for this node
+
+    const lastSegment = node.fullPath.split('.').pop() || node.name;
+    return accountNameMap?.get(lastSegment) ?? `[${node.name}]`;
+  };
+
+  const walk = (nodesToProcess: TreeNode[], parentExpanded = true, level = 0): void => {
+    nodesToProcess.forEach(node => {
+      const isVisible = level === 0 || parentExpanded;
+      const hasChildren = Object.keys(node.children).length > 0;
+      const hasMultipleData = node.data.length > 1;
+      const isLeaf = !hasChildren && !hasMultipleData;
+
+      if (isLeaf) {
+        result.push({
+          ...node.data[0],
+          __level: node.level,
+          __isVisible: isVisible,
+          __isLeaf: true,
+          __path: node.fullPath,
+          __hasChildren: false
+        });
+        return;
+      }
+
+      if (hasMultipleData) {
+        const totalPaguRevisi = node.data.reduce((sum: number, row: any) => sum + (Number(row[2]) || 0), 0);
+        const totalRealisasi = node.data.reduce((sum: number, row: any) => sum + (Number(row[6]) || 0), 0);
+        const persentaseRealisasi = totalPaguRevisi > 0
+          ? (totalRealisasi / totalPaguRevisi) * 100
+          : 0;
+        const sisaAnggaran = totalPaguRevisi - totalRealisasi;
+        const groupName = resolveGroupName(node);
+
+        result.push({
+          [0]: node.fullPath,
+          [1]: groupName,
+          [2]: totalPaguRevisi,
+          [6]: totalRealisasi,
+          __paguRevisi: totalPaguRevisi,
+          __realisasi: totalRealisasi,
+          __persentaseRealisasi: persentaseRealisasi,
+          __sisaAnggaran: sisaAnggaran,
+          __level: node.level,
+          __isVisible: isVisible,
+          __isLeaf: false,
+          __isExpanded: node.isExpanded,
+          __path: node.fullPath,
+          __hasChildren: true,
+          __isDataGroup: true,
+          __dataCount: node.data.length
+        });
+
+        if (node.isExpanded) {
+          node.data.forEach((row: any, index: number) => {
+            result.push({
+              ...row,
+              __level: node.level + 1,
+              __isVisible: isVisible && node.isExpanded,
+              __isLeaf: true,
+              __path: `${node.fullPath}-${index}`,
+              __hasChildren: false
+            });
+          });
+        }
+        return;
+      }
+
       const childNodes = Object.values(node.children);
-      const calculateTotals = (nodes: TreeNode[]) => {
+      const calculateTotals = (nodesForTotals: TreeNode[]) => {
         let totalPaguRevisi = 0;
         let totalRealisasi = 0;
-        
-        nodes.forEach(child => {
+
+        nodesForTotals.forEach(child => {
           if (child.data && child.data.length > 0) {
             child.data.forEach((row: any) => {
               totalPaguRevisi += Number(row[2]) || 0;
@@ -143,22 +158,22 @@ export function flattenTree(nodes: TreeNode[], result: any[] = [], parentExpande
             totalRealisasi += childTotals.totalRealisasi;
           }
         });
-        
+
         return { totalPaguRevisi, totalRealisasi };
       };
-      
+
       const { totalPaguRevisi, totalRealisasi } = calculateTotals(childNodes);
-      const persentaseRealisasi = totalPaguRevisi > 0 
-        ? (totalRealisasi / totalPaguRevisi) * 100 
+      const persentaseRealisasi = totalPaguRevisi > 0
+        ? (totalRealisasi / totalPaguRevisi) * 100
         : 0;
       const sisaAnggaran = totalPaguRevisi - totalRealisasi;
-      
-      // For parent nodes, add a summary row with financial data
+      const groupName = resolveGroupName(node);
+
       result.push({
-        [0]: node.fullPath, // Kode
-        [1]: `[${node.name}]`, // Uraian
-        [2]: totalPaguRevisi, // Pagu Revisi
-        [6]: totalRealisasi, // REALISASI
+        [0]: node.fullPath,
+        [1]: groupName,
+        [2]: totalPaguRevisi,
+        [6]: totalRealisasi,
         __paguRevisi: totalPaguRevisi,
         __realisasi: totalRealisasi,
         __persentaseRealisasi: persentaseRealisasi,
@@ -171,13 +186,12 @@ export function flattenTree(nodes: TreeNode[], result: any[] = [], parentExpande
         __hasChildren: true
       });
 
-      // Process children if expanded
       if (node.isExpanded) {
-        const childNodes = Object.values(node.children);
-        flattenTree(childNodes, result, isVisible && node.isExpanded, level + 1);
+        walk(childNodes, isVisible && node.isExpanded, level + 1);
       }
-    }
-  });
+    });
+  };
 
+  walk(nodes);
   return result;
 }

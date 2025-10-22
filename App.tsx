@@ -1599,7 +1599,7 @@ const HistoryDropdown = () => (
         return { ...node, isExpanded, children: withExpanded(Object.values(node.children), currentLevel + 1) };
       });
       const processedHierarchy = withExpanded(hierarchy);
-      const flatData = flattenTree(processedHierarchy);
+      const flatData = flattenTree(processedHierarchy, { accountNameMap: result?.accountNameMap });
       setHierarchicalData(flatData);
       setDisplayedData(flatData);
     }
