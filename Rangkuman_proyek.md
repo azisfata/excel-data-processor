@@ -624,6 +624,25 @@ kill -9 <PID>
 - Tests for data validation and error handling in all API calls
 - Component tests for UI interaction patterns
 
+## Refactor & Optimization Roadmap
+
+### Fokus Utama
+- **Pecah `App.tsx`**: Pisahkan header, upload, dashboard, tabel akun, modul AI, dan form kegiatan ke komponen mandiri. Bungkus logika berat (hierarki, upload, kegiatan, AI) dalam custom hook agar state tetap terkontrol dan mudah diuji.
+- **Perapihan layer data**: Buat modul akses data khusus (mis. `services/processedResults`) yang mengembalikan data bertipe kuat hasil normalisasi. Tambahkan validasi (Zod/TypeScript) saat membaca payload Supabase supaya error terdeteksi dini.
+- **Optimasi render hierarki/tabel**: Memoisasi `createHierarchy`/`flattenTree`, evaluasi pemakaian web worker untuk dataset besar, dan gunakan virtualisasi (`react-window`) agar tabel tetap lancar.
+- **Manajemen state terstruktur**: Alihkan state kompleks ke `useReducer` atau store ringan (Zustand) untuk kegiatan, filter, dan AI chat. Simpan preferensi UI (depth, panel visibility) lewat satu hook settings yang konsisten.
+- **Pipeline Excel modular**: Pecah fungsi besar di `excelProcessor.ts` menjadi tahapan pure function dengan unit test, cache hasil berat (mis. `accountNameMap`), dan dokumentasikan setiap transformasi.
+- **UX & performa**: Lazy-load panel berat (AI chat, form kegiatan), debounce pencarian/filter, dan batasi rerender melalui memo serta selector state.
+- **Tooling & testing**: Tambah linting (`@typescript-eslint` + Prettier) dan suite test (Jest/RTL) untuk hook/komponen krusial. Gunakan React Profiler/log custom buat mendeteksi regresi performa.
+
+### Tahapan Eksekusi
+1. **Strukturisasi** – Refactor `App.tsx` menjadi komponen/hook terpisah, kencangkan typing di service layer.
+2. **Performa UI** – Terapkan memoization, virtualisasi tabel, dan optimasi render hierarki.
+3. **Pipeline Data** – Modularisasi pengolahan Excel, tambahkan pengujian unit serta penanganan error yang jelas.
+4. **UX & Polishing** – Implementasi lazy loading, restruktur state global, integrasi linting dan test otomatis sebelum rilis.
+
+Setiap fase idealnya disertai regression test minimal dan review performa untuk memastikan tidak ada degradasi fungsional.
+
 ## Production Checklist
 - [ ] Environment variables configured
 - [ ] Frontend built (`dist/` folder exists)
