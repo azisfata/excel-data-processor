@@ -643,6 +643,9 @@ kill -9 <PID>
 
 Setiap fase idealnya disertai regression test minimal dan review performa untuk memastikan tidak ada degradasi fungsional.
 
+### Progress
+- **Phase 1 (Strukturisasi) – selesai**: `App.tsx` dipecah ke komponen dashboard (`BudgetOverviewPanel`, `AccountSummaryPanel`) dan custom hooks (`useHierarchyTable`, `useProcessedMetrics`); logika pencarian dan perhitungan total dipindahkan agar lebih terisolasi; `services/supabaseService.ts` dan utilitas terkait diperkuat typenya menggunakan struktur row eksplisit.
+
 ## Production Checklist
 - [ ] Environment variables configured
 - [ ] Frontend built (`dist/` folder exists)

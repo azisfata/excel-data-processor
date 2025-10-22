@@ -9,6 +9,10 @@ import * as attachmentService from './services/activityAttachmentService';
 import { supabase } from './utils/supabase';
 import { fetchAiResponse, getLastSuccessfulModel, type AiChatMessage as AiRequestMessage } from './services/aiService';
 import FloatingAIButton from './src/components/FloatingAIButton';
+import mammoth from 'mammoth';
+import * as XLSX from 'xlsx';
+import JSZip from 'jszip';
+import Tesseract from 'tesseract.js';
 import { useHierarchyTable } from './src/hooks/useHierarchyTable';
 import { useProcessedMetrics } from './src/hooks/useProcessedMetrics';
 import BudgetOverviewPanel from './src/components/dashboard/BudgetOverviewPanel';
@@ -179,6 +183,7 @@ const App: React.FC = () => {
   const [isAiAutofilling, setIsAiAutofilling] = useState(false);
   const [aiAutofillError, setAiAutofillError] = useState<string | null>(null);
   const [aiAutofillSuccess, setAiAutofillSuccess] = useState<string | null>(null);
+  const [aiAutofillSteps, setAiAutofillSteps] = useState<AiAutofillStep[]>([]);
 
   const {
     activeData,
@@ -787,6 +792,10 @@ const HistoryDropdown = () => (
       setActivityAttachments([]);
       setNewAttachmentFiles([]);
       setAttachmentsToRemove(new Set());
+      setAiAutofillError(null);
+      setAiAutofillSuccess(null);
+      setAiAutofillSteps([]);
+      setIsAiAutofilling(false);
     }
   }, [showActivityForm, isEditing]);
 
@@ -1349,6 +1358,10 @@ const HistoryDropdown = () => (
       setActivityAttachments([]);
       setNewAttachmentFiles([]);
       setAttachmentsToRemove(new Set());
+      setAiAutofillError(null);
+      setAiAutofillSuccess(null);
+      setAiAutofillSteps([]);
+      setIsAiAutofilling(false);
       setShowActivityForm(false);
       setIsEditing(false);
       setEditingActivityId(null);
@@ -1381,6 +1394,10 @@ const HistoryDropdown = () => (
     setActivityAttachments(activity.attachments ?? []);
     setNewAttachmentFiles([]);
     setAttachmentsToRemove(new Set());
+    setAiAutofillError(null);
+    setAiAutofillSuccess(null);
+    setAiAutofillSteps([]);
+    setIsAiAutofilling(false);
     setEditingActivityId(activity.id);
     setIsEditing(true);
     setShowActivityForm(true);
@@ -1393,6 +1410,7 @@ const HistoryDropdown = () => (
     setAttachmentsToRemove(new Set());
     setAiAutofillError(null);
     setAiAutofillSuccess(null);
+    setAiAutofillSteps([]);
     setIsAiAutofilling(false);
     setIsEditing(false);
     setEditingActivityId(null);
@@ -1495,29 +1513,71 @@ const HistoryDropdown = () => (
     setAiAutofillError(null);
     setAiAutofillSuccess(null);
 
-    const pdfFile =
-      newAttachmentFiles.find(file => file.type === 'application/pdf') ??
-      newAttachmentFiles.find(file => file.name.toLowerCase().endsWith('.pdf'));
+    const pdfFiles = newAttachmentFiles.filter(file => {
+      const name = file.name.toLowerCase();
+      return file.type === 'application/pdf' || name.endsWith('.pdf');
+    });
 
-    if (!pdfFile) {
+    if (pdfFiles.length === 0) {
+      setAiAutofillSteps([
+        {
+          label: 'Mengumpulkan teks dari lampiran',
+          status: 'error',
+          detail: 'Unggah minimal satu file PDF agar AI dapat membaca isi dokumen.',
+        },
+      ]);
       setAiAutofillError('Unggah minimal satu dokumen PDF terlebih dahulu untuk digunakan oleh AI.');
       return;
     }
 
+    const initialSteps: AiAutofillStep[] = [
+      { label: 'Mengumpulkan teks dari lampiran', status: 'processing' },
+      { label: 'Mengirim permintaan ke AI', status: 'processing' },
+    ];
+    setAiAutofillSteps(initialSteps);
     setIsAiAutofilling(true);
+
+    const updateStep = (index: number, patch: Partial<AiAutofillStep>) => {
+      setAiAutofillSteps(prev => prev.map((step, idx) => (idx === index ? { ...step, ...patch } : step)));
+    };
+
     try {
-      const extractedText = await extractTextFromPdf(pdfFile);
-      if (!extractedText) {
-        throw new Error('Tidak dapat membaca isi PDF. Pastikan dokumen tidak terkunci atau kosong.');
+      let combinedText = '';
+      for (let i = 0; i < pdfFiles.length; i += 1) {
+        const file = pdfFiles[i];
+        updateStep(0, {
+          detail: `Membaca ${file.name} (${i + 1} dari ${pdfFiles.length})`,
+        });
+        try {
+          const extractedText = await extractTextFromPdf(file);
+          if (extractedText) {
+            combinedText += `\n\n==== ${file.name} ====\n${extractedText}`;
+          }
+        } catch (extractionError) {
+          console.warn(`Gagal mengekstrak teks dari ${file.name}`, extractionError);
+        }
       }
 
-      const truncated = extractedText.slice(0, 12000);
+      if (!combinedText.trim()) {
+        updateStep(0, {
+          status: 'error',
+          detail: 'Tidak ada teks yang berhasil diambil dari lampiran PDF.',
+        });
+        throw new Error('Tidak ada teks yang berhasil diambil dari lampiran.');
+      }
+
+      updateStep(0, {
+        status: 'success',
+        detail: `Berhasil mengumpulkan teks dari ${pdfFiles.length} file PDF`,
+      });
+
+      const truncated = combinedText.slice(0, 15000);
       const systemMessage =
         'Anda adalah asisten yang mengekstrak informasi kegiatan dari dokumen resmi. ' +
         'Jawab hanya dengan JSON valid tanpa teks tambahan.';
 
       const userMessage = [
-        'Berdasarkan dokumen berikut, isi field kegiatan yang tersedia. Gunakan format tanggal YYYY-MM-DD.',
+        'Berdasarkan kumpulan dokumen berikut, isi field kegiatan yang tersedia. Gunakan format tanggal YYYY-MM-DD.',
         'Jika informasi tidak ditemukan, biarkan field kosong atau null.',
         'Gunakan struktur JSON berikut:',
         '{',
@@ -1535,9 +1595,11 @@ const HistoryDropdown = () => (
         '  ]',
         '}',
         '',
-        'Dokumen:',
+        'Kumpulan dokumen:',
         truncated,
       ].join('\n');
+
+      updateStep(1, { detail: 'Mengirim permintaan ke model AI...' });
 
       const aiResponse = await fetchAiResponse([
         { role: 'system', content: systemMessage },
@@ -1582,10 +1644,19 @@ const HistoryDropdown = () => (
         }
       }
 
-      setAiAutofillSuccess('Field berhasil diisi dari dokumen PDF. Mohon tinjau kembali sebelum menyimpan.');
+      updateStep(1, {
+        status: 'success',
+        detail: `Respons AI (${modelUsed}) diterima. Field telah diisi, mohon ditinjau.`,
+      });
+
+      setAiAutofillSuccess(`Field berhasil diisi dari ${pdfFiles.length} dokumen. Mohon tinjau sebelum menyimpan.`);
     } catch (error) {
       console.error('AI autofill error:', error);
       const message = error instanceof Error ? error.message : 'Gagal mengisi form dengan AI.';
+      updateStep(1, {
+        status: 'error',
+        detail: message,
+      });
       setAiAutofillError(message);
     } finally {
       setIsAiAutofilling(false);
@@ -2773,12 +2844,59 @@ const HistoryDropdown = () => (
                               : 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700'
                           }`}
                         >
-                          {isAiAutofilling ? 'Memproses dengan AI…' : 'Isi Form Otomatis dengan AI'}
+                          {isAiAutofilling ? (
+                            <span className="flex items-center gap-2">
+                              <svg
+                                className="h-4 w-4 animate-spin text-current"
+                                xmlns="http://www.w3.org/2000/svg"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                              >
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path
+                                  className="opacity-75"
+                                  fill="currentColor"
+                                  d="M4 12a8 8 0 018-8V2a10 10 0 100 20 10 10 0 01-8-10z"
+                                ></path>
+                              </svg>
+                              <span>Proses AI sedang berjalan...</span>
+                            </span>
+                          ) : (
+                            'Isi Form Otomatis dengan AI'
+                          )}
                         </button>
                         <p className="text-xs text-gray-500 max-w-md">
-                          Unggah dokumen PDF kegiatan sebagai lampiran, lalu gunakan tombol ini agar AI menyalin data ke form.
+                          Unggah satu atau lebih dokumen PDF sebagai lampiran, lalu gunakan tombol ini agar AI menyalin data ke form.
                         </p>
                       </div>
+                      {aiAutofillSteps.length > 0 && (
+                        <div className="mt-3 space-y-2 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-gray-700">
+                          {aiAutofillSteps.map((step, index) => (
+                            <div key={index} className="flex items-start gap-2">
+                              {step.status === 'processing' && (
+                                <svg className="h-4 w-4 mt-[2px] animate-spin text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V2a10 10 0 100 20 10 10 0 01-8-10z"></path>
+                                </svg>
+                              )}
+                              {step.status === 'success' && (
+                                <svg className="h-4 w-4 mt-[2px] text-green-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                              {step.status === 'error' && (
+                                <svg className="h-4 w-4 mt-[2px] text-red-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                              )}
+                              <div>
+                                <p className="font-medium">{step.label}</p>
+                                {step.detail && <p className="mt-0.5 text-gray-600">{step.detail}</p>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       {aiAutofillError && (
                         <p className="mt-2 text-xs text-red-600">{aiAutofillError}</p>
                       )}
@@ -3060,10 +3178,4 @@ const HistoryDropdown = () => (
 }
 
 export default App;
-
-
-
-
-
-
 

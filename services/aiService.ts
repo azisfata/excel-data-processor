@@ -6,6 +6,10 @@ export type AiChatMessage = {
 const DEFAULT_MODEL = 'models/gemini-2.5-flash';
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
+let lastSuccessfulModel: string | null = null;
+
+export const getLastSuccessfulModel = (): string | null => lastSuccessfulModel;
+
 const resolveEnv = (key: string): string | undefined => {
   const env = import.meta.env as Record<string, string | undefined>;
   return env[key];
@@ -105,6 +109,7 @@ export const fetchAiResponse = async (messages: AiChatMessage[]): Promise<string
       throw new Error('Respon AI tidak mengandung jawaban yang dapat dibaca.');
     }
 
+    lastSuccessfulModel = model;
     return contentText;
   };
 
@@ -116,16 +121,22 @@ export const fetchAiResponse = async (messages: AiChatMessage[]): Promise<string
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
         const message = lastError?.message?.toLowerCase() ?? '';
+        console.warn(`[AI] Model ${candidate} gagal: ${lastError?.message ?? 'unknown error'}`);
         if (
           message.includes('quota') ||
           message.includes('exceeded') ||
           message.includes('rate') ||
-          message.includes('429')
+          message.includes('429') ||
+          message.includes('503') ||
+          message.includes('overload')
         ) {
           continue;
         }
         throw lastError;
       }
+    }
+    if (lastError) {
+      console.error('[AI] Seluruh model fallback gagal. Mengembalikan error terakhir:', lastError.message);
     }
     throw lastError ?? new Error('Tidak dapat memproses permintaan menggunakan layanan AI.');
   } catch (error) {
