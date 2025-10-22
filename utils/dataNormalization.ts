@@ -1,9 +1,9 @@
-import type { ExcelData } from '../types';
+import type { ExcelData, ExcelRow } from '../types';
 
 const DESCRIPTION_PREFIX_REGEX = /^(\d{6})\.\s*(.+)$/;
 const SIX_DIGIT_CODE_REGEX = /^\d{6}$/;
 
-const cloneRow = (row: any[]): any[] => Array.isArray(row) ? [...row] : [];
+const cloneRow = (row: ExcelRow): ExcelRow => (Array.isArray(row) ? [...row] : []);
 
 export const getLastSegmentFromCode = (code: string): string => {
   if (!code) return '';
@@ -68,7 +68,7 @@ export function deriveAccountNameMap(data: ExcelData): Map<string, string> {
   return map;
 }
 
-export function cloneExcelData(data: any[] | null | undefined): ExcelData {
+export function cloneExcelData(data: ExcelData | null | undefined): ExcelData {
   if (!Array.isArray(data)) {
     return [];
   }

@@ -3,14 +3,16 @@ import { useDropzone, type DropzoneOptions } from 'react-dropzone';
 import { useNavigate } from 'react-router-dom';
 import { ProcessingResult, Activity, ActivityAttachment, BudgetAllocation } from './types';
 import { processExcelData, downloadExcelFile, parseExcelFile } from './services/excelProcessor';
-import { createHierarchy, flattenTree } from './utils/hierarchy';
-import { getLevel7Segment, isSixDigitSegment } from './utils/dataNormalization';
 import * as supabaseService from './services/supabaseService';
 import { useAuth } from './src/contexts/AuthContext';
 import * as attachmentService from './services/activityAttachmentService';
 import { supabase } from './utils/supabase';
 import { fetchAiResponse, type AiChatMessage as AiRequestMessage } from './services/aiService';
 import FloatingAIButton from './src/components/FloatingAIButton';
+import { useHierarchyTable } from './src/hooks/useHierarchyTable';
+import { useProcessedMetrics } from './src/hooks/useProcessedMetrics';
+import BudgetOverviewPanel from './src/components/dashboard/BudgetOverviewPanel';
+import AccountSummaryPanel from './src/components/dashboard/AccountSummaryPanel';
 
 const MONTH_NAMES_ID = [
   'Januari',
@@ -147,19 +149,11 @@ const App: React.FC = () => {
   const [budgetView, setBudgetView] = useState('realisasi-laporan');
   const currentYear = useMemo(() => new Date().getFullYear(), []);
   const currentMonthIndex = useMemo(() => new Date().getMonth(), []);
-  const getAttachmentDownloadUrl = useCallback(
-    (attachment: ActivityAttachment) =>
-      `/api/activities/${attachment.activityId}/attachments/${attachment.attachmentId}/download`,
-    []
-  );
-  const isInlinePreview = useCallback((fileName: string) => /\.(pdf|png|jpe?g|gif)$/i.test(fileName), []);
 
-  // State for file processing
+  // State for file processing & hierarchy
   const [isProcessing, setIsProcessing] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [result, setResult] = useState<ProcessingResult | null>(null);
-  const [hierarchicalData, setHierarchicalData] = useState<any[]>([]);
-  const [displayedData, setDisplayedData] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [maxDepth, setMaxDepth] = useState(7);
   const [isTableExpanded, setIsTableExpanded] = useState(true);
@@ -174,6 +168,34 @@ const App: React.FC = () => {
   const [aiInput, setAiInput] = useState('');
   const [isAiProcessing, setIsAiProcessing] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+
+  const {
+    activeData,
+    activeTotals,
+    additionalTotals,
+    progressPercentage,
+    level7Totals,
+  } = useProcessedMetrics({ result, activities, budgetView });
+
+  const {
+    hierarchicalData,
+    displayedData,
+    setDisplayedData,
+    toggleNode,
+    resetExpansion,
+  } = useHierarchyTable({
+    data: activeData,
+    maxDepth,
+    accountNameMap: result?.accountNameMap,
+  });
+  const getAttachmentDownloadUrl = useCallback(
+    (attachment: ActivityAttachment) =>
+      `/api/activities/${attachment.activityId}/attachments/${attachment.attachmentId}/download`,
+    []
+  );
+  const isInlinePreview = useCallback((fileName: string) => /\.(pdf|png|jpe?g|gif)$/i.test(fileName), []);
+
+  // State for file processing
   const applyProcessedResult = useCallback((data: {
     id: string;
     result: ProcessingResult;
@@ -191,74 +213,6 @@ const App: React.FC = () => {
       localStorage.setItem('lastSelectedHistoryId', data.id);
     }
   }, []);
-
-  const activeData = useMemo(() => {
-    if (!result?.finalData) return [];
-
-    if (budgetView === 'realisasi-laporan') {
-        return result.finalData;
-    }
-
-    const allocationMap = new Map<string, number>();
-    const targetStatuses = budgetView === 'realisasi-outstanding'
-        ? ['outstanding']
-        : ['outstanding', 'komitmen'];
-
-    activities
-        .filter(activity => targetStatuses.includes((activity.status || '').toLowerCase()))
-        .forEach(activity => {
-            activity.allocations.forEach(alloc => {
-                const compositeKey = `${alloc.kode}||${alloc.uraian}`;
-                allocationMap.set(compositeKey, (allocationMap.get(compositeKey) || 0) + alloc.jumlah);
-            });
-        });
-
-    if (allocationMap.size === 0) {
-        return result.finalData;
-    }
-
-    return result.finalData.map(row => {
-        const rowKode = row[0];
-        const rowUraian = row[1];
-        const compositeKey = `${rowKode}||${rowUraian}`;
-        const additionalAmount = allocationMap.get(compositeKey);
-
-        if (additionalAmount) {
-            const newRow = [...row];
-            const newRealisasi = (Number(newRow[6]) || 0) + additionalAmount;
-            newRow[6] = newRealisasi;
-            return newRow;
-        }
-        return row;
-    });
-
-  }, [budgetView, result, activities]);
-
-  const activeTotals = useMemo(() => {
-    if (!activeData || activeData.length === 0) return [0, 0, 0, 0, 0];
-
-    const columnsToSum = [2, 3, 4, 5, 6]; // Pagu, Lock, Periode Lalu, Periode Ini, s.d. Periode
-    return columnsToSum.map(colIndex =>
-        activeData.reduce((sum, row) => sum + (Number(row[colIndex]) || 0), 0)
-    );
-  }, [activeData]);
-
-  const additionalTotals = useMemo(() => {
-    let totalOutstanding = 0;
-    let totalKomitmen = 0;
-
-    activities.forEach(activity => {
-        const activityTotal = activity.allocations.reduce((sum, alloc) => sum + alloc.jumlah, 0);
-        if ((activity.status || '').toLowerCase() === 'outstanding') {
-            totalOutstanding += activityTotal;
-        }
-        if ((activity.status || '').toLowerCase() === 'komitmen') {
-            totalKomitmen += activityTotal;
-        }
-    });
-
-    return { outstanding: totalOutstanding, komitmen: totalKomitmen };
-  }, [activities]);
 
   // State for allocation search
   const [allocationSearch, setAllocationSearch] = useState('');
@@ -501,8 +455,6 @@ const App: React.FC = () => {
   }, [aiMessages]);
 
   // State for expanded nodes
-  const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
-
   const aiSystemPrompt = useMemo(() => buildAiSystemPrompt(), [buildAiSystemPrompt]);
 const Spinner = () => (
   <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -1543,110 +1495,10 @@ const HistoryDropdown = () => (
     return allocations.reduce((sum, item) => sum + item.jumlah, 0);
   };
 
-  // --- Data & Hierarchy Logic ---
-  const progressPercentage = useMemo(() => {
-    if (!activeTotals || typeof activeTotals[0] !== 'number' || activeTotals[0] <= 0) return 0;
-    if (typeof activeTotals[4] !== 'number') return 0;
-    return (activeTotals[4] / activeTotals[0]) * 100;
-  }, [activeTotals]);
-
-  // Calculate level 7 account totals
-  const level7Totals = useMemo(() => {
-    if (!result) return [];
-
-    const outstandingMap = new Map<string, number>();
-    const komitmenMap = new Map<string, number>();
-
-    activities.forEach(activity => {
-        const status = (activity.status || '').toLowerCase();
-        if (status !== 'outstanding' && status !== 'komitmen') return;
-
-        activity.allocations.forEach(alloc => {
-            const level7Code = getLevel7Segment(alloc.kode);
-            if (!level7Code || !isSixDigitSegment(level7Code)) return;
-
-            if (status === 'outstanding') {
-                outstandingMap.set(level7Code, (outstandingMap.get(level7Code) || 0) + alloc.jumlah);
-            } else if (status === 'komitmen') {
-                komitmenMap.set(level7Code, (komitmenMap.get(level7Code) || 0) + alloc.jumlah);
-            }
-        });
-    });
-
-    const totalsMap = new Map();
-    result.finalData.forEach(row => {
-        const kode = row[0];
-        if (typeof kode !== 'string') return;
-
-        const accountCode = getLevel7Segment(kode);
-        if (!accountCode || !isSixDigitSegment(accountCode)) return;
-
-        const paguRevisi = Number(row[2]) || 0;
-        const realisasiLaporan = Number(row[6]) || 0;
-
-        if (totalsMap.has(accountCode)) {
-            const current = totalsMap.get(accountCode);
-            current.paguRevisi += paguRevisi;
-            current.realisasiLaporan += realisasiLaporan;
-        } else {
-            const accountName = result.accountNameMap?.get(accountCode) || row[1] || `Akun ${accountCode}`;
-            totalsMap.set(accountCode, {
-                code: accountCode,
-                uraian: accountName,
-                paguRevisi,
-                realisasiLaporan,
-            });
-        }
-    });
-
-    const totals = Array.from(totalsMap.values()).map(item => {
-        const outstandingAmount = outstandingMap.get(item.code) || 0;
-        const komitmenAmount = komitmenMap.get(item.code) || 0;
-
-        let finalRealisasi = item.realisasiLaporan;
-        if (budgetView === 'realisasi-outstanding' || budgetView === 'realisasi-komitmen') {
-            finalRealisasi += outstandingAmount;
-        }
-        if (budgetView === 'realisasi-komitmen') {
-            finalRealisasi += komitmenAmount;
-        }
-
-        return {
-            ...item,
-            realisasi: finalRealisasi,
-            outstanding: outstandingAmount,
-            komitmen: komitmenAmount,
-            persentase: item.paguRevisi > 0 ? (finalRealisasi / item.paguRevisi) * 100 : 0,
-            sisa: item.paguRevisi - finalRealisasi
-        };
-    });
-
-    return totals.sort((a, b) => a.code.localeCompare(b.code));
-  }, [result, activities, budgetView]);
-
-  useEffect(() => {
-    if (activeData) {
-      const hierarchy = createHierarchy(activeData.slice(0, 100)); // Use activeData for preview
-      const withExpanded = (nodes: any[], currentLevel = 0): any[] => nodes.map(node => {
-        const shouldExpand = currentLevel < maxDepth - 1;
-        const isExpanded = expandedNodes[node.fullPath] ?? shouldExpand;
-        return { ...node, isExpanded, children: withExpanded(Object.values(node.children), currentLevel + 1) };
-      });
-      const processedHierarchy = withExpanded(hierarchy);
-      const flatData = flattenTree(processedHierarchy, { accountNameMap: result?.accountNameMap });
-      setHierarchicalData(flatData);
-      setDisplayedData(flatData);
-    }
-  }, [activeData, expandedNodes, maxDepth]);
-
-  const toggleNode = useCallback((path: string, isDataGroup = false) => {
-    setExpandedNodes(prev => ({ ...prev, [path]: !prev[path], ...(isDataGroup ? { [`${path}-data`]: !prev[path] } : {}) }));
-  }, []);
-
   const handleDepthChange = async (depth: number) => {
     if (!user?.id) return;
     setMaxDepth(depth);
-    setExpandedNodes({}); // Reset the expanded state
+    resetExpansion();
     try {
       await supabaseService.saveSetting('hierarchyMaxDepth', depth.toString(), user.id);
     } catch (err) {
@@ -2036,166 +1888,22 @@ const HistoryDropdown = () => (
               </div>
             </div>
 
-            {/* Totals & Progress */}
-            <div className="bg-white shadow-md rounded-lg overflow-hidden border border-gray-200">
-              <div className="p-6 space-y-6">
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                                                  {/* Pagu Revisi */}
-                                                  <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 border-t-4 border-t-blue-500">
-                                                    <p className="text-sm font-medium text-gray-500">Pagu Revisi</p>
-                                                    <p className="mt-1 text-2xl font-semibold text-gray-900">{formatCurrency(activeTotals[0] || 0)}</p>
-                                                  </div>
-                                                  {/* Realisasi */}
-                                                  <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 border-t-4 border-t-green-500">
-                                                    <p className="text-sm font-medium text-gray-500">Realisasi</p>
-                                                    <p className="mt-1 text-2xl font-semibold text-gray-900">{formatCurrency(activeTotals[4] || 0)}</p>
-                                                  </div>
-                                                  {/* Sisa Anggaran */}
-                                                  <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 border-t-4 border-t-gray-400">
-                                                    <p className="text-sm font-medium text-gray-500">Sisa Anggaran</p>
-                                                    <p className="mt-1 text-2xl font-semibold text-gray-900">{formatCurrency((activeTotals[0] || 0) - (activeTotals[4] || 0))}</p>
-                                                  </div>
-                                                </div>                <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm">
-                  <div className="max-w-3xl mx-auto">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-gray-700">Capaian Realisasi</span>
-                      <span className="text-sm font-semibold text-indigo-700">{progressPercentage.toFixed(2)}%</span>
-                    </div>
-                    <div className="w-full bg-gray-100 rounded-full h-2.5"><div className="bg-gradient-to-r from-indigo-500 to-indigo-600 h-full rounded-full" style={{ width: `${progressPercentage}%` }}/></div>
-                    {/* Additional Totals Display */}
-                    {(budgetView === 'realisasi-outstanding' || budgetView === 'realisasi-komitmen') && (additionalTotals.outstanding > 0 || additionalTotals.komitmen > 0) && (
-                        <div className="mt-3 flex justify-center items-center gap-x-6 gap-y-2 flex-wrap">
-                            {(budgetView === 'realisasi-outstanding' || budgetView === 'realisasi-komitmen') && additionalTotals.outstanding > 0 && (
-                                <div className="text-sm text-gray-600">
-                                    <span className="font-semibold text-yellow-800">Outstanding:</span> {formatCurrency(additionalTotals.outstanding)}
-                                </div>
-                            )}
-                            {budgetView === 'realisasi-komitmen' && additionalTotals.komitmen > 0 && (
-                                <div className="text-sm text-gray-600">
-                                    <span className="font-semibold text-orange-800">Komitmen:</span> {formatCurrency(additionalTotals.komitmen)}
-                                </div>
-                            )}
-                        </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
+            <BudgetOverviewPanel
+              activeTotals={activeTotals}
+              progressPercentage={progressPercentage}
+              additionalTotals={additionalTotals}
+              budgetView={budgetView}
+              formatCurrency={formatCurrency}
+            />
 
-            {/* Level 7 Account Totals */}
-            {level7Totals.length > 0 && (
-              <div className="bg-white shadow-md rounded-lg overflow-hidden border border-gray-200">
-                <div className="p-4 bg-gray-50 border-b border-gray-200 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                  <div 
-                    className="flex items-center justify-between cursor-pointer hover:bg-gray-100 transition-colors duration-200 rounded-md px-2 py-1"
-                    onClick={() => setShowAccountSummary(!showAccountSummary)}
-                  >
-                    <h3 className="text-lg font-medium text-gray-800">Rekapitulasi per Akun</h3>
-                    <svg 
-                      className={`w-5 h-5 text-gray-500 transform transition-transform duration-200 ${showAccountSummary ? 'rotate-180' : ''}`} 
-                      fill="none" 
-                      viewBox="0 0 24 24" 
-                      stroke="currentColor"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Tampilkan Anggaran</span>
-                    <div className="relative">
-                      <select
-                        className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                        value={budgetView}
-                        onChange={(e) => setBudgetView(e.target.value)}
-                      >
-                        <option value="realisasi-laporan">Realisasi (Sesuai Laporan)</option>
-                        <option value="realisasi-outstanding">Realisasi + Outstanding</option>
-                        <option value="realisasi-komitmen">Realisasi + Outstanding + Komitmen</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-                {showAccountSummary && (
-                  <div className="p-6 space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {level7Totals.map((item, index) => (
-                        <div key={index} className="bg-white rounded-lg border border-gray-200 p-3 shadow-sm hover:shadow-md transition-shadow">
-                          <div className="space-y-2">
-                            <div className="flex justify-between items-start">
-                              <div className="flex-1 min-w-0">
-                                <h4 className="text-sm font-medium text-gray-900 break-words">{item.uraian}</h4>
-                                <p className="text-xs text-gray-500">{item.code}</p>
-                              </div>
-                              <span className="text-xs font-medium bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full ml-2">
-                                {item.paguRevisi > 0 ? `${((item.realisasi / item.paguRevisi) * 100).toFixed(2)}%` : '0.00%'}
-                              </span>
-                            </div>
-                            
-                            <div className="w-full bg-gray-100 rounded-full h-1.5">
-                              <div 
-                                className="h-full rounded-full transition-all duration-300 ease-out" 
-                                style={{ 
-                                  width: `${item.paguRevisi > 0 ? Math.min(100, Math.round((item.realisasi / item.paguRevisi) * 100)) : 0}%`,
-                                  backgroundColor: item.paguRevisi > 0 ? '#3b82f6' : '#e5e7eb' // Blue if has budget, gray if not
-                                }}
-                              ></div>
-                            </div>
-                            
-                                                          <div className="grid grid-cols-3 gap-1 text-xs">
-                                                            <div>
-                                                              <p className="text-gray-500">Pagu</p>
-                                                              <p className="font-medium">{item.paguRevisi?.toLocaleString('id-ID') || '0'}</p>
-                                                            </div>
-                                                            <div className="text-center">
-                                                              <p className="text-gray-500">Realisasi</p>
-                                                              <p className="font-medium">{item.realisasi?.toLocaleString('id-ID') || '0'}</p>
-                                                            </div>
-                                                            <div className="text-right">
-                                                              <p className="text-gray-500">Sisa</p>
-                                                              <p className="font-medium">{item.sisa?.toLocaleString('id-ID') || '0'}</p>
-                                                            </div>
-                                                          </div>
-                                                          
-                                                                                        {/* Conditional display for outstanding/komitmen per account */}
-                                                          
-                                                                                        {(budgetView !== 'realisasi-laporan') && (item.outstanding > 0 || item.komitmen > 0) && (
-                                                          
-                                                                                          <div className="mt-2 pt-2 border-t border-gray-100 flex justify-around text-xs text-center">
-                                                          
-                                                                                              {(budgetView === 'realisasi-outstanding' || budgetView === 'realisasi-komitmen') && item.outstanding > 0 && (
-                                                          
-                                                                                                  <div>
-                                                          
-                                                                                                      <p className="text-gray-500">Outstanding</p>
-                                                          
-                                                                                                      <p className="font-medium text-yellow-800">{formatCurrency(item.outstanding)}</p>
-                                                          
-                                                                                                  </div>
-                                                          
-                                                                                              )}
-                                                          
-                                                                                              {budgetView === 'realisasi-komitmen' && item.komitmen > 0 && (
-                                                          
-                                                                                                  <div>
-                                                          
-                                                                                                      <p className="text-gray-500">Komitmen</p>
-                                                          
-                                                                                                      <p className="font-medium text-orange-800">{formatCurrency(item.komitmen)}</p>
-                                                          
-                                                                                                  </div>
-                                                          
-                                                                                              )}
-                                                          
-                                                                                          </div>
-                                                          
-                                                                                        )}                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+            <AccountSummaryPanel
+              totals={level7Totals}
+              budgetView={budgetView}
+              onBudgetViewChange={setBudgetView}
+              show={showAccountSummary}
+              onToggle={() => setShowAccountSummary(prev => !prev)}
+              formatCurrency={formatCurrency}
+            />
 
             {/* Data Table with Search and Filter */}
             <div className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200 mb-6">

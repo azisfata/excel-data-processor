@@ -1,6 +1,14 @@
 
 import { supabase } from '../utils/supabase';
-import { ProcessingResult, Activity, ExcelData } from '../types';
+import {
+  ProcessingResult,
+  Activity,
+  ExcelData,
+  BudgetAllocation,
+  ProcessedResultRow,
+  SupabaseActivityRow,
+  SupabaseAllocationRow,
+} from '../types';
 import {
   normalizeCodeAndDescription,
   deriveAccountNameMap,
@@ -9,13 +17,7 @@ import {
 
 // --- Processed Results ---
 
-type RawProcessedResultRow = {
-  processed_data?: any[] | null;
-  totals?: number[] | null;
-  account_name_map?: Record<string, string> | null;
-};
-
-function buildProcessingResult(row: RawProcessedResultRow): ProcessingResult {
+function buildProcessingResult(row: ProcessedResultRow): ProcessingResult {
   const clonedData: ExcelData = cloneExcelData(row.processed_data);
   const normalizedData = normalizeCodeAndDescription(clonedData);
   const totals = Array.isArray(row.totals) ? row.totals : [];
@@ -57,7 +59,13 @@ export async function getAllProcessedResults(userId: string) {
     return [];
   }
 
-  return data.map(item => {
+  if (!data) {
+    return [];
+  }
+
+  const rows = data as ProcessedResultRow[];
+
+  return rows.map(item => {
     const now = new Date(item.created_at);
     const dateOptions: Intl.DateTimeFormatOptions = {
       weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
@@ -114,7 +122,7 @@ export async function getLatestProcessedResult(userId: string): Promise<{
     return null; // No results found, which is normal for a new user
   }
 
-  const latestResult = data[0];
+  const [latestResult] = data as ProcessedResultRow[];
 
   const processingResult = buildProcessingResult(latestResult);
 
@@ -148,14 +156,16 @@ export async function getProcessedResultById(id: string, userId: string): Promis
     return null;
   }
 
-  const processingResult = buildProcessingResult(data);
+  const record = data as ProcessedResultRow;
+
+  const processingResult = buildProcessingResult(record);
 
   return {
-    id: data.id,
+    id: record.id,
     result: processingResult,
-    lastUpdated: new Date(data.created_at).toLocaleString('id-ID'),
-    reportType: data.report_type || null,
-    reportDate: data.report_date || null
+    lastUpdated: new Date(record.created_at).toLocaleString('id-ID'),
+    reportType: record.report_type || null,
+    reportDate: record.report_date || null
   };
 }
 
@@ -241,24 +251,30 @@ export async function getActivities(userId: string): Promise<Activity[]> {
         return [];
     }
 
-    return data.map((activity: any) => ({
-        id: activity.id,
-        nama: activity.nama,
-        status: activity.status || 'draft',
-        tanggal_pelaksanaan: activity.tanggal_pelaksanaan || null,
-        tujuan_kegiatan: activity.tujuan_kegiatan || null,
-        kl_unit_terkait: activity.kl_unit_terkait || null,
-        penanggung_jawab: activity.penanggung_jawab || null,
-        capaian: activity.capaian || null,
-        pending_issue: activity.pending_issue || null,
-        rencana_tindak_lanjut: activity.rencana_tindak_lanjut || null,
-        attachments: [],
-        allocations: (activity.allocations || []).map((alloc: any) => ({
-            kode: alloc.kode,
-            uraian: alloc.uraian || '',
-            jumlah: alloc.jumlah,
-        })),
-    }));
+        const rows = data as SupabaseActivityRow[];
+
+    return rows.map(activity => {
+        const allocations = (activity.allocations ?? []) as SupabaseAllocationRow[];
+
+        return {
+            id: activity.id,
+            nama: activity.nama,
+            status: activity.status || 'draft',
+            tanggal_pelaksanaan: activity.tanggal_pelaksanaan || null,
+            tujuan_kegiatan: activity.tujuan_kegiatan || null,
+            kl_unit_terkait: activity.kl_unit_terkait || null,
+            penanggung_jawab: activity.penanggung_jawab || null,
+            capaian: activity.capaian || null,
+            pending_issue: activity.pending_issue || null,
+            rencana_tindak_lanjut: activity.rencana_tindak_lanjut || null,
+            attachments: [],
+            allocations: allocations.map((alloc): BudgetAllocation => ({
+                kode: alloc.kode,
+                uraian: alloc.uraian || '',
+                jumlah: alloc.jumlah,
+            })),
+        };
+    });
 }
 
 
@@ -470,4 +486,11 @@ export async function saveSetting(key: string, value: string, userId: string): P
         throw new Error('Gagal menyimpan pengaturan.');
     }
 }
+
+
+
+
+
+
+
 
