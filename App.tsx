@@ -132,7 +132,7 @@ const App: React.FC = () => {
   const [attachmentsToRemove, setAttachmentsToRemove] = useState<Set<string>>(new Set());
   const [selectedYear, setSelectedYear] = useState<number | 'all'>(() => new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<number | 'all' | 'no-date'>(() => new Date().getMonth());
-  const [showAllActivities, setShowAllActivities] = useState(false);
+  const [showAllActivities, setShowAllActivities] = useState(true);
   const [selectedStatus, setSelectedStatus] = useState<Set<string>>(new Set(['all']));
   const [activitySearchTerm, setActivitySearchTerm] = useState('');
   const [activitiesPerPage, setActivitiesPerPage] = useState<number | 'all'>(10);
@@ -1144,76 +1144,8 @@ const HistoryDropdown = () => (
     []
   );
 
-  const activitiesByMonth = useMemo(() => {
+  const filteredActivities = useMemo(() => {
     if (!activities.length) return [];
-
-    type GroupBucket = {
-      key: string;
-      label: string;
-      sortKey: number;
-      year: number | null;
-      month: number | null;
-      isNoDate: boolean;
-      activities: Activity[];
-    };
-
-    const groupMap = new Map<string, GroupBucket>();
-
-    activities.forEach(activity => {
-      const rawDate = activity.tanggal_pelaksanaan;
-      const parsedDate = rawDate ? new Date(rawDate) : null;
-      const hasValidDate = parsedDate instanceof Date && !Number.isNaN(parsedDate.getTime());
-      const label = hasValidDate ? formatMonthLabel(parsedDate) : 'Tanpa Tanggal';
-      const sortKey = hasValidDate
-        ? new Date(parsedDate.getFullYear(), parsedDate.getMonth(), 1).getTime()
-        : Number.NEGATIVE_INFINITY;
-      const key = hasValidDate
-        ? `${parsedDate.getFullYear()}-${parsedDate.getMonth()}`
-        : 'no-date';
-
-      if (!groupMap.has(key)) {
-        groupMap.set(key, {
-          key,
-          label,
-          sortKey,
-          year: hasValidDate ? parsedDate.getFullYear() : null,
-          month: hasValidDate ? parsedDate.getMonth() : null,
-          isNoDate: !hasValidDate,
-          activities: []
-        });
-      }
-
-      groupMap.get(key)!.activities.push(activity);
-    });
-
-    const grouped = Array.from(groupMap.values());
-
-    grouped.forEach(group => {
-      group.activities.sort((a, b) => {
-        const dateA = a.tanggal_pelaksanaan ? new Date(a.tanggal_pelaksanaan).getTime() : 0;
-        const dateB = b.tanggal_pelaksanaan ? new Date(b.tanggal_pelaksanaan).getTime() : 0;
-
-        if (dateA && dateB) {
-          return dateB - dateA;
-        }
-        if (dateA) return -1;
-        if (dateB) return 1;
-        return a.nama.localeCompare(b.nama);
-      });
-    });
-
-    grouped.sort((a, b) => {
-      if (a.sortKey === b.sortKey) {
-        return a.label.localeCompare(b.label);
-      }
-      return b.sortKey - a.sortKey;
-    });
-
-    return grouped;
-  }, [activities, formatMonthLabel]);
-
-  const filteredActivityGroups = useMemo(() => {
-    if (!activitiesByMonth.length) return [];
 
     const normalizedSearch = activitySearchTerm.trim().toLowerCase();
     const matchesSearch = (activity: Activity) =>
@@ -1225,58 +1157,55 @@ const HistoryDropdown = () => (
       const activityStatus = (activity.status || 'tanpa-status').toLowerCase();
       return selectedStatus.has(activityStatus);
     };
+    const matchesPeriod = (activity: Activity) => {
+      if (showAllActivities) return true;
 
-    const baseGroups = showAllActivities
-      ? activitiesByMonth
-      : activitiesByMonth.filter(group => {
-          if (selectedMonth === 'no-date') {
-            return group.isNoDate;
-          }
+      const rawDate = activity.tanggal_pelaksanaan;
+      const parsedDate = rawDate ? new Date(rawDate) : null;
+      const hasValidDate = parsedDate instanceof Date && !Number.isNaN(parsedDate.getTime());
 
-          if (group.isNoDate) {
-            return selectedMonth === 'all' && selectedYear === 'all';
-          }
+      if (selectedMonth === 'no-date') {
+        return !hasValidDate;
+      }
 
-          const matchesYear = selectedYear === 'all' || group.year === selectedYear;
-          const matchesMonth = selectedMonth === 'all' || group.month === selectedMonth;
+      if (!hasValidDate) {
+        return selectedMonth === 'all' && selectedYear === 'all';
+      }
 
-          return matchesYear && matchesMonth;
-        });
+      const activityMonth = parsedDate.getMonth();
+      const activityYear = parsedDate.getFullYear();
 
-    const filtered = baseGroups
-      .map(group => ({
-        ...group,
-        activities: group.activities.filter(activity => matchesSearch(activity) && matchesStatus(activity)),
-      }))
-      .filter(group => group.activities.length > 0);
+      const monthMatches = selectedMonth === 'all' || activityMonth === selectedMonth;
+      const yearMatches = selectedYear === 'all' || activityYear === selectedYear;
 
-    if (!filtered.length && normalizedSearch) {
-      const fallback = activitiesByMonth
-        .map(group => ({
-          ...group,
-          activities: group.activities.filter(activity => matchesSearch(activity) && matchesStatus(activity)),
-        }))
-        .filter(group => group.activities.length > 0);
+      return monthMatches && yearMatches;
+    };
 
-      return fallback;
-    }
+    const sortedActivities = [...activities].sort((a, b) => {
+      const dateA = a.tanggal_pelaksanaan ? new Date(a.tanggal_pelaksanaan).getTime() : 0;
+      const dateB = b.tanggal_pelaksanaan ? new Date(b.tanggal_pelaksanaan).getTime() : 0;
 
-    return filtered;
-  }, [activitiesByMonth, selectedMonth, selectedYear, showAllActivities, activitySearchTerm, selectedStatus]);
+      if (dateA && dateB) {
+        return dateB - dateA;
+      }
+      if (dateA) return -1;
+      if (dateB) return 1;
+      return a.nama.localeCompare(b.nama);
+    });
 
-  const flattenedActivities = useMemo(
-    () =>
-      filteredActivityGroups.flatMap(group =>
-        group.activities.map(activity => ({
-          groupKey: group.key,
-          groupLabel: group.label,
-          activity,
-        }))
-      ),
-    [filteredActivityGroups]
-  );
+    return sortedActivities.filter(
+      activity => matchesSearch(activity) && matchesStatus(activity) && matchesPeriod(activity)
+    );
+  }, [
+    activities,
+    activitySearchTerm,
+    selectedStatus,
+    showAllActivities,
+    selectedMonth,
+    selectedYear,
+  ]);
 
-  const totalActivities = flattenedActivities.length;
+  const totalActivities = filteredActivities.length;
   const totalPages =
     totalActivities === 0 || activitiesPerPage === 'all'
       ? 1
@@ -1293,30 +1222,28 @@ const HistoryDropdown = () => (
     setActivitiesPage(1);
   }, [selectedYear, selectedMonth, selectedStatus, activitySearchTerm, showAllActivities, activitiesPerPage]);
 
+  const paginatedActivities = useMemo(() => {
+    if (!filteredActivities.length) return [];
+    if (activitiesPerPage === 'all') {
+      return filteredActivities;
+    }
+    const startIndex = (activitiesPage - 1) * activitiesPerPage;
+    const endIndex = startIndex + activitiesPerPage;
+    return filteredActivities.slice(startIndex, endIndex);
+  }, [filteredActivities, activitiesPerPage, activitiesPage]);
+
   const paginatedActivityGroups = useMemo(() => {
-    if (!flattenedActivities.length) return [];
-    const slice =
-      activitiesPerPage === 'all'
-        ? flattenedActivities
-        : flattenedActivities.slice(
-            (activitiesPage - 1) * activitiesPerPage,
-            (activitiesPage - 1) * activitiesPerPage + activitiesPerPage
-          );
-    const map = new Map<string, { key: string; label: string; activities: Activity[] }>();
-
-    slice.forEach(item => {
-      if (!map.has(item.groupKey)) {
-        map.set(item.groupKey, {
-          key: item.groupKey,
-          label: item.groupLabel,
-          activities: [],
-        });
-      }
-      map.get(item.groupKey)!.activities.push(item.activity);
-    });
-
-    return Array.from(map.values());
-  }, [flattenedActivities, activitiesPage, activitiesPerPage]);
+    if (!paginatedActivities.length) {
+      return [];
+    }
+    return [
+      {
+        key: 'all',
+        label: '',
+        activities: paginatedActivities,
+      },
+    ];
+  }, [paginatedActivities]);
 
   const pageRangeStart =
     totalActivities === 0
@@ -1332,20 +1259,10 @@ const HistoryDropdown = () => (
         : Math.min(activitiesPage * activitiesPerPage, totalActivities);
   const totalActivitiesByGroup = useMemo(() => {
     const map = new Map<string, number>();
-    filteredActivityGroups.forEach(group => {
-      map.set(group.key, group.activities.length);
-    });
+    map.set('all', filteredActivities.length);
     return map;
-  }, [filteredActivityGroups]);
+  }, [filteredActivities.length, filteredActivities]);
 
-  const totalPaginatedAllocation = useMemo(() => {
-    return paginatedActivityGroups
-        .flatMap(group => group.activities)
-        .reduce((total, activity) => {
-            const activityTotal = activity.allocations.reduce((allocSum, alloc) => allocSum + (alloc.jumlah || 0), 0);
-            return total + activityTotal;
-        }, 0);
-  }, [paginatedActivityGroups]);
 
   const handleAddActivity = async () => {
     setError(''); // Clear previous errors
@@ -2217,12 +2134,14 @@ const HistoryDropdown = () => (
                                 <div className="space-y-8">
                                     {paginatedActivityGroups.map(group => (
                                         <div key={group.key} className="space-y-3">
-                                            <div className="flex items-center justify-between">
-                                                <h3 className="text-lg font-semibold text-gray-800">{group.label}</h3>
-                                                <span className="text-xs text-gray-500">
-                                                    {totalActivitiesByGroup.get(group.key) ?? group.activities.length} kegiatan
-                                                </span>
-                                            </div>
+                                            {group.label ? (
+                                                <div className="flex items-center justify-between">
+                                                    <h3 className="text-lg font-semibold text-gray-800">{group.label}</h3>
+                                                    <span className="text-xs text-gray-500">
+                                                        {totalActivitiesByGroup.get(group.key) ?? group.activities.length} kegiatan
+                                                    </span>
+                                                </div>
+                                            ) : null}
                                             <div className="border border-gray-200 rounded-lg shadow-sm overflow-hidden">
                                                 <div className="overflow-x-auto">
                                                     <table className="min-w-full md:min-w-[760px] table-fixed divide-y divide-gray-200">
@@ -2315,7 +2234,7 @@ const HistoryDropdown = () => (
                                                         </tbody>
                                                         <tfoot className="bg-gray-50 font-medium">
                                                             <tr>
-                                                                <td className="px-4 py-3 text-right" colSpan={2}>Total {group.label}</td>
+                                                                <td className="px-4 py-3 text-right" colSpan={2}>Total Alokasi Halaman Ini</td>
                                                                 <td className="px-4 py-3 text-right">
                                                                     {formatCurrency(group.activities.reduce((sum, activity) => 
                                                                         sum + activity.allocations.reduce((allocSum, alloc) => allocSum + (alloc.jumlah || 0), 0),
