@@ -11,6 +11,14 @@ export const getLastSegmentFromCode = (code: string): string => {
   return segments.length ? segments[segments.length - 1] : '';
 };
 
+export const getSegmentAtLevel = (code: string, levelIndex: number): string => {
+  if (!code) return '';
+  const segments = code.split('.').map(segment => segment.trim()).filter(Boolean);
+  return segments[levelIndex] ?? '';
+};
+
+export const getLevel7Segment = (code: string): string => getSegmentAtLevel(code, 6);
+
 export const isSixDigitSegment = (segment: string): boolean => SIX_DIGIT_CODE_REGEX.test(segment);
 
 export function normalizeCodeAndDescription(data: ExcelData): ExcelData {

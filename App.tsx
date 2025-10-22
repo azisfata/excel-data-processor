@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { ProcessingResult, Activity, ActivityAttachment, BudgetAllocation } from './types';
 import { processExcelData, downloadExcelFile, parseExcelFile } from './services/excelProcessor';
 import { createHierarchy, flattenTree } from './utils/hierarchy';
+import { getLevel7Segment, isSixDigitSegment } from './utils/dataNormalization';
 import * as supabaseService from './services/supabaseService';
 import { useAuth } from './src/contexts/AuthContext';
 import * as attachmentService from './services/activityAttachmentService';
@@ -1561,14 +1562,13 @@ const HistoryDropdown = () => (
         if (status !== 'outstanding' && status !== 'komitmen') return;
 
         activity.allocations.forEach(alloc => {
-            const codeParts = alloc.kode.split('.');
-            if (codeParts.length >= 7) {
-                const level7Code = codeParts[6];
-                if (status === 'outstanding') {
-                    outstandingMap.set(level7Code, (outstandingMap.get(level7Code) || 0) + alloc.jumlah);
-                } else if (status === 'komitmen') {
-                    komitmenMap.set(level7Code, (komitmenMap.get(level7Code) || 0) + alloc.jumlah);
-                }
+            const level7Code = getLevel7Segment(alloc.kode);
+            if (!level7Code || !isSixDigitSegment(level7Code)) return;
+
+            if (status === 'outstanding') {
+                outstandingMap.set(level7Code, (outstandingMap.get(level7Code) || 0) + alloc.jumlah);
+            } else if (status === 'komitmen') {
+                komitmenMap.set(level7Code, (komitmenMap.get(level7Code) || 0) + alloc.jumlah);
             }
         });
     });
@@ -1576,27 +1576,26 @@ const HistoryDropdown = () => (
     const totalsMap = new Map();
     result.finalData.forEach(row => {
         const kode = row[0];
-        if (typeof kode === 'string') {
-            const parts = kode.split('.');
-            if (parts.length === 7) {
-                const accountCode = parts[6];
-                const paguRevisi = Number(row[2]) || 0;
-                const realisasiLaporan = Number(row[6]) || 0;
+        if (typeof kode !== 'string') return;
 
-                if (totalsMap.has(accountCode)) {
-                    const current = totalsMap.get(accountCode);
-                    current.paguRevisi += paguRevisi;
-                    current.realisasiLaporan += realisasiLaporan;
-                } else {
-                    const accountName = result.accountNameMap?.get(accountCode) || row[1] || `Akun ${accountCode}`;
-                    totalsMap.set(accountCode, {
-                        code: accountCode,
-                        uraian: accountName,
-                        paguRevisi,
-                        realisasiLaporan,
-                    });
-                }
-            }
+        const accountCode = getLevel7Segment(kode);
+        if (!accountCode || !isSixDigitSegment(accountCode)) return;
+
+        const paguRevisi = Number(row[2]) || 0;
+        const realisasiLaporan = Number(row[6]) || 0;
+
+        if (totalsMap.has(accountCode)) {
+            const current = totalsMap.get(accountCode);
+            current.paguRevisi += paguRevisi;
+            current.realisasiLaporan += realisasiLaporan;
+        } else {
+            const accountName = result.accountNameMap?.get(accountCode) || row[1] || `Akun ${accountCode}`;
+            totalsMap.set(accountCode, {
+                code: accountCode,
+                uraian: accountName,
+                paguRevisi,
+                realisasiLaporan,
+            });
         }
     });
 
