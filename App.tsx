@@ -1923,7 +1923,12 @@ const HistoryDropdown = () => (
                       const indent = Math.max(level, 0) * 12;
                       const rawCode = String(row[0] ?? '');
                       const codeSegments = rawCode.split('.');
-                      const displayCode = level > 0 && codeSegments.length > 0 ? (codeSegments.pop() || rawCode) : rawCode;
+                      const showFullCode = Boolean(searchTerm.trim());
+                      const displayCode = showFullCode
+                        ? rawCode
+                        : level > 0 && codeSegments.length > 0
+                          ? (codeSegments.pop() || rawCode)
+                          : rawCode;
                       return (
                         <tr key={`${row.__path}-${rowIndex}`} className={`transition-colors ${isGroup ? 'bg-gray-100 font-medium' : 'odd:bg-white even:bg-slate-50'} hover:bg-blue-50`}>
                           <td className="px-6 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
