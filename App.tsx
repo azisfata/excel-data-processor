@@ -1696,16 +1696,6 @@ const HistoryDropdown = () => (
                     Kelola User
                   </button>
                 )}
-                <button
-                  onClick={scrollToAiPanel}
-                  className="relative p-2 rounded-full border border-blue-200 text-blue-600 hover:bg-blue-50 transition"
-                  title="Buka AI Chat"
-                  aria-label="Buka AI Chat"
-                >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                  </svg>
-                </button>
                 <div className="flex items-center gap-3 border-l pl-4">
                   <div className="text-right">
                     <p className="text-sm font-medium text-gray-800">{user?.name}</p>
@@ -2270,7 +2260,20 @@ const HistoryDropdown = () => (
                         <tr key={`${row.__path}-${rowIndex}`} className={`transition-colors ${isGroup ? 'bg-gray-100 font-medium' : 'odd:bg-white even:bg-slate-50'} hover:bg-blue-50`}>
                           <td className="px-6 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
                             <div className="flex items-center">
-                              {showExpandCollapse && <button onClick={() => toggleNode(row.__path, row.__isDataGroup)} className="mr-2 w-4">{row.__isExpanded ? '▼' : '▶'}</button>}
+                              {showExpandCollapse && (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleNode(row.__path, row.__isDataGroup)}
+                                  className={`mr-2 w-6 h-6 flex items-center justify-center rounded-full border text-xs font-semibold transition-colors ${
+                                    row.__isExpanded
+                                      ? 'bg-blue-100 border-blue-300 text-blue-700'
+                                      : 'bg-gray-100 border-gray-300 text-gray-600'
+                                  }`}
+                                  aria-label={row.__isExpanded ? 'Collapse kode akun' : 'Expand kode akun'}
+                                >
+                                  {row.__isExpanded ? '-' : '+'}
+                                </button>
+                              )}
                               {!showExpandCollapse && <div className="w-6"></div>}
                               <span>{row[0]}</span>
                             </div>
