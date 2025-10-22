@@ -7,7 +7,7 @@ import * as supabaseService from './services/supabaseService';
 import { useAuth } from './src/contexts/AuthContext';
 import * as attachmentService from './services/activityAttachmentService';
 import { supabase } from './utils/supabase';
-import { fetchAiResponse, type AiChatMessage as AiRequestMessage } from './services/aiService';
+import { fetchAiResponse, getLastSuccessfulModel, type AiChatMessage as AiRequestMessage } from './services/aiService';
 import FloatingAIButton from './src/components/FloatingAIButton';
 import { useHierarchyTable } from './src/hooks/useHierarchyTable';
 import { useProcessedMetrics } from './src/hooks/useProcessedMetrics';
@@ -36,6 +36,14 @@ type AiMessage = {
   sender: 'user' | 'assistant';
   content: string;
   timestamp: string;
+};
+
+type AiAutofillStepStatus = 'processing' | 'success' | 'error';
+
+type AiAutofillStep = {
+  label: string;
+  status: AiAutofillStepStatus;
+  detail?: string;
 };
 
 const INITIAL_AI_MESSAGE_ID = 'assistant-initial';
@@ -168,6 +176,9 @@ const App: React.FC = () => {
   const [aiInput, setAiInput] = useState('');
   const [isAiProcessing, setIsAiProcessing] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [isAiAutofilling, setIsAiAutofilling] = useState(false);
+  const [aiAutofillError, setAiAutofillError] = useState<string | null>(null);
+  const [aiAutofillSuccess, setAiAutofillSuccess] = useState<string | null>(null);
 
   const {
     activeData,
@@ -1380,6 +1391,9 @@ const HistoryDropdown = () => (
     setActivityAttachments([]);
     setNewAttachmentFiles([]);
     setAttachmentsToRemove(new Set());
+    setAiAutofillError(null);
+    setAiAutofillSuccess(null);
+    setIsAiAutofilling(false);
     setIsEditing(false);
     setEditingActivityId(null);
     setShowActivityForm(false);
@@ -1454,16 +1468,136 @@ const HistoryDropdown = () => (
       });
   };
 
-  // --- Search Logic ---
-  useEffect(() => {
-    if (!searchTerm.trim()) {
-      setDisplayedData(hierarchicalData);
+  const extractTextFromPdf = useCallback(async (file: File): Promise<string> => {
+    const [pdfjsLib, pdfWorker] = await Promise.all([
+      import('pdfjs-dist/build/pdf'),
+      import('pdfjs-dist/build/pdf.worker?url'),
+    ]);
+    (pdfjsLib as any).GlobalWorkerOptions.workerSrc = (pdfWorker as any).default;
+
+    const data = await file.arrayBuffer();
+    const pdf = await (pdfjsLib as any).getDocument({ data }).promise;
+
+    let combinedText = '';
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+      const page = await pdf.getPage(pageNumber);
+      const content = await page.getTextContent();
+      const pageText = content.items
+        .map((item: any) => (typeof item.str === 'string' ? item.str : ''))
+        .join(' ');
+      combinedText += `\n\nHalaman ${pageNumber}:\n${pageText}`;
+    }
+
+    return combinedText.replace(/\s+/g, ' ').trim();
+  }, []);
+
+  const handleAutoFillFromPdf = useCallback(async () => {
+    setAiAutofillError(null);
+    setAiAutofillSuccess(null);
+
+    const pdfFile =
+      newAttachmentFiles.find(file => file.type === 'application/pdf') ??
+      newAttachmentFiles.find(file => file.name.toLowerCase().endsWith('.pdf'));
+
+    if (!pdfFile) {
+      setAiAutofillError('Unggah minimal satu dokumen PDF terlebih dahulu untuk digunakan oleh AI.');
       return;
     }
-    if (maxDepth < 8) setMaxDepth(8);
+
+    setIsAiAutofilling(true);
+    try {
+      const extractedText = await extractTextFromPdf(pdfFile);
+      if (!extractedText) {
+        throw new Error('Tidak dapat membaca isi PDF. Pastikan dokumen tidak terkunci atau kosong.');
+      }
+
+      const truncated = extractedText.slice(0, 12000);
+      const systemMessage =
+        'Anda adalah asisten yang mengekstrak informasi kegiatan dari dokumen resmi. ' +
+        'Jawab hanya dengan JSON valid tanpa teks tambahan.';
+
+      const userMessage = [
+        'Berdasarkan dokumen berikut, isi field kegiatan yang tersedia. Gunakan format tanggal YYYY-MM-DD.',
+        'Jika informasi tidak ditemukan, biarkan field kosong atau null.',
+        'Gunakan struktur JSON berikut:',
+        '{',
+        '  "nama": string | null,',
+        '  "status": string | null,',
+        '  "tanggal": string | null,',
+        '  "tujuan": string | null,',
+        '  "unitTerkait": string | null,',
+        '  "penanggungJawab": string | null,',
+        '  "capaian": string | null,',
+        '  "pendingIssue": string | null,',
+        '  "rencanaTindakLanjut": string | null,',
+        '  "allocations": [',
+        '    { "kode": string, "uraian": string | null, "jumlah": number | null }',
+        '  ]',
+        '}',
+        '',
+        'Dokumen:',
+        truncated,
+      ].join('\n');
+
+      const aiResponse = await fetchAiResponse([
+        { role: 'system', content: systemMessage },
+        { role: 'user', content: userMessage },
+      ]);
+      const modelUsed = getLastSuccessfulModel() ?? 'tidak diketahui';
+      console.log('AI autofill menggunakan model:', modelUsed);
+
+      const cleaned = aiResponse.replace(/```json|```/g, '').trim();
+      const parsed = JSON.parse(cleaned);
+
+      setNewActivity(prev => ({
+        ...prev,
+        nama: parsed.nama ?? prev.nama,
+        status: parsed.status ?? prev.status ?? 'Rencana',
+        tanggal_pelaksanaan: parsed.tanggal ?? prev.tanggal_pelaksanaan,
+        tujuan_kegiatan: parsed.tujuan ?? prev.tujuan_kegiatan,
+        kl_unit_terkait: parsed.unitTerkait ?? prev.kl_unit_terkait,
+        penanggung_jawab: parsed.penanggungJawab ?? prev.penanggung_jawab,
+        capaian: parsed.capaian ?? prev.capaian,
+        pending_issue: parsed.pendingIssue ?? prev.pending_issue,
+        rencana_tindak_lanjut: parsed.rencanaTindakLanjut ?? prev.rencana_tindak_lanjut,
+      }));
+
+      if (Array.isArray(parsed.allocations)) {
+        const normalizedAllocations = parsed.allocations
+          .map((item: any) => ({
+            kode: typeof item.kode === 'string' ? item.kode.trim() : '',
+            uraian: typeof item.uraian === 'string' ? item.uraian.trim() : '',
+            jumlah: Number(item.jumlah) || 0,
+          }))
+          .filter(item => item.kode);
+
+        if (normalizedAllocations.length > 0) {
+          setNewActivity(prev => ({
+            ...prev,
+            allocations:
+              prev.allocations && prev.allocations.length > 0
+                ? prev.allocations
+                : normalizedAllocations,
+          }));
+        }
+      }
+
+      setAiAutofillSuccess('Field berhasil diisi dari dokumen PDF. Mohon tinjau kembali sebelum menyimpan.');
+    } catch (error) {
+      console.error('AI autofill error:', error);
+      const message = error instanceof Error ? error.message : 'Gagal mengisi form dengan AI.';
+      setAiAutofillError(message);
+    } finally {
+      setIsAiAutofilling(false);
+    }
+  }, [extractTextFromPdf, newAttachmentFiles]);
+
+  // --- Search Logic ---
+  const searchMatches = useMemo(() => {
+    if (!searchTerm.trim()) return [];
 
     const orGroups = searchTerm.split(/\s+OR\s+/i).map(g => g.trim()).filter(Boolean);
-    const filtered = hierarchicalData.filter(item => {
+    return hierarchicalData.filter(item => {
       const kode = String(item[0] || '').toLowerCase();
       const uraian = String(item[1] || '').toLowerCase();
       return orGroups.some(group => {
@@ -1471,8 +1605,73 @@ const HistoryDropdown = () => (
         return andTerms.every(term => kode.includes(term) || uraian.includes(term));
       });
     });
-    setDisplayedData(filtered);
-  }, [searchTerm, hierarchicalData, maxDepth]);
+  }, [searchTerm, hierarchicalData]);
+
+  useEffect(() => {
+    if (!searchTerm.trim()) {
+      setDisplayedData(hierarchicalData);
+      return;
+    }
+    if (!searchMatches.length) {
+      setDisplayedData([]);
+      return;
+    }
+    if (maxDepth < 8) setMaxDepth(8);
+
+    const pathToRow = new Map<string, any>();
+    hierarchicalData.forEach(row => {
+      if (row?.__path) {
+        pathToRow.set(String(row.__path), row);
+      }
+    });
+
+    const pathsToInclude = new Set<string>();
+    const addPathWithAncestors = (path: string) => {
+      let currentPath = path;
+      const visited = new Set<string>();
+      while (currentPath && !visited.has(currentPath)) {
+        visited.add(currentPath);
+        if (pathToRow.has(currentPath)) {
+          pathsToInclude.add(currentPath);
+        }
+        if (currentPath.includes('-')) {
+          const trimmed = currentPath.split('-')[0];
+          if (trimmed !== currentPath) {
+            currentPath = trimmed;
+            continue;
+          }
+        }
+        const lastDot = currentPath.lastIndexOf('.');
+        currentPath = lastDot === -1 ? '' : currentPath.slice(0, lastDot);
+      }
+    };
+
+    searchMatches.forEach(row => {
+      const path = String(row.__path || '');
+      if (path) {
+        addPathWithAncestors(path);
+      }
+    });
+
+    const merged = hierarchicalData.filter(row => pathsToInclude.has(String(row.__path)));
+    setDisplayedData(merged);
+  }, [searchTerm, searchMatches, hierarchicalData, maxDepth]);
+
+  const searchTotals = useMemo(() => {
+    if (!searchTerm.trim() || !searchMatches.length) return null;
+
+    const dataRows = searchMatches.filter(row => !row.__hasChildren && !row.__isDataGroup);
+    const totalPagu = dataRows.reduce((sum, row) => sum + (Number(row[2]) || 0), 0);
+    const totalRealisasi = dataRows.reduce((sum, row) => sum + (Number(row[6]) || 0), 0);
+    const persentase = totalPagu > 0 ? (totalRealisasi / totalPagu) * 100 : 0;
+
+    return {
+      totalPagu,
+      totalRealisasi,
+      persentase,
+      sisa: totalPagu - totalRealisasi,
+    };
+  }, [searchTerm, searchMatches]);
 
   // --- Render Logic ---
   if (isInitializing) {
@@ -2473,6 +2672,122 @@ const HistoryDropdown = () => (
               </div>
               <div className="p-6 overflow-y-auto flex-1">
                 <div className="space-y-6 bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+                  {/* Lampiran */}
+                  <div className="space-y-3">
+                    <label className="block text-sm font-medium text-gray-700">Lampiran Kegiatan</label>
+
+                    {activityAttachments.length > 0 && (
+                      <div className="space-y-2">
+                        {activityAttachments.map(attachment => {
+                          const isMarked = attachmentsToRemove.has(attachment.attachmentId);
+                          const inlinePreview = isInlinePreview(attachment.fileName);
+                          const href = inlinePreview ? attachment.filePath : getAttachmentDownloadUrl(attachment);
+                          return (
+                            <div
+                              key={attachment.attachmentId}
+                              className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 border rounded-md text-sm ${isMarked ? 'border-red-300 bg-red-50' : 'border-gray-200 bg-gray-50'}`}
+                            >
+                              <div className="space-y-1">
+                                <p className={`break-all ${isMarked ? 'line-through text-red-600' : 'text-gray-700'}`}>
+                                  {attachment.fileName}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  Diunggah {new Date(attachment.uploadedAt).toLocaleString('id-ID')}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <a
+                                  href={href}
+                                  className="inline-flex items-center px-3 py-1.5 border border-blue-500 text-blue-600 rounded-md hover:bg-blue-100 transition"
+                                  {...(inlinePreview
+                                    ? { target: '_blank', rel: 'noopener noreferrer' }
+                                    : { download: attachment.fileName })}
+                                >
+                                  {inlinePreview ? 'Buka' : 'Unduh'}
+                                </a>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleAttachmentRemoval(attachment.attachmentId)}
+                                  className={`text-xs font-medium ${isMarked ? 'text-gray-600 hover:text-gray-700' : 'text-red-600 hover:text-red-700'}`}
+                                >
+                                  {isMarked ? 'Batalkan' : 'Hapus'}
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {attachmentsToRemove.size > 0 && (
+                      <p className="text-xs text-yellow-600">
+                        Lampiran bertanda akan dihapus setelah Anda menyimpan perubahan.
+                      </p>
+                    )}
+
+                    {newAttachmentFiles.length > 0 && (
+                      <div className="space-y-2 text-xs text-gray-600">
+                        <p className="font-medium text-gray-700">Lampiran baru:</p>
+                        {newAttachmentFiles.map((file, index) => (
+                          <div
+                            key={`${file.name}-${file.lastModified}`}
+                            className="flex items-center justify-between gap-3 border border-dashed border-blue-200 rounded-md px-3 py-2 bg-blue-50/60"
+                          >
+                            <span className="break-all">{file.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveNewAttachment(index)}
+                              className="text-red-500 hover:text-red-600"
+                            >
+                              Hapus
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div>
+                      <input
+                        id="activity-attachment"
+                        type="file"
+                        multiple
+                        className="block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                        onChange={(e) => {
+                          handleAttachmentSelection(e.target.files);
+                          if (e.target) {
+                            e.target.value = '';
+                          }
+                        }}
+                      />
+                      <p className="mt-1 text-xs text-gray-500">
+                        Anda dapat memilih beberapa file sekaligus. Format yang didukung: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG.
+                      </p>
+                      <div className="mt-3 flex flex-col sm:flex-row sm:items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={handleAutoFillFromPdf}
+                          disabled={isAiAutofilling}
+                          className={`inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-md border ${
+                            isAiAutofilling
+                              ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                              : 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700'
+                          }`}
+                        >
+                          {isAiAutofilling ? 'Memproses dengan AI…' : 'Isi Form Otomatis dengan AI'}
+                        </button>
+                        <p className="text-xs text-gray-500 max-w-md">
+                          Unggah dokumen PDF kegiatan sebagai lampiran, lalu gunakan tombol ini agar AI menyalin data ke form.
+                        </p>
+                      </div>
+                      {aiAutofillError && (
+                        <p className="mt-2 text-xs text-red-600">{aiAutofillError}</p>
+                      )}
+                      {aiAutofillSuccess && (
+                        <p className="mt-2 text-xs text-green-600">{aiAutofillSuccess}</p>
+                      )}
+                    </div>
+                  </div>
+
                   {/* Nama Kegiatan */}
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
@@ -2544,96 +2859,6 @@ const HistoryDropdown = () => (
                       </div>
                     </div>
                     <p id="status-description" className="mt-1 text-xs text-gray-500">Pilih status terkini dari kegiatan ini</p>
-                  </div>
-
-                  {/* Lampiran */}
-                  <div className="space-y-3">
-                    <label className="block text-sm font-medium text-gray-700">Lampiran Kegiatan</label>
-
-                    {activityAttachments.length > 0 && (
-                      <div className="space-y-2">
-                    {activityAttachments.map(attachment => {
-                      const isMarked = attachmentsToRemove.has(attachment.attachmentId);
-                      const inlinePreview = isInlinePreview(attachment.fileName);
-                      const href = inlinePreview ? attachment.filePath : getAttachmentDownloadUrl(attachment);
-                      return (
-                        <div
-                          key={attachment.attachmentId}
-                          className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 border rounded-md text-sm ${isMarked ? 'border-red-300 bg-red-50' : 'border-gray-200 bg-gray-50'}`}
-                        >
-                          <div className="space-y-1">
-                            <p className={`break-all ${isMarked ? 'line-through text-red-600' : 'text-gray-700'}`}>
-                              {attachment.fileName}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              Diunggah {new Date(attachment.uploadedAt).toLocaleString('id-ID')}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <a
-                              href={href}
-                              className="inline-flex items-center px-3 py-1.5 border border-blue-500 text-blue-600 rounded-md hover:bg-blue-100 transition"
-                              {...(inlinePreview
-                                ? { target: '_blank', rel: 'noopener noreferrer' }
-                                : { download: attachment.fileName })}
-                            >
-                              {inlinePreview ? 'Buka' : 'Unduh'}
-                            </a>
-                            <button
-                              type="button"
-                              onClick={() => toggleAttachmentRemoval(attachment.attachmentId)}
-                              className={`text-xs font-medium ${isMarked ? 'text-gray-600 hover:text-gray-700' : 'text-red-600 hover:text-red-700'}`}
-                            >
-                              {isMarked ? 'Batalkan' : 'Hapus'}
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                      </div>
-                    )}
-
-                    {attachmentsToRemove.size > 0 && (
-                      <p className="text-xs text-yellow-600">
-                        Lampiran bertanda akan dihapus setelah Anda menyimpan perubahan.
-                      </p>
-                    )}
-
-                    {newAttachmentFiles.length > 0 && (
-                      <div className="space-y-2 text-xs text-gray-600">
-                        <p className="font-medium text-gray-700">Lampiran baru:</p>
-                        {newAttachmentFiles.map((file, index) => (
-                          <div key={`${file.name}-${file.lastModified}`} className="flex items-center justify-between gap-3 border border-dashed border-blue-200 rounded-md px-3 py-2 bg-blue-50/60">
-                            <span className="break-all">{file.name}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveNewAttachment(index)}
-                              className="text-red-500 hover:text-red-600"
-                            >
-                              Hapus
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    <div>
-                      <input
-                        id="activity-attachment"
-                        type="file"
-                        multiple
-                        className="block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                        onChange={(e) => {
-                          handleAttachmentSelection(e.target.files);
-                          if (e.target) {
-                            e.target.value = '';
-                          }
-                        }}
-                      />
-                      <p className="mt-1 text-xs text-gray-500">
-                        Anda dapat memilih beberapa file sekaligus. Format yang didukung: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG.
-                      </p>
-                    </div>
                   </div>
 
                   {/* Alokasi Anggaran */}
