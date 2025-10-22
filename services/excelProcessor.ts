@@ -1,7 +1,19 @@
 
-import { ExcelData, ExcelRow, ProcessingResult } from '../types';
+import { ExcelData, ProcessingResult } from '../types';
+import {
+    normalizeCodeAndDescription,
+    deriveAccountNameMap,
+    getLastSegmentFromCode,
+    isSixDigitSegment,
+} from '../utils/dataNormalization';
 
 declare var XLSX: any;
+
+interface DownloadOptions {
+    periodeLaluLabel?: string;
+    periodeIniLabel?: string;
+    sdPeriodeLabel?: string;
+}
 
 /**
  * Helper function to check for empty cells, mimicking pandas' isna() for practical purposes.
@@ -60,37 +72,20 @@ export function processExcelData(data: ExcelData): ProcessingResult {
         });
     });
 
+    const normalizedData = normalizeCodeAndDescription(dataWithColsRemoved2);
+
     // Log dataWithColsRemoved2
     console.log('=== DATA DENGAN KOLOM YANG TELAH DIHAPUS ===');
-    console.log('Jumlah baris:', dataWithColsRemoved2.length);
-    if (dataWithColsRemoved2.length > 0) {
-        console.log('Jumlah kolom per baris:', dataWithColsRemoved2[0].length);
-        console.log('Contoh data (5 baris pertama):', JSON.stringify(dataWithColsRemoved2.slice(0, 5), null, 2));
+    console.log('Jumlah baris:', normalizedData.length);
+    if (normalizedData.length > 0) {
+        console.log('Jumlah kolom per baris:', normalizedData[0].length);
+        console.log('Contoh data (5 baris pertama):', JSON.stringify(normalizedData.slice(0, 5), null, 2));
     }
 
     // Step 4: Filter and calculate totals on the final data structure
-    const { finalData, totals } = filterDanHitungTotal(dataWithColsRemoved2);
+    const { finalData, totals } = filterDanHitungTotal(normalizedData);
 
-    // Create a map of account codes to their names from dataWithColsRemoved2
-    const accountNameMap = new Map();
-    dataWithColsRemoved2.forEach(row => {
-        if (row.length > 1 && typeof row[0] === 'string' && row[0].trim() !== '') {
-            const fullCode = row[0].trim();
-            const accountName = (row[1] || '').trim();
-            
-            // Only process if we have both code and name
-            if (fullCode && accountName) {
-                // For codes with dots, only take the part after the last dot
-                const codeParts = fullCode.split('.');
-                const shortCode = codeParts[codeParts.length - 1];
-                
-                // Only add if this short code is not already in the map
-                if (!accountNameMap.has(shortCode)) {
-                    accountNameMap.set(shortCode, accountName);
-                }
-            }
-        }
-    });
+    const accountNameMap = deriveAccountNameMap(normalizedData);
 
     return { 
         finalData, // Data with columns removed, ready for download
@@ -253,11 +248,10 @@ function prosesDanStrukturData(data: ExcelData): ExcelData {
  * Filters data and calculates totals for specific columns.
  */
 function filterDanHitungTotal(data: ExcelData): { finalData: ExcelData; totals: number[] } {
-    // Filter rows where the second column starts with 6 digits
     const filteredData = data.filter(row => {
-        const cellValue = row[1];
-        const cellStr = cellValue?.toString() || '';
-        return /^\d{6}/.test(cellStr);
+        const kodeStr = typeof row[0] === 'string' ? row[0].trim() : '';
+        const lastSegment = getLastSegmentFromCode(kodeStr);
+        return isSixDigitSegment(lastSegment);
     });
 
     const totals: number[] = [];
@@ -297,16 +291,26 @@ function filterDanHitungTotal(data: ExcelData): { finalData: ExcelData; totals: 
  * @param data The data to write to the file.
  * @param fileName The desired name for the downloaded file.
  */
-export function downloadExcelFile(data: ExcelData, fileName: string): void {
+export function downloadExcelFile(
+    data: ExcelData,
+    fileName: string,
+    options: DownloadOptions = {}
+): void {
+    const {
+        periodeLaluLabel = 'Periode Lalu',
+        periodeIniLabel = 'Periode Ini',
+        sdPeriodeLabel = 's.d. Periode',
+    } = options;
+
     // Define headers
     const headers = [
         'Kode',
         'Uraian',
         'Pagu Revisi',
         'Lock Pagu',
-        'Periode Lalu',
-        'Periode Ini',
-        's.d. Periode'
+        periodeLaluLabel,
+        periodeIniLabel,
+        sdPeriodeLabel
     ];
 
     // Add headers to the data if not already present
@@ -335,9 +339,9 @@ export function downloadExcelFile(data: ExcelData, fileName: string): void {
         { wch: 50 }, // Uraian
         { wch: 15 }, // Pagu Revisi
         { wch: 15 }, // Lock Pagu
-        { wch: 15 }, // Periode Lalu
-        { wch: 15 }, // Periode Ini
-        { wch: 15 }  // s.d. Periode
+        { wch: 15 }, // Realisasi periode lalu (dinamis)
+        { wch: 15 }, // Realisasi periode berjalan (dinamis)
+        { wch: 15 }  // Realisasi kumulatif (dinamis)
     ];
     
     const workbook = XLSX.utils.book_new();

@@ -270,6 +270,41 @@ const App: React.FC = () => {
         : new Date().getFullYear();
   }, [latestReportMeta.reportDate]);
 
+  const reportMonthName = useMemo(() => {
+    if (!latestReportMeta.reportDate) return null;
+    const date = new Date(latestReportMeta.reportDate);
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toLocaleDateString('id-ID', { month: 'long' });
+  }, [latestReportMeta.reportDate]);
+
+  const previousReportMonthName = useMemo(() => {
+    if (!latestReportMeta.reportDate) return null;
+    const date = new Date(latestReportMeta.reportDate);
+    if (Number.isNaN(date.getTime())) return null;
+    if (date.getMonth() === 0) return null;
+    const prevDate = new Date(date);
+    prevDate.setMonth(prevDate.getMonth() - 1);
+    return prevDate.toLocaleDateString('id-ID', { month: 'long' });
+  }, [latestReportMeta.reportDate]);
+
+  const isReportJanuary = useMemo(() => reportMonthName?.toLowerCase() === 'januari', [reportMonthName]);
+
+  const periodeLaluLabel = useMemo(() => {
+    if (!reportMonthName || isReportJanuary || !previousReportMonthName) return 'Periode Lalu';
+    return `Realisasi Januari s.d. ${previousReportMonthName}`;
+  }, [reportMonthName, isReportJanuary, previousReportMonthName]);
+
+  const periodeIniLabel = useMemo(() => {
+    if (!reportMonthName) return 'Periode Ini';
+    return `Realisasi Bulan ${reportMonthName}`;
+  }, [reportMonthName]);
+
+  const sdPeriodeLabel = useMemo(() => {
+    if (!reportMonthName) return 's.d. Periode';
+    if (isReportJanuary) return 'Realisasi Januari';
+    return `Realisasi Januari s.d. ${reportMonthName}`;
+  }, [reportMonthName, isReportJanuary]);
+
   const comprehensiveAllocationMap = useMemo(() => {
     const allocationMap = new Map<string, number>();
     activities
@@ -367,9 +402,9 @@ const App: React.FC = () => {
     const columnSummary = [
       { label: 'Pagu Revisi', value: activeTotals[0] || 0 },
       { label: 'Lock Anggaran', value: activeTotals[1] || 0 },
-      { label: 'Realisasi Periode Lalu', value: activeTotals[2] || 0 },
-      { label: 'Realisasi Periode Ini', value: activeTotals[3] || 0 },
-      { label: 'Realisasi s.d. Periode', value: activeTotals[4] || 0 }
+      { label: periodeLaluLabel, value: activeTotals[2] || 0 },
+      { label: periodeIniLabel, value: activeTotals[3] || 0 },
+      { label: sdPeriodeLabel, value: activeTotals[4] || 0 }
     ];
 
     const budgetEntries = (activeData.length ? activeData : result?.finalData ?? [])
@@ -441,7 +476,7 @@ const App: React.FC = () => {
     }
 
     return lines.join('\n');
-  }, [activities, activeTotals, result, activeData]);
+  }, [activities, activeTotals, result, activeData, periodeLaluLabel, periodeIniLabel, sdPeriodeLabel]);
 
   const buildAiSystemPrompt = useCallback((): string => {
     const snapshot = buildAiDataSnapshot();
@@ -1644,7 +1679,11 @@ const HistoryDropdown = () => (
       if (!result) return;
       const originalFileName = file?.name.replace(/\.(xlsx|xls)$/, '') || 'laporan';
       const newFileName = `${originalFileName}_processed.xlsx`;
-      downloadExcelFile(result.finalData, newFileName);
+      downloadExcelFile(result.finalData, newFileName, {
+        periodeLaluLabel,
+        periodeIniLabel,
+        sdPeriodeLabel,
+      });
   };
 
   // --- Search Logic ---
@@ -2256,26 +2295,33 @@ const HistoryDropdown = () => (
                       const isGroup = row.__isGroup;
                       const paguRevisi = row[2];
                       const sdPeriode = row[6];
+                      const level = Number(row.__level ?? 0);
+                      const indent = Math.max(level, 0) * 12;
+                      const rawCode = String(row[0] ?? '');
+                      const codeSegments = rawCode.split('.');
+                      const displayCode = level > 0 && codeSegments.length > 0 ? (codeSegments.pop() || rawCode) : rawCode;
                       return (
                         <tr key={`${row.__path}-${rowIndex}`} className={`transition-colors ${isGroup ? 'bg-gray-100 font-medium' : 'odd:bg-white even:bg-slate-50'} hover:bg-blue-50`}>
                           <td className="px-6 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
                             <div className="flex items-center">
-                              {showExpandCollapse && (
-                                <button
-                                  type="button"
-                                  onClick={() => toggleNode(row.__path, row.__isDataGroup)}
-                                  className={`mr-2 w-6 h-6 flex items-center justify-center rounded-full border text-xs font-semibold transition-colors ${
+                              <div className="flex items-center" style={{ marginLeft: `${indent}px` }}>
+                                {showExpandCollapse && (
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleNode(row.__path, row.__isDataGroup)}
+                                    className={`mr-2 w-6 h-6 flex items-center justify-center rounded-full border text-xs font-semibold transition-colors ${
                                     row.__isExpanded
                                       ? 'bg-blue-100 border-blue-300 text-blue-700'
                                       : 'bg-gray-100 border-gray-300 text-gray-600'
                                   }`}
                                   aria-label={row.__isExpanded ? 'Collapse kode akun' : 'Expand kode akun'}
-                                >
-                                  {row.__isExpanded ? '-' : '+'}
-                                </button>
-                              )}
-                              {!showExpandCollapse && <div className="w-6"></div>}
-                              <span>{row[0]}</span>
+                                  >
+                                    {row.__isExpanded ? '-' : '+'}
+                                  </button>
+                                )}
+                                {!showExpandCollapse && <div className="mr-2 w-6 h-6"></div>}
+                                <span>{displayCode}</span>
+                              </div>
                             </div>
                           </td>
                           <td className="px-6 py-3 text-sm text-gray-700">{row[1]}</td>

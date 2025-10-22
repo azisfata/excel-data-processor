@@ -1,8 +1,41 @@
 
 import { supabase } from '../utils/supabase';
-import { ProcessingResult, Activity } from '../types';
+import { ProcessingResult, Activity, ExcelData } from '../types';
+import {
+  normalizeCodeAndDescription,
+  deriveAccountNameMap,
+  cloneExcelData,
+} from '../utils/dataNormalization';
 
 // --- Processed Results ---
+
+type RawProcessedResultRow = {
+  processed_data?: any[] | null;
+  totals?: number[] | null;
+  account_name_map?: Record<string, string> | null;
+};
+
+function buildProcessingResult(row: RawProcessedResultRow): ProcessingResult {
+  const clonedData: ExcelData = cloneExcelData(row.processed_data);
+  const normalizedData = normalizeCodeAndDescription(clonedData);
+  const totals = Array.isArray(row.totals) ? row.totals : [];
+  const accountNameEntries = row.account_name_map ? Object.entries(row.account_name_map) : [];
+  const baseMap = new Map<string, string>(accountNameEntries);
+  const derivedMap = deriveAccountNameMap(normalizedData);
+
+  derivedMap.forEach((value, key) => {
+    if (!baseMap.has(key)) {
+      baseMap.set(key, value);
+    }
+  });
+
+  return {
+    finalData: normalizedData,
+    totals,
+    processedDataForPreview: normalizedData.slice(0, 100),
+    accountNameMap: baseMap,
+  };
+}
 
 /**
  * Fetches all processed results from Supabase, ordered by creation date (newest first).
@@ -36,6 +69,8 @@ export async function getAllProcessedResults(userId: string) {
     const timeStr = now.toLocaleTimeString('id-ID', timeOptions);
     const formattedDate = `${dateStr} pukul ${timeStr}`;
 
+    const processingResult = buildProcessingResult(item);
+
     return {
       id: item.id,
       fileName: item.file_name || 'File tanpa nama',
@@ -43,12 +78,7 @@ export async function getAllProcessedResults(userId: string) {
       formattedDate,
       reportType: item.report_type || null,
       reportDate: item.report_date || null,
-      result: {
-        finalData: item.processed_data,
-        totals: item.totals,
-        processedDataForPreview: item.processed_data?.slice(0, 100) || [],
-        accountNameMap: item.account_name_map ? new Map(Object.entries(item.account_name_map)) : new Map()
-      }
+      result: processingResult
     };
   });
 }
@@ -86,14 +116,11 @@ export async function getLatestProcessedResult(userId: string): Promise<{
 
   const latestResult = data[0];
 
+  const processingResult = buildProcessingResult(latestResult);
+
   return {
     id: latestResult.id,
-    result: {
-      finalData: latestResult.processed_data,
-      totals: latestResult.totals,
-      processedDataForPreview: latestResult.processed_data?.slice(0, 100) || [],
-      accountNameMap: latestResult.account_name_map ? new Map(Object.entries(latestResult.account_name_map)) : new Map()
-    },
+    result: processingResult,
     lastUpdated: new Date(latestResult.created_at).toLocaleString('id-ID'),
     reportType: latestResult.report_type || null,
     reportDate: latestResult.report_date || null
@@ -121,14 +148,11 @@ export async function getProcessedResultById(id: string, userId: string): Promis
     return null;
   }
 
+  const processingResult = buildProcessingResult(data);
+
   return {
     id: data.id,
-    result: {
-      finalData: data.processed_data,
-      totals: data.totals,
-      processedDataForPreview: data.processed_data?.slice(0, 100) || [],
-      accountNameMap: data.account_name_map ? new Map(Object.entries(data.account_name_map)) : new Map()
-    },
+    result: processingResult,
     lastUpdated: new Date(data.created_at).toLocaleString('id-ID'),
     reportType: data.report_type || null,
     reportDate: data.report_date || null
