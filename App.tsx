@@ -173,6 +173,116 @@ const App: React.FC = () => {
   const [aiInput, setAiInput] = useState('');
   const [isAiProcessing, setIsAiProcessing] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  
+  const generateRkbPdf = async (filteredActivityGroups: any[], selectedYear: number | 'all', selectedMonth: number | 'all' | 'no-date', selectedStatus: Set<string>) => {
+    try {
+      // Dynamically import jsPDF and autoTable
+      const jsPDF = (await import('jspdf')).default;
+      const autoTable = (await import('jspdf-autotable')).default;
+
+      // Create a new PDF document
+      const doc = new jsPDF();
+      
+      // Title
+      let title = 'RENCANA KERJA DAN ANGGARAN';
+      if (selectedYear !== 'all') {
+        title += ` TAHUN ${selectedYear}`;
+      }
+      if (typeof selectedMonth === 'number') {
+        title += ` BULAN ${MONTH_NAMES_ID[selectedMonth]}`;
+      }
+      if (!selectedStatus.has('all')) {
+        title += ` - Status: ${Array.from(selectedStatus).join(', ')}`;
+      }
+      
+      // Add title
+      doc.setFontSize(16);
+      doc.text(title, 105, 20, { align: 'center' });
+      
+      // Add current date
+      const currentDate = new Date().toLocaleDateString('id-ID', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      });
+      doc.setFontSize(10);
+      doc.text(`Dicetak pada: ${currentDate}`, 14, 30);
+      
+      // Add table with filtered activities
+      const tableData = [];
+      let totalAllActivities = 0;
+      let totalAllAllocations = 0;
+
+      for (const group of filteredActivityGroups) {
+        // Add group header if there are activities
+        if (group.activities.length > 0) {
+          for (const activity of group.activities) {
+            const totalAllocation = activity.allocations.reduce((sum, alloc) => sum + (alloc.jumlah || 0), 0);
+            totalAllActivities += 1;
+            totalAllAllocations += totalAllocation;
+            
+            // Add activity row with requested columns: No, Komponen Kegiatan, Judul Kegiatan, K/L/Unit Terkait, Tujuan, RBPN/PP/KP, Tanggal Pelaksanaan, Rencana Anggaran, PIC
+            tableData.push([
+              tableData.length + 1, // No
+              activity.nama, // Komponen Kegiatan
+              activity.nama, // Judul Kegiatan (using the same as Komponen Kegiatan)
+              activity.kl_unit_terkait || '-', // K/L/Unit Terkait
+              activity.tujuan_kegiatan || '-', // Tujuan
+              activity.rbpn_pp_kp || '-', // RBPN/PP/KP (adding new field to activity)
+              activity.tanggal_pelaksanaan ? new Date(activity.tanggal_pelaksanaan).toLocaleDateString('id-ID') : '-', // Tanggal Pelaksanaan
+              formatCurrency(totalAllocation), // Rencana Anggaran (Rp)
+              activity.penanggung_jawab || '-' // PIC
+            ]);
+          }
+        }
+      }
+
+      // Add table
+      autoTable(doc, {
+        head: [['No.', 'Komponen Kegiatan', 'Judul Kegiatan', 'K/L/Unit Terkait', 'Tujuan', 'RBPN/PP/KP', 'Tanggal Pelaksanaan', 'Rencana Anggaran (Rp)', 'PIC']],
+        body: tableData,
+        startY: 40,
+        styles: {
+          fontSize: 9,
+          cellPadding: 4
+        },
+        headStyles: {
+          fillColor: [30, 59, 175], // Blue color
+          textColor: [255, 255, 255],
+          fontStyle: 'bold'
+        },
+        alternateRowStyles: {
+          fillColor: [245, 245, 245]
+        },
+        margin: { left: 10, right: 10 },
+        columnStyles: {
+          0: { cellWidth: 15, halign: 'center' }, // No
+          1: { cellWidth: 35 }, // Komponen Kegiatan
+          2: { cellWidth: 40 }, // Judul Kegiatan
+          3: { cellWidth: 25 }, // K/L/Unit Terkait
+          4: { cellWidth: 35 }, // Tujuan
+          5: { cellWidth: 20, halign: 'center' }, // RBPN/PP/KP
+          6: { cellWidth: 25, halign: 'center' }, // Tanggal Pelaksanaan
+          7: { cellWidth: 30, halign: 'right' }, // Rencana Anggaran (Rp)
+          8: { cellWidth: 20 } // PIC
+        }
+      });
+
+      // Add summary footer
+      const finalY = doc.lastAutoTable.finalY || 40;
+      doc.setFontSize(10);
+      doc.text(`Jumlah Kegiatan: ${totalAllActivities}`, 14, finalY + 10);
+      doc.text(`Total Alokasi: ${formatCurrency(totalAllAllocations)}`, 14, finalY + 16);
+
+      // Save the PDF
+      const fileName = `RKB_${selectedYear}_${typeof selectedMonth === 'number' ? MONTH_NAMES_ID[selectedMonth] : 'all'}.pdf`;
+      doc.save(fileName);
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('Terjadi kesalahan saat membuat PDF. Pastikan Anda telah menginstal pustaka jspdf dan jspdf-autotable.');
+    }
+  };
+
   const applyProcessedResult = useCallback((data: {
     id: string;
     result: ProcessingResult;
@@ -1429,7 +1539,7 @@ const HistoryDropdown = () => (
         setActivities(prev => [...prev, activityWithAttachments]);
       }
 
-      setNewActivity({ nama: '', allocations: [], status: 'Rencana', attachments: [], tanggal_pelaksanaan: '', tujuan_kegiatan: '', kl_unit_terkait: '', penanggung_jawab: '', capaian: '', pending_issue: '', rencana_tindak_lanjut: '' });
+      setNewActivity({ nama: '', allocations: [], status: 'Rencana', attachments: [], tanggal_pelaksanaan: '', tujuan_kegiatan: '', kl_unit_terkait: '', rbpn_pp_kp: '', penanggung_jawab: '', capaian: '', pending_issue: '', rencana_tindak_lanjut: '' });
       setActivityAttachments([]);
       setNewAttachmentFiles([]);
       setAttachmentsToRemove(new Set());
@@ -1471,7 +1581,7 @@ const HistoryDropdown = () => (
   };
 
   const handleCancelEdit = () => {
-    setNewActivity({ nama: '', allocations: [], status: 'Rencana', attachments: [], tanggal_pelaksanaan: '', tujuan_kegiatan: '', kl_unit_terkait: '', penanggung_jawab: '', capaian: '', pending_issue: '', rencana_tindak_lanjut: '' });
+    setNewActivity({ nama: '', allocations: [], status: 'Rencana', attachments: [], tanggal_pelaksanaan: '', tujuan_kegiatan: '', kl_unit_terkait: '', rbpn_pp_kp: '', penanggung_jawab: '', capaian: '', pending_issue: '', rencana_tindak_lanjut: '' });
     setActivityAttachments([]);
     setNewAttachmentFiles([]);
     setAttachmentsToRemove(new Set());
@@ -2452,6 +2562,12 @@ const HistoryDropdown = () => (
                                             </label>
                                         );
                                     })}
+                                    <button 
+                                      onClick={() => generateRkbPdf(filteredActivityGroups, selectedYear, selectedMonth, selectedStatus)}
+                                      className='bg-blue-600 text-white px-4 py-1.5 rounded-md hover:bg-blue-700 text-sm'
+                                    >
+                                      RKB Lengkap PDF
+                                    </button>
                                 </div>
                             </div>
                         </div>
