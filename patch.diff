@@ -1,0 +1,97 @@
+*** Begin Patch
+*** Update File: App.tsx
+@@
+-                      <div className="mt-3 flex flex-col sm:flex-row sm:items-center gap-3">
+-                        <button
+-                          type="button"
+-                          onClick={handleAutoFillFromFiles}
+-                          disabled={isAiAutofilling}
+-                          className={`inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-md border ${
+-                            isAiAutofilling
+-                              ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+-                              : 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700'
+-                          }`}
+-                        >
+-                          {isAiAutofilling ? 'Memproses dengan AI.' : 'Isi Form Otomatis dengan AI'}
+-                        </button>
+-                        <p className="text-xs text-gray-500 max-w-md">
+-                          Unggah dokumen PDF kegiatan sebagai lampiran, lalu gunakan tombol ini agar AI menyalin data ke form.
+-                        </p>
+-                      </div>
+-                      {aiAutofillError && (
+-                        <p className="mt-2 text-xs text-red-600">{aiAutofillError}</p>
+-                      )}
+-                      {aiAutofillSuccess && (
+-                        <p className="mt-2 text-xs text-green-600">{aiAutofillSuccess}</p>
+-                      )}
++                      <div className="mt-3 flex flex-col sm:flex-row sm:items-center gap-3">
++                        <button
++                          type="button"
++                          onClick={handleAutoFillFromFiles}
++                          disabled={isAiAutofilling}
++                          className={`inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-md border ${
++                            isAiAutofilling
++                              ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
++                              : 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700'
++                          }`}
++                        >
++                          {isAiAutofilling ? (
++                            <span className="flex items-center gap-2">
++                              <svg
++                                className="h-4 w-4 animate-spin text-white"
++                                xmlns="http://www.w3.org/2000/svg"
++                                fill="none"
++                                viewBox="0 0 24 24"
++                              >
++                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
++                                <path
++                                  className="opacity-75"
++                                  fill="currentColor"
++                                  d="M4 12a8 8 0 018-8V2a10 10 0 100 20 10 10 0 01-8-10z"
++                                ></path>
++                              </svg>
++                              <span>Proses AI sedang berjalan…</span>
++                            </span>
++                          ) : (
++                            'Isi Form Otomatis dengan AI'
++                          )}
++                        </button>
++                        <p className="text-xs text-gray-500 max-w-md">
++                          Unggah satu atau lebih dokumen (PDF dianjurkan) sebagai lampiran, lalu gunakan tombol ini agar AI membantu mengisi form.
++                        </p>
++                      </div>
++                      {aiAutofillSteps.length > 0 && (
++                        <div className="mt-3 space-y-2 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-gray-700">
++                          {aiAutofillSteps.map((step, index) => (
++                            <div key={index} className="flex items-start gap-2">
++                              {step.status === 'processing' && (
++                                <svg className="h-4 w-4 mt-[2px] animate-spin text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
++                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
++                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V2a10 10 0 100 20 10 10 0 01-8-10z"></path>
++                                </svg>
++                              )}
++                              {step.status === 'success' && (
++                                <svg className="h-4 w-4 mt-[2px] text-green-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
++                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
++                                </svg>
++                              )}
++                              {step.status === 'error' && (
++                                <svg className="h-4 w-4 mt-[2px] text-red-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
++                                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
++                                </svg>
++                              )}
++                              <div>
++                                <p className="font-semibold">{step.label}</p>
++                                {step.detail && <p className="text-gray-600">{step.detail}</p>}
++                              </div>
++                            </div>
++                          ))}
++                        </div>
++                      )}
++                      {aiAutofillError && (
++                        <p className="mt-2 text-xs text-red-600">{aiAutofillError}</p>
++                      )}
++                      {aiAutofillSuccess && (
++                        <p className="mt-2 text-xs text-green-600">{aiAutofillSuccess}</p>
++                      )}
+*** End Patch

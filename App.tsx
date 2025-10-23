@@ -3,13 +3,23 @@ import { useDropzone, type DropzoneOptions } from 'react-dropzone';
 import { useNavigate } from 'react-router-dom';
 import { ProcessingResult, Activity, ActivityAttachment, BudgetAllocation } from './types';
 import { processExcelData, downloadExcelFile, parseExcelFile } from './services/excelProcessor';
-import { createHierarchy, flattenTree } from './utils/hierarchy';
 import * as supabaseService from './services/supabaseService';
 import { useAuth } from './src/contexts/AuthContext';
 import * as attachmentService from './services/activityAttachmentService';
 import { supabase } from './utils/supabase';
-import { fetchAiResponse, type AiChatMessage as AiRequestMessage } from './services/aiService';
+import { fetchAiResponse, getLastSuccessfulModel, type AiChatMessage as AiRequestMessage } from './services/aiService';
 import FloatingAIButton from './src/components/FloatingAIButton';
+import mammoth from 'mammoth';
+import * as XLSX from 'xlsx';
+import JSZip from 'jszip';
+import Tesseract from 'tesseract.js';
+import { useHierarchyTable } from './src/hooks/useHierarchyTable';
+import { useProcessedMetrics } from './src/hooks/useProcessedMetrics';
+import BudgetOverviewPanel from './src/components/dashboard/BudgetOverviewPanel';
+import AccountSummaryPanel from './src/components/dashboard/AccountSummaryPanel';
+import MonthlyAnalyticsPanel from './src/components/dashboard/MonthlyAnalyticsPanel';
+import TrendAnalyticsPanel from './src/components/dashboard/TrendAnalyticsPanel';
+import { useHistoricalData } from './src/hooks/useHistoricalData';
 
 const MONTH_NAMES_ID = [
   'Januari',
@@ -33,6 +43,14 @@ type AiMessage = {
   sender: 'user' | 'assistant';
   content: string;
   timestamp: string;
+};
+
+type AiAutofillStepStatus = 'processing' | 'success' | 'error';
+
+type AiAutofillStep = {
+  label: string;
+  status: AiAutofillStepStatus;
+  detail?: string;
 };
 
 const INITIAL_AI_MESSAGE_ID = 'assistant-initial';
@@ -129,7 +147,7 @@ const App: React.FC = () => {
   const [attachmentsToRemove, setAttachmentsToRemove] = useState<Set<string>>(new Set());
   const [selectedYear, setSelectedYear] = useState<number | 'all'>(() => new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<number | 'all' | 'no-date'>(() => new Date().getMonth());
-  const [showAllActivities, setShowAllActivities] = useState(false);
+  const [showAllActivities, setShowAllActivities] = useState(true);
   const [selectedStatus, setSelectedStatus] = useState<Set<string>>(new Set(['all']));
   const [activitySearchTerm, setActivitySearchTerm] = useState('');
   const [activitiesPerPage, setActivitiesPerPage] = useState<number | 'all'>(10);
@@ -146,19 +164,11 @@ const App: React.FC = () => {
   const [budgetView, setBudgetView] = useState('realisasi-laporan');
   const currentYear = useMemo(() => new Date().getFullYear(), []);
   const currentMonthIndex = useMemo(() => new Date().getMonth(), []);
-  const getAttachmentDownloadUrl = useCallback(
-    (attachment: ActivityAttachment) =>
-      `/api/activities/${attachment.activityId}/attachments/${attachment.attachmentId}/download`,
-    []
-  );
-  const isInlinePreview = useCallback((fileName: string) => /\.(pdf|png|jpe?g|gif)$/i.test(fileName), []);
 
-  // State for file processing
+  // State for file processing & hierarchy
   const [isProcessing, setIsProcessing] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [result, setResult] = useState<ProcessingResult | null>(null);
-  const [hierarchicalData, setHierarchicalData] = useState<any[]>([]);
-  const [displayedData, setDisplayedData] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [maxDepth, setMaxDepth] = useState(7);
   const [isTableExpanded, setIsTableExpanded] = useState(true);
@@ -173,134 +183,51 @@ const App: React.FC = () => {
   const [aiInput, setAiInput] = useState('');
   const [isAiProcessing, setIsAiProcessing] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
-  
-  const generateRkbPdf = async (filteredActivityGroups: any[], selectedYear: number | 'all', selectedMonth: number | 'all' | 'no-date', selectedStatus: Set<string>) => {
-    try {
-      // Dynamically import jsPDF and autoTable
-      const jsPDF = (await import('jspdf')).default;
-      const autoTable = (await import('jspdf-autotable')).default;
+  const [isAiAutofilling, setIsAiAutofilling] = useState(false);
+  const [aiAutofillError, setAiAutofillError] = useState<string | null>(null);
+  const [aiAutofillSuccess, setAiAutofillSuccess] = useState<string | null>(null);
+  const [aiAutofillSteps, setAiAutofillSteps] = useState<AiAutofillStep[]>([]);
 
-      // Create a new PDF document
-      const doc = new jsPDF();
-      
-      // Title
-      let title = 'RENCANA KERJA DAN ANGGARAN';
-      if (selectedYear !== 'all') {
-        title += ` TAHUN ${selectedYear}`;
-      }
-      if (typeof selectedMonth === 'number') {
-        title += ` BULAN ${MONTH_NAMES_ID[selectedMonth]}`;
-      }
-      if (!selectedStatus.has('all')) {
-        title += ` - Status: ${Array.from(selectedStatus).join(', ')}`;
-      }
-      
-      // Add title
-      doc.setFontSize(16);
-      doc.text(title, 105, 20, { align: 'center' });
-      
-      // Add current date
-      const currentDate = new Date().toLocaleDateString('id-ID', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric'
-      });
-      doc.setFontSize(10);
-      doc.text(`Dicetak pada: ${currentDate}`, 14, 30);
-      
-      // Add table with filtered activities
-      const tableData = [];
-      let totalAllActivities = 0;
-      let totalAllAllocations = 0;
+  const {
+    activeData,
+    activeTotals,
+    additionalTotals,
+    progressPercentage,
+    level7Totals,
+  } = useProcessedMetrics({ result, activities, budgetView });
 
-      for (const group of filteredActivityGroups) {
-        // Add group header if there are activities
-        if (group.activities.length > 0) {
-          for (const activity of group.activities) {
-            const totalAllocation = activity.allocations.reduce((sum, alloc) => sum + (alloc.jumlah || 0), 0);
-            totalAllActivities += 1;
-            totalAllAllocations += totalAllocation;
-            
-            // Add activity row with requested columns: No, Komponen Kegiatan, Judul Kegiatan, K/L/Unit Terkait, Tujuan, RBPN/PP/KP, Tanggal Pelaksanaan, Rencana Anggaran, PIC
-            tableData.push([
-              tableData.length + 1, // No
-              activity.nama, // Komponen Kegiatan
-              activity.nama, // Judul Kegiatan (using the same as Komponen Kegiatan)
-              activity.kl_unit_terkait || '-', // K/L/Unit Terkait
-              activity.tujuan_kegiatan || '-', // Tujuan
-              activity.rbpn_pp_kp || '-', // RBPN/PP/KP (adding new field to activity)
-              activity.tanggal_pelaksanaan ? new Date(activity.tanggal_pelaksanaan).toLocaleDateString('id-ID') : '-', // Tanggal Pelaksanaan
-              formatCurrency(totalAllocation), // Rencana Anggaran (Rp)
-              activity.penanggung_jawab || '-' // PIC
-            ]);
-          }
-        }
-      }
+  // Historical data for analytics
+  const {
+    monthlyReports,
+    currentReport,
+    allReports,
+    isLoading: isHistoricalLoading,
+    error: historicalError,
+    setCurrentReport,
+    refreshData,
+    availableAccounts,
+    currentMonthData
+  } = useHistoricalData(user?.id);
 
-      // Calculate column widths based on the available page width
-      const pageWidth = doc.internal.pageSize.width;
-      const margin = 16; // left + right margin
-      const availableWidth = pageWidth - margin;
-      
-      // Define proportional widths for each column
-      // Total of 177 units below, adjust as needed
-      const totalUnits = 177;
-      const unitWidth = availableWidth / totalUnits;
-      
-      // Add table
-      autoTable(doc, {
-        head: [['No.', 'Komponen Kegiatan', 'Judul Kegiatan', 'K/L/Unit Terkait', 'Tujuan', 'RB', 'PN/PP/KP', 'Tanggal Pelaksanaan', 'Rencana Anggaran (Rp)', 'PIC']],
-        body: tableData,
-        startY: 40,
-        styles: {
-          fontSize: 8, // Slightly smaller font to fit more content
-          cellPadding: 3,
-          overflow: 'linebreak', // Handle text overflow by breaking lines
-          valign: 'middle'
-        },
-        headStyles: {
-          fillColor: [30, 59, 175], // Blue color
-          textColor: [255, 255, 255],
-          fontStyle: 'bold'
-        },
-        bodyStyles: {
-          textColor: [50, 50, 50]
-        },
-        alternateRowStyles: {
-          fillColor: [245, 245, 245]
-        },
-        margin: { left: 8, right: 8 }, // Slightly more margin to ensure it fits on A4
-        tableWidth: 'wrap', // Make table width adapt to content but stay within bounds
-        // Calculate column widths based on content importance and available space
-        columnStyles: {
-          0: { cellWidth: Math.round(unitWidth * 6), halign: 'center' }, // No (narrow - 6 units)
-          1: { cellWidth: Math.round(unitWidth * 25), halign: 'left' }, // Komponen Kegiatan (wide - 25 units)
-          2: { cellWidth: Math.round(unitWidth * 25), halign: 'left' }, // Judul Kegiatan (wide - 25 units)
-          3: { cellWidth: Math.round(unitWidth * 15), halign: 'left' }, // K/L/Unit Terkait (medium - 15 units)
-          4: { cellWidth: Math.round(unitWidth * 20), halign: 'left' }, 
-          5: { cellWidth: Math.round(unitWidth * 12), halign: 'center' },// Tujuan (medium wide - 20 units)
-          6: { cellWidth: Math.round(unitWidth * 12), halign: 'center' }, // RBPN/PP/KP (narrow - 12 units)
-          7: { cellWidth: Math.round(unitWidth * 18), halign: 'center' }, // Tanggal Pelaksanaan (medium - 18 units)
-          8: { cellWidth: Math.round(unitWidth * 20), halign: 'right' }, // Rencana Anggaran (Rp) (medium - 20 units)
-          9: { cellWidth: Math.round(unitWidth * 16), halign: 'left' } // PIC (medium - 16 units)
-        }
-      });
+  const {
+    hierarchicalData,
+    displayedData,
+    setDisplayedData,
+    toggleNode,
+    resetExpansion,
+  } = useHierarchyTable({
+    data: activeData,
+    maxDepth,
+    accountNameMap: result?.accountNameMap,
+  });
+  const getAttachmentDownloadUrl = useCallback(
+    (attachment: ActivityAttachment) =>
+      `/api/activities/${attachment.activityId}/attachments/${attachment.attachmentId}/download`,
+    []
+  );
+  const isInlinePreview = useCallback((fileName: string) => /\.(pdf|png|jpe?g|gif)$/i.test(fileName), []);
 
-      // Add summary footer
-      const finalY = doc.lastAutoTable.finalY || 40;
-      doc.setFontSize(10);
-      doc.text(`Jumlah Kegiatan: ${totalAllActivities}`, 14, finalY + 10);
-      doc.text(`Total Alokasi: ${formatCurrency(totalAllAllocations)}`, 14, finalY + 16);
-
-      // Save the PDF
-      const fileName = `RKB_${selectedYear}_${typeof selectedMonth === 'number' ? MONTH_NAMES_ID[selectedMonth] : 'all'}.pdf`;
-      doc.save(fileName);
-    } catch (error) {
-      console.error('Error generating PDF:', error);
-      alert('Terjadi kesalahan saat membuat PDF. Pastikan Anda telah menginstal pustaka jspdf dan jspdf-autotable.');
-    }
-  };
-
+  // State for file processing
   const applyProcessedResult = useCallback((data: {
     id: string;
     result: ProcessingResult;
@@ -319,74 +246,6 @@ const App: React.FC = () => {
     }
   }, []);
 
-  const activeData = useMemo(() => {
-    if (!result?.finalData) return [];
-
-    if (budgetView === 'realisasi-laporan') {
-        return result.finalData;
-    }
-
-    const allocationMap = new Map<string, number>();
-    const targetStatuses = budgetView === 'realisasi-outstanding'
-        ? ['outstanding']
-        : ['outstanding', 'komitmen'];
-
-    activities
-        .filter(activity => targetStatuses.includes((activity.status || '').toLowerCase()))
-        .forEach(activity => {
-            activity.allocations.forEach(alloc => {
-                const compositeKey = `${alloc.kode}||${alloc.uraian}`;
-                allocationMap.set(compositeKey, (allocationMap.get(compositeKey) || 0) + alloc.jumlah);
-            });
-        });
-
-    if (allocationMap.size === 0) {
-        return result.finalData;
-    }
-
-    return result.finalData.map(row => {
-        const rowKode = row[0];
-        const rowUraian = row[1];
-        const compositeKey = `${rowKode}||${rowUraian}`;
-        const additionalAmount = allocationMap.get(compositeKey);
-
-        if (additionalAmount) {
-            const newRow = [...row];
-            const newRealisasi = (Number(newRow[6]) || 0) + additionalAmount;
-            newRow[6] = newRealisasi;
-            return newRow;
-        }
-        return row;
-    });
-
-  }, [budgetView, result, activities]);
-
-  const activeTotals = useMemo(() => {
-    if (!activeData || activeData.length === 0) return [0, 0, 0, 0, 0];
-
-    const columnsToSum = [2, 3, 4, 5, 6]; // Pagu, Lock, Periode Lalu, Periode Ini, s.d. Periode
-    return columnsToSum.map(colIndex =>
-        activeData.reduce((sum, row) => sum + (Number(row[colIndex]) || 0), 0)
-    );
-  }, [activeData]);
-
-  const additionalTotals = useMemo(() => {
-    let totalOutstanding = 0;
-    let totalKomitmen = 0;
-
-    activities.forEach(activity => {
-        const activityTotal = activity.allocations.reduce((sum, alloc) => sum + alloc.jumlah, 0);
-        if ((activity.status || '').toLowerCase() === 'outstanding') {
-            totalOutstanding += activityTotal;
-        }
-        if ((activity.status || '').toLowerCase() === 'komitmen') {
-            totalKomitmen += activityTotal;
-        }
-    });
-
-    return { outstanding: totalOutstanding, komitmen: totalKomitmen };
-  }, [activities]);
-
   // State for allocation search
   const [allocationSearch, setAllocationSearch] = useState('');
   const [isAllocationDropdownOpen, setIsAllocationDropdownOpen] = useState(false);
@@ -397,6 +256,41 @@ const App: React.FC = () => {
         ? new Date(latestReportMeta.reportDate).getFullYear() 
         : new Date().getFullYear();
   }, [latestReportMeta.reportDate]);
+
+  const reportMonthName = useMemo(() => {
+    if (!latestReportMeta.reportDate) return null;
+    const date = new Date(latestReportMeta.reportDate);
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toLocaleDateString('id-ID', { month: 'long' });
+  }, [latestReportMeta.reportDate]);
+
+  const previousReportMonthName = useMemo(() => {
+    if (!latestReportMeta.reportDate) return null;
+    const date = new Date(latestReportMeta.reportDate);
+    if (Number.isNaN(date.getTime())) return null;
+    if (date.getMonth() === 0) return null;
+    const prevDate = new Date(date);
+    prevDate.setMonth(prevDate.getMonth() - 1);
+    return prevDate.toLocaleDateString('id-ID', { month: 'long' });
+  }, [latestReportMeta.reportDate]);
+
+  const isReportJanuary = useMemo(() => reportMonthName?.toLowerCase() === 'januari', [reportMonthName]);
+
+  const periodeLaluLabel = useMemo(() => {
+    if (!reportMonthName || isReportJanuary || !previousReportMonthName) return 'Periode Lalu';
+    return `Realisasi Januari s.d. ${previousReportMonthName}`;
+  }, [reportMonthName, isReportJanuary, previousReportMonthName]);
+
+  const periodeIniLabel = useMemo(() => {
+    if (!reportMonthName) return 'Periode Ini';
+    return `Realisasi Bulan ${reportMonthName}`;
+  }, [reportMonthName]);
+
+  const sdPeriodeLabel = useMemo(() => {
+    if (!reportMonthName) return 's.d. Periode';
+    if (isReportJanuary) return 'Realisasi Januari';
+    return `Realisasi Januari s.d. ${reportMonthName}`;
+  }, [reportMonthName, isReportJanuary]);
 
   const comprehensiveAllocationMap = useMemo(() => {
     const allocationMap = new Map<string, number>();
@@ -495,9 +389,9 @@ const App: React.FC = () => {
     const columnSummary = [
       { label: 'Pagu Revisi', value: activeTotals[0] || 0 },
       { label: 'Lock Anggaran', value: activeTotals[1] || 0 },
-      { label: 'Realisasi Periode Lalu', value: activeTotals[2] || 0 },
-      { label: 'Realisasi Periode Ini', value: activeTotals[3] || 0 },
-      { label: 'Realisasi s.d. Periode', value: activeTotals[4] || 0 }
+      { label: periodeLaluLabel, value: activeTotals[2] || 0 },
+      { label: periodeIniLabel, value: activeTotals[3] || 0 },
+      { label: sdPeriodeLabel, value: activeTotals[4] || 0 }
     ];
 
     const budgetEntries = (activeData.length ? activeData : result?.finalData ?? [])
@@ -569,7 +463,7 @@ const App: React.FC = () => {
     }
 
     return lines.join('\n');
-  }, [activities, activeTotals, result, activeData]);
+  }, [activities, activeTotals, result, activeData, periodeLaluLabel, periodeIniLabel, sdPeriodeLabel]);
 
   const buildAiSystemPrompt = useCallback((): string => {
     const snapshot = buildAiDataSnapshot();
@@ -593,8 +487,6 @@ const App: React.FC = () => {
   }, [aiMessages]);
 
   // State for expanded nodes
-  const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
-
   const aiSystemPrompt = useMemo(() => buildAiSystemPrompt(), [buildAiSystemPrompt]);
 const Spinner = () => (
   <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -916,6 +808,10 @@ const HistoryDropdown = () => (
       setActivityAttachments([]);
       setNewAttachmentFiles([]);
       setAttachmentsToRemove(new Set());
+      setAiAutofillError(null);
+      setAiAutofillSuccess(null);
+      setAiAutofillSteps([]);
+      setIsAiAutofilling(false);
     }
   }, [showActivityForm, isEditing]);
 
@@ -1284,76 +1180,8 @@ const HistoryDropdown = () => (
     []
   );
 
-  const activitiesByMonth = useMemo(() => {
+  const filteredActivities = useMemo(() => {
     if (!activities.length) return [];
-
-    type GroupBucket = {
-      key: string;
-      label: string;
-      sortKey: number;
-      year: number | null;
-      month: number | null;
-      isNoDate: boolean;
-      activities: Activity[];
-    };
-
-    const groupMap = new Map<string, GroupBucket>();
-
-    activities.forEach(activity => {
-      const rawDate = activity.tanggal_pelaksanaan;
-      const parsedDate = rawDate ? new Date(rawDate) : null;
-      const hasValidDate = parsedDate instanceof Date && !Number.isNaN(parsedDate.getTime());
-      const label = hasValidDate ? formatMonthLabel(parsedDate) : 'Tanpa Tanggal';
-      const sortKey = hasValidDate
-        ? new Date(parsedDate.getFullYear(), parsedDate.getMonth(), 1).getTime()
-        : Number.NEGATIVE_INFINITY;
-      const key = hasValidDate
-        ? `${parsedDate.getFullYear()}-${parsedDate.getMonth()}`
-        : 'no-date';
-
-      if (!groupMap.has(key)) {
-        groupMap.set(key, {
-          key,
-          label,
-          sortKey,
-          year: hasValidDate ? parsedDate.getFullYear() : null,
-          month: hasValidDate ? parsedDate.getMonth() : null,
-          isNoDate: !hasValidDate,
-          activities: []
-        });
-      }
-
-      groupMap.get(key)!.activities.push(activity);
-    });
-
-    const grouped = Array.from(groupMap.values());
-
-    grouped.forEach(group => {
-      group.activities.sort((a, b) => {
-        const dateA = a.tanggal_pelaksanaan ? new Date(a.tanggal_pelaksanaan).getTime() : 0;
-        const dateB = b.tanggal_pelaksanaan ? new Date(b.tanggal_pelaksanaan).getTime() : 0;
-
-        if (dateA && dateB) {
-          return dateB - dateA;
-        }
-        if (dateA) return -1;
-        if (dateB) return 1;
-        return a.nama.localeCompare(b.nama);
-      });
-    });
-
-    grouped.sort((a, b) => {
-      if (a.sortKey === b.sortKey) {
-        return a.label.localeCompare(b.label);
-      }
-      return b.sortKey - a.sortKey;
-    });
-
-    return grouped;
-  }, [activities, formatMonthLabel]);
-
-  const filteredActivityGroups = useMemo(() => {
-    if (!activitiesByMonth.length) return [];
 
     const normalizedSearch = activitySearchTerm.trim().toLowerCase();
     const matchesSearch = (activity: Activity) =>
@@ -1365,58 +1193,55 @@ const HistoryDropdown = () => (
       const activityStatus = (activity.status || 'tanpa-status').toLowerCase();
       return selectedStatus.has(activityStatus);
     };
+    const matchesPeriod = (activity: Activity) => {
+      if (showAllActivities) return true;
 
-    const baseGroups = showAllActivities
-      ? activitiesByMonth
-      : activitiesByMonth.filter(group => {
-          if (selectedMonth === 'no-date') {
-            return group.isNoDate;
-          }
+      const rawDate = activity.tanggal_pelaksanaan;
+      const parsedDate = rawDate ? new Date(rawDate) : null;
+      const hasValidDate = parsedDate instanceof Date && !Number.isNaN(parsedDate.getTime());
 
-          if (group.isNoDate) {
-            return selectedMonth === 'all' && selectedYear === 'all';
-          }
+      if (selectedMonth === 'no-date') {
+        return !hasValidDate;
+      }
 
-          const matchesYear = selectedYear === 'all' || group.year === selectedYear;
-          const matchesMonth = selectedMonth === 'all' || group.month === selectedMonth;
+      if (!hasValidDate) {
+        return selectedMonth === 'all' && selectedYear === 'all';
+      }
 
-          return matchesYear && matchesMonth;
-        });
+      const activityMonth = parsedDate.getMonth();
+      const activityYear = parsedDate.getFullYear();
 
-    const filtered = baseGroups
-      .map(group => ({
-        ...group,
-        activities: group.activities.filter(activity => matchesSearch(activity) && matchesStatus(activity)),
-      }))
-      .filter(group => group.activities.length > 0);
+      const monthMatches = selectedMonth === 'all' || activityMonth === selectedMonth;
+      const yearMatches = selectedYear === 'all' || activityYear === selectedYear;
 
-    if (!filtered.length && normalizedSearch) {
-      const fallback = activitiesByMonth
-        .map(group => ({
-          ...group,
-          activities: group.activities.filter(activity => matchesSearch(activity) && matchesStatus(activity)),
-        }))
-        .filter(group => group.activities.length > 0);
+      return monthMatches && yearMatches;
+    };
 
-      return fallback;
-    }
+    const sortedActivities = [...activities].sort((a, b) => {
+      const dateA = a.tanggal_pelaksanaan ? new Date(a.tanggal_pelaksanaan).getTime() : 0;
+      const dateB = b.tanggal_pelaksanaan ? new Date(b.tanggal_pelaksanaan).getTime() : 0;
 
-    return filtered;
-  }, [activitiesByMonth, selectedMonth, selectedYear, showAllActivities, activitySearchTerm, selectedStatus]);
+      if (dateA && dateB) {
+        return dateB - dateA;
+      }
+      if (dateA) return -1;
+      if (dateB) return 1;
+      return a.nama.localeCompare(b.nama);
+    });
 
-  const flattenedActivities = useMemo(
-    () =>
-      filteredActivityGroups.flatMap(group =>
-        group.activities.map(activity => ({
-          groupKey: group.key,
-          groupLabel: group.label,
-          activity,
-        }))
-      ),
-    [filteredActivityGroups]
-  );
+    return sortedActivities.filter(
+      activity => matchesSearch(activity) && matchesStatus(activity) && matchesPeriod(activity)
+    );
+  }, [
+    activities,
+    activitySearchTerm,
+    selectedStatus,
+    showAllActivities,
+    selectedMonth,
+    selectedYear,
+  ]);
 
-  const totalActivities = flattenedActivities.length;
+  const totalActivities = filteredActivities.length;
   const totalPages =
     totalActivities === 0 || activitiesPerPage === 'all'
       ? 1
@@ -1433,30 +1258,28 @@ const HistoryDropdown = () => (
     setActivitiesPage(1);
   }, [selectedYear, selectedMonth, selectedStatus, activitySearchTerm, showAllActivities, activitiesPerPage]);
 
+  const paginatedActivities = useMemo(() => {
+    if (!filteredActivities.length) return [];
+    if (activitiesPerPage === 'all') {
+      return filteredActivities;
+    }
+    const startIndex = (activitiesPage - 1) * activitiesPerPage;
+    const endIndex = startIndex + activitiesPerPage;
+    return filteredActivities.slice(startIndex, endIndex);
+  }, [filteredActivities, activitiesPerPage, activitiesPage]);
+
   const paginatedActivityGroups = useMemo(() => {
-    if (!flattenedActivities.length) return [];
-    const slice =
-      activitiesPerPage === 'all'
-        ? flattenedActivities
-        : flattenedActivities.slice(
-            (activitiesPage - 1) * activitiesPerPage,
-            (activitiesPage - 1) * activitiesPerPage + activitiesPerPage
-          );
-    const map = new Map<string, { key: string; label: string; activities: Activity[] }>();
-
-    slice.forEach(item => {
-      if (!map.has(item.groupKey)) {
-        map.set(item.groupKey, {
-          key: item.groupKey,
-          label: item.groupLabel,
-          activities: [],
-        });
-      }
-      map.get(item.groupKey)!.activities.push(item.activity);
-    });
-
-    return Array.from(map.values());
-  }, [flattenedActivities, activitiesPage, activitiesPerPage]);
+    if (!paginatedActivities.length) {
+      return [];
+    }
+    return [
+      {
+        key: 'all',
+        label: '',
+        activities: paginatedActivities,
+      },
+    ];
+  }, [paginatedActivities]);
 
   const pageRangeStart =
     totalActivities === 0
@@ -1472,20 +1295,10 @@ const HistoryDropdown = () => (
         : Math.min(activitiesPage * activitiesPerPage, totalActivities);
   const totalActivitiesByGroup = useMemo(() => {
     const map = new Map<string, number>();
-    filteredActivityGroups.forEach(group => {
-      map.set(group.key, group.activities.length);
-    });
+    map.set('all', filteredActivities.length);
     return map;
-  }, [filteredActivityGroups]);
+  }, [filteredActivities.length, filteredActivities]);
 
-  const totalPaginatedAllocation = useMemo(() => {
-    return paginatedActivityGroups
-        .flatMap(group => group.activities)
-        .reduce((total, activity) => {
-            const activityTotal = activity.allocations.reduce((allocSum, alloc) => allocSum + (alloc.jumlah || 0), 0);
-            return total + activityTotal;
-        }, 0);
-  }, [paginatedActivityGroups]);
 
   const handleAddActivity = async () => {
     setError(''); // Clear previous errors
@@ -1561,6 +1374,10 @@ const HistoryDropdown = () => (
       setActivityAttachments([]);
       setNewAttachmentFiles([]);
       setAttachmentsToRemove(new Set());
+      setAiAutofillError(null);
+      setAiAutofillSuccess(null);
+      setAiAutofillSteps([]);
+      setIsAiAutofilling(false);
       setShowActivityForm(false);
       setIsEditing(false);
       setEditingActivityId(null);
@@ -1593,6 +1410,10 @@ const HistoryDropdown = () => (
     setActivityAttachments(activity.attachments ?? []);
     setNewAttachmentFiles([]);
     setAttachmentsToRemove(new Set());
+    setAiAutofillError(null);
+    setAiAutofillSuccess(null);
+    setAiAutofillSteps([]);
+    setIsAiAutofilling(false);
     setEditingActivityId(activity.id);
     setIsEditing(true);
     setShowActivityForm(true);
@@ -1603,6 +1424,10 @@ const HistoryDropdown = () => (
     setActivityAttachments([]);
     setNewAttachmentFiles([]);
     setAttachmentsToRemove(new Set());
+    setAiAutofillError(null);
+    setAiAutofillSuccess(null);
+    setAiAutofillSteps([]);
+    setIsAiAutofilling(false);
     setIsEditing(false);
     setEditingActivityId(null);
     setShowActivityForm(false);
@@ -1635,112 +1460,10 @@ const HistoryDropdown = () => (
     return allocations.reduce((sum, item) => sum + item.jumlah, 0);
   };
 
-  // --- Data & Hierarchy Logic ---
-  const progressPercentage = useMemo(() => {
-    if (!activeTotals || typeof activeTotals[0] !== 'number' || activeTotals[0] <= 0) return 0;
-    if (typeof activeTotals[4] !== 'number') return 0;
-    return (activeTotals[4] / activeTotals[0]) * 100;
-  }, [activeTotals]);
-
-  // Calculate level 7 account totals
-  const level7Totals = useMemo(() => {
-    if (!result) return [];
-
-    const outstandingMap = new Map<string, number>();
-    const komitmenMap = new Map<string, number>();
-
-    activities.forEach(activity => {
-        const status = (activity.status || '').toLowerCase();
-        if (status !== 'outstanding' && status !== 'komitmen') return;
-
-        activity.allocations.forEach(alloc => {
-            const codeParts = alloc.kode.split('.');
-            if (codeParts.length >= 7) {
-                const level7Code = codeParts[6];
-                if (status === 'outstanding') {
-                    outstandingMap.set(level7Code, (outstandingMap.get(level7Code) || 0) + alloc.jumlah);
-                } else if (status === 'komitmen') {
-                    komitmenMap.set(level7Code, (komitmenMap.get(level7Code) || 0) + alloc.jumlah);
-                }
-            }
-        });
-    });
-
-    const totalsMap = new Map();
-    result.finalData.forEach(row => {
-        const kode = row[0];
-        if (typeof kode === 'string') {
-            const parts = kode.split('.');
-            if (parts.length === 7) {
-                const accountCode = parts[6];
-                const paguRevisi = Number(row[2]) || 0;
-                const realisasiLaporan = Number(row[6]) || 0;
-
-                if (totalsMap.has(accountCode)) {
-                    const current = totalsMap.get(accountCode);
-                    current.paguRevisi += paguRevisi;
-                    current.realisasiLaporan += realisasiLaporan;
-                } else {
-                    const accountName = result.accountNameMap?.get(accountCode) || row[1] || `Akun ${accountCode}`;
-                    totalsMap.set(accountCode, {
-                        code: accountCode,
-                        uraian: accountName,
-                        paguRevisi,
-                        realisasiLaporan,
-                    });
-                }
-            }
-        }
-    });
-
-    const totals = Array.from(totalsMap.values()).map(item => {
-        const outstandingAmount = outstandingMap.get(item.code) || 0;
-        const komitmenAmount = komitmenMap.get(item.code) || 0;
-
-        let finalRealisasi = item.realisasiLaporan;
-        if (budgetView === 'realisasi-outstanding' || budgetView === 'realisasi-komitmen') {
-            finalRealisasi += outstandingAmount;
-        }
-        if (budgetView === 'realisasi-komitmen') {
-            finalRealisasi += komitmenAmount;
-        }
-
-        return {
-            ...item,
-            realisasi: finalRealisasi,
-            outstanding: outstandingAmount,
-            komitmen: komitmenAmount,
-            persentase: item.paguRevisi > 0 ? (finalRealisasi / item.paguRevisi) * 100 : 0,
-            sisa: item.paguRevisi - finalRealisasi
-        };
-    });
-
-    return totals.sort((a, b) => a.code.localeCompare(b.code));
-  }, [result, activities, budgetView]);
-
-  useEffect(() => {
-    if (activeData) {
-      const hierarchy = createHierarchy(activeData.slice(0, 100)); // Use activeData for preview
-      const withExpanded = (nodes: any[], currentLevel = 0): any[] => nodes.map(node => {
-        const shouldExpand = currentLevel < maxDepth - 1;
-        const isExpanded = expandedNodes[node.fullPath] ?? shouldExpand;
-        return { ...node, isExpanded, children: withExpanded(Object.values(node.children), currentLevel + 1) };
-      });
-      const processedHierarchy = withExpanded(hierarchy);
-      const flatData = flattenTree(processedHierarchy);
-      setHierarchicalData(flatData);
-      setDisplayedData(flatData);
-    }
-  }, [activeData, expandedNodes, maxDepth]);
-
-  const toggleNode = useCallback((path: string, isDataGroup = false) => {
-    setExpandedNodes(prev => ({ ...prev, [path]: !prev[path], ...(isDataGroup ? { [`${path}-data`]: !prev[path] } : {}) }));
-  }, []);
-
   const handleDepthChange = async (depth: number) => {
     if (!user?.id) return;
     setMaxDepth(depth);
-    setExpandedNodes({}); // Reset the expanded state
+    resetExpansion();
     try {
       await supabaseService.saveSetting('hierarchyMaxDepth', depth.toString(), user.id);
     } catch (err) {
@@ -1772,28 +1495,259 @@ const HistoryDropdown = () => (
       if (!result) return;
       const originalFileName = file?.name.replace(/\.(xlsx|xls)$/, '') || 'laporan';
       const newFileName = `${originalFileName}_processed.xlsx`;
-      downloadExcelFile(result.finalData, newFileName);
+      downloadExcelFile(result.finalData, newFileName, {
+        periodeLaluLabel,
+        periodeIniLabel,
+        sdPeriodeLabel,
+      });
   };
 
+  const extractTextFromPdf = useCallback(async (file: File): Promise<string> => {
+    const [pdfjsLib, pdfWorker] = await Promise.all([
+      import('pdfjs-dist/build/pdf'),
+      import('pdfjs-dist/build/pdf.worker?url'),
+    ]);
+    (pdfjsLib as any).GlobalWorkerOptions.workerSrc = (pdfWorker as any).default;
+
+    const data = await file.arrayBuffer();
+    const pdf = await (pdfjsLib as any).getDocument({ data }).promise;
+
+    let combinedText = '';
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+      const page = await pdf.getPage(pageNumber);
+      const content = await page.getTextContent();
+      const pageText = content.items
+        .map((item: any) => (typeof item.str === 'string' ? item.str : ''))
+        .join(' ');
+      combinedText += `\n\nHalaman ${pageNumber}:\n${pageText}`;
+    }
+
+    return combinedText.replace(/\s+/g, ' ').trim();
+  }, []);
+
+  const handleAutoFillFromPdf = useCallback(async () => {
+    setAiAutofillError(null);
+    setAiAutofillSuccess(null);
+
+    const pdfFiles = newAttachmentFiles.filter(file => {
+      const name = file.name.toLowerCase();
+      return file.type === 'application/pdf' || name.endsWith('.pdf');
+    });
+
+    if (pdfFiles.length === 0) {
+      setAiAutofillSteps([
+        {
+          label: 'Mengumpulkan teks dari lampiran',
+          status: 'error',
+          detail: 'Unggah minimal satu file PDF agar AI dapat membaca isi dokumen.',
+        },
+      ]);
+      setAiAutofillError('Unggah minimal satu dokumen PDF terlebih dahulu untuk digunakan oleh AI.');
+      return;
+    }
+
+    const initialSteps: AiAutofillStep[] = [
+      { label: 'Mengumpulkan teks dari lampiran', status: 'processing' },
+      { label: 'Mengirim permintaan ke AI', status: 'processing' },
+    ];
+    setAiAutofillSteps(initialSteps);
+    setIsAiAutofilling(true);
+
+    const updateStep = (index: number, patch: Partial<AiAutofillStep>) => {
+      setAiAutofillSteps(prev => prev.map((step, idx) => (idx === index ? { ...step, ...patch } : step)));
+    };
+
+    try {
+      let combinedText = '';
+      for (let i = 0; i < pdfFiles.length; i += 1) {
+        const file = pdfFiles[i];
+        updateStep(0, {
+          detail: `Membaca ${file.name} (${i + 1} dari ${pdfFiles.length})`,
+        });
+        try {
+          const extractedText = await extractTextFromPdf(file);
+          if (extractedText) {
+            combinedText += `\n\n==== ${file.name} ====\n${extractedText}`;
+          }
+        } catch (extractionError) {
+          console.warn(`Gagal mengekstrak teks dari ${file.name}`, extractionError);
+        }
+      }
+
+      if (!combinedText.trim()) {
+        updateStep(0, {
+          status: 'error',
+          detail: 'Tidak ada teks yang berhasil diambil dari lampiran PDF.',
+        });
+        throw new Error('Tidak ada teks yang berhasil diambil dari lampiran.');
+      }
+
+      updateStep(0, {
+        status: 'success',
+        detail: `Berhasil mengumpulkan teks dari ${pdfFiles.length} file PDF`,
+      });
+
+      const truncated = combinedText.slice(0, 15000);
+      const systemMessage =
+        'Anda adalah asisten yang mengekstrak informasi kegiatan dari dokumen resmi. ' +
+        'Jawab hanya dengan JSON valid tanpa teks tambahan.';
+
+      const userMessage = [
+        'Berdasarkan kumpulan dokumen berikut, isi field kegiatan yang tersedia. Gunakan format tanggal YYYY-MM-DD.',
+        'Jika informasi tidak ditemukan, biarkan field kosong atau null.',
+        'Gunakan struktur JSON berikut:',
+        '{',
+        '  "nama": string | null,',
+        '  "status": string | null,',
+        '  "tanggal": string | null,',
+        '  "tujuan": string | null,',
+        '  "unitTerkait": string | null,',
+        '  "penanggungJawab": string | null,',
+        '  "capaian": string | null,',
+        '  "pendingIssue": string | null,',
+        '  "rencanaTindakLanjut": string | null,',
+        '  "allocations": [',
+        '    { "kode": string, "uraian": string | null, "jumlah": number | null }',
+        '  ]',
+        '}',
+        '',
+        'Kumpulan dokumen:',
+        truncated,
+      ].join('\n');
+
+      updateStep(1, { detail: 'Mengirim permintaan ke model AI...' });
+
+      const aiResponse = await fetchAiResponse([
+        { role: 'system', content: systemMessage },
+        { role: 'user', content: userMessage },
+      ]);
+      const modelUsed = getLastSuccessfulModel() ?? 'tidak diketahui';
+      console.log('AI autofill menggunakan model:', modelUsed);
+
+      const cleaned = aiResponse.replace(/```json|```/g, '').trim();
+      const parsed = JSON.parse(cleaned);
+
+      setNewActivity(prev => ({
+        ...prev,
+        nama: parsed.nama ?? prev.nama,
+        status: parsed.status ?? prev.status ?? 'Rencana',
+        tanggal_pelaksanaan: parsed.tanggal ?? prev.tanggal_pelaksanaan,
+        tujuan_kegiatan: parsed.tujuan ?? prev.tujuan_kegiatan,
+        kl_unit_terkait: parsed.unitTerkait ?? prev.kl_unit_terkait,
+        penanggung_jawab: parsed.penanggungJawab ?? prev.penanggung_jawab,
+        capaian: parsed.capaian ?? prev.capaian,
+        pending_issue: parsed.pendingIssue ?? prev.pending_issue,
+        rencana_tindak_lanjut: parsed.rencanaTindakLanjut ?? prev.rencana_tindak_lanjut,
+      }));
+
+      if (Array.isArray(parsed.allocations)) {
+        const normalizedAllocations = parsed.allocations
+          .map((item: any) => ({
+            kode: typeof item.kode === 'string' ? item.kode.trim() : '',
+            uraian: typeof item.uraian === 'string' ? item.uraian.trim() : '',
+            jumlah: Number(item.jumlah) || 0,
+          }))
+          .filter(item => item.kode);
+
+        if (normalizedAllocations.length > 0) {
+          setNewActivity(prev => ({
+            ...prev,
+            allocations:
+              prev.allocations && prev.allocations.length > 0
+                ? prev.allocations
+                : normalizedAllocations,
+          }));
+        }
+      }
+
+      updateStep(1, {
+        status: 'success',
+        detail: `Respons AI diterima. Field telah diisi, mohon ditinjau.`,
+      });
+
+      setAiAutofillSuccess(`Field berhasil diisi dari ${pdfFiles.length} dokumen. Mohon tinjau sebelum menyimpan.`);
+    } catch (error) {
+      console.error('AI autofill error:', error);
+      const message = error instanceof Error ? error.message : 'Gagal mengisi form dengan AI.';
+      updateStep(1, {
+        status: 'error',
+        detail: message,
+      });
+      setAiAutofillError(message);
+    } finally {
+      setIsAiAutofilling(false);
+    }
+  }, [extractTextFromPdf, newAttachmentFiles]);
+
   // --- Search Logic ---
+  const searchMatches = useMemo(() => {
+    if (!searchTerm.trim()) return [];
+
+    const orGroups = searchTerm.split(/\s+OR\s+/i).map(g => g.trim()).filter(Boolean);
+    if (!orGroups.length) return [];
+
+    return activeData
+      .map((row, rowIndex) => ({ row, rowIndex }))
+      .filter(({ row }) => {
+        const kode = typeof row?.[0] === 'string' ? row[0].trim() : '';
+        const segments = kode.split('.').map(segment => segment.trim()).filter(Boolean);
+        if (segments.length < 8) {
+          return false;
+        }
+
+        const kodeLower = kode.toLowerCase();
+        const uraianLower = typeof row?.[1] === 'string' ? row[1].toLowerCase() : '';
+
+        return orGroups.some(group => {
+          const andTerms = group.split(/\s+AND\s+/i).map(t => t.trim().toLowerCase()).filter(Boolean);
+          if (!andTerms.length) return false;
+          return andTerms.every(term => kodeLower.includes(term) || uraianLower.includes(term));
+        });
+      })
+      .map(({ row, rowIndex }) => {
+        const clonedRow: any = Array.isArray(row) ? [...row] : [];
+        const kode = typeof row?.[0] === 'string' ? row[0] : '';
+
+        clonedRow.__hasChildren = false;
+        clonedRow.__isDataGroup = false;
+        clonedRow.__isLeaf = true;
+        clonedRow.__isVisible = true;
+        clonedRow.__level = 7;
+        clonedRow.__path = kode || `search-${rowIndex}`;
+
+        return clonedRow;
+      });
+  }, [searchTerm, activeData]);
+
   useEffect(() => {
     if (!searchTerm.trim()) {
       setDisplayedData(hierarchicalData);
       return;
     }
+    if (!searchMatches.length) {
+      setDisplayedData([]);
+      return;
+    }
     if (maxDepth < 8) setMaxDepth(8);
 
-    const orGroups = searchTerm.split(/\s+OR\s+/i).map(g => g.trim()).filter(Boolean);
-    const filtered = hierarchicalData.filter(item => {
-      const kode = String(item[0] || '').toLowerCase();
-      const uraian = String(item[1] || '').toLowerCase();
-      return orGroups.some(group => {
-        const andTerms = group.split(/\s+AND\s+/i).map(t => t.trim().toLowerCase()).filter(Boolean);
-        return andTerms.every(term => kode.includes(term) || uraian.includes(term));
-      });
-    });
-    setDisplayedData(filtered);
-  }, [searchTerm, hierarchicalData, maxDepth]);
+    setDisplayedData(searchMatches);
+  }, [searchTerm, searchMatches, hierarchicalData, maxDepth]);
+
+  const searchTotals = useMemo(() => {
+    if (!searchTerm.trim() || !searchMatches.length) return null;
+
+    const dataRows = searchMatches.filter(row => !row.__hasChildren && !row.__isDataGroup);
+    const totalPagu = dataRows.reduce((sum, row) => sum + (Number(row[2]) || 0), 0);
+    const totalRealisasi = dataRows.reduce((sum, row) => sum + (Number(row[6]) || 0), 0);
+    const persentase = totalPagu > 0 ? (totalRealisasi / totalPagu) * 100 : 0;
+
+    return {
+      totalPagu,
+      totalRealisasi,
+      persentase,
+      sisa: totalPagu - totalRealisasi,
+    };
+  }, [searchTerm, searchMatches]);
 
   // --- Render Logic ---
   if (isInitializing) {
@@ -1824,16 +1778,6 @@ const HistoryDropdown = () => (
                     Kelola User
                   </button>
                 )}
-                <button
-                  onClick={scrollToAiPanel}
-                  className="relative p-2 rounded-full border border-blue-200 text-blue-600 hover:bg-blue-50 transition"
-                  title="Buka AI Chat"
-                  aria-label="Buka AI Chat"
-                >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                  </svg>
-                </button>
                 <div className="flex items-center gap-3 border-l pl-4">
                   <div className="text-right">
                     <p className="text-sm font-medium text-gray-800">{user?.name}</p>
@@ -2136,166 +2080,50 @@ const HistoryDropdown = () => (
               </div>
             </div>
 
-            {/* Totals & Progress */}
-            <div className="bg-white shadow-md rounded-lg overflow-hidden border border-gray-200">
-              <div className="p-6 space-y-6">
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                                                  {/* Pagu Revisi */}
-                                                  <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 border-t-4 border-t-blue-500">
-                                                    <p className="text-sm font-medium text-gray-500">Pagu Revisi</p>
-                                                    <p className="mt-1 text-2xl font-semibold text-gray-900">{formatCurrency(activeTotals[0] || 0)}</p>
-                                                  </div>
-                                                  {/* Realisasi */}
-                                                  <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 border-t-4 border-t-green-500">
-                                                    <p className="text-sm font-medium text-gray-500">Realisasi</p>
-                                                    <p className="mt-1 text-2xl font-semibold text-gray-900">{formatCurrency(activeTotals[4] || 0)}</p>
-                                                  </div>
-                                                  {/* Sisa Anggaran */}
-                                                  <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 border-t-4 border-t-gray-400">
-                                                    <p className="text-sm font-medium text-gray-500">Sisa Anggaran</p>
-                                                    <p className="mt-1 text-2xl font-semibold text-gray-900">{formatCurrency((activeTotals[0] || 0) - (activeTotals[4] || 0))}</p>
-                                                  </div>
-                                                </div>                <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm">
-                  <div className="max-w-3xl mx-auto">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-gray-700">Capaian Realisasi</span>
-                      <span className="text-sm font-semibold text-indigo-700">{progressPercentage.toFixed(2)}%</span>
-                    </div>
-                    <div className="w-full bg-gray-100 rounded-full h-2.5"><div className="bg-gradient-to-r from-indigo-500 to-indigo-600 h-full rounded-full" style={{ width: `${progressPercentage}%` }}/></div>
-                    {/* Additional Totals Display */}
-                    {(budgetView === 'realisasi-outstanding' || budgetView === 'realisasi-komitmen') && (additionalTotals.outstanding > 0 || additionalTotals.komitmen > 0) && (
-                        <div className="mt-3 flex justify-center items-center gap-x-6 gap-y-2 flex-wrap">
-                            {(budgetView === 'realisasi-outstanding' || budgetView === 'realisasi-komitmen') && additionalTotals.outstanding > 0 && (
-                                <div className="text-sm text-gray-600">
-                                    <span className="font-semibold text-yellow-800">Outstanding:</span> {formatCurrency(additionalTotals.outstanding)}
-                                </div>
-                            )}
-                            {budgetView === 'realisasi-komitmen' && additionalTotals.komitmen > 0 && (
-                                <div className="text-sm text-gray-600">
-                                    <span className="font-semibold text-orange-800">Komitmen:</span> {formatCurrency(additionalTotals.komitmen)}
-                                </div>
-                            )}
-                        </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
+            <BudgetOverviewPanel
+              activeTotals={activeTotals}
+              progressPercentage={progressPercentage}
+              additionalTotals={additionalTotals}
+              budgetView={budgetView}
+              formatCurrency={formatCurrency}
+            />
 
-            {/* Level 7 Account Totals */}
-            {level7Totals.length > 0 && (
-              <div className="bg-white shadow-md rounded-lg overflow-hidden border border-gray-200">
-                <div className="p-4 bg-gray-50 border-b border-gray-200 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                  <div 
-                    className="flex items-center justify-between cursor-pointer hover:bg-gray-100 transition-colors duration-200 rounded-md px-2 py-1"
-                    onClick={() => setShowAccountSummary(!showAccountSummary)}
-                  >
-                    <h3 className="text-lg font-medium text-gray-800">Rekapitulasi per Akun</h3>
-                    <svg 
-                      className={`w-5 h-5 text-gray-500 transform transition-transform duration-200 ${showAccountSummary ? 'rotate-180' : ''}`} 
-                      fill="none" 
-                      viewBox="0 0 24 24" 
-                      stroke="currentColor"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Tampilkan Anggaran</span>
-                    <div className="relative">
-                      <select
-                        className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                        value={budgetView}
-                        onChange={(e) => setBudgetView(e.target.value)}
-                      >
-                        <option value="realisasi-laporan">Realisasi (Sesuai Laporan)</option>
-                        <option value="realisasi-outstanding">Realisasi + Outstanding</option>
-                        <option value="realisasi-komitmen">Realisasi + Outstanding + Komitmen</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-                {showAccountSummary && (
-                  <div className="p-6 space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {level7Totals.map((item, index) => (
-                        <div key={index} className="bg-white rounded-lg border border-gray-200 p-3 shadow-sm hover:shadow-md transition-shadow">
-                          <div className="space-y-2">
-                            <div className="flex justify-between items-start">
-                              <div className="flex-1 min-w-0">
-                                <h4 className="text-sm font-medium text-gray-900 break-words">{item.uraian}</h4>
-                                <p className="text-xs text-gray-500">{item.code}</p>
-                              </div>
-                              <span className="text-xs font-medium bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full ml-2">
-                                {item.paguRevisi > 0 ? `${((item.realisasi / item.paguRevisi) * 100).toFixed(2)}%` : '0.00%'}
-                              </span>
-                            </div>
-                            
-                            <div className="w-full bg-gray-100 rounded-full h-1.5">
-                              <div 
-                                className="h-full rounded-full transition-all duration-300 ease-out" 
-                                style={{ 
-                                  width: `${item.paguRevisi > 0 ? Math.min(100, Math.round((item.realisasi / item.paguRevisi) * 100)) : 0}%`,
-                                  backgroundColor: item.paguRevisi > 0 ? '#3b82f6' : '#e5e7eb' // Blue if has budget, gray if not
-                                }}
-                              ></div>
-                            </div>
-                            
-                                                          <div className="grid grid-cols-3 gap-1 text-xs">
-                                                            <div>
-                                                              <p className="text-gray-500">Pagu</p>
-                                                              <p className="font-medium">{item.paguRevisi?.toLocaleString('id-ID') || '0'}</p>
-                                                            </div>
-                                                            <div className="text-center">
-                                                              <p className="text-gray-500">Realisasi</p>
-                                                              <p className="font-medium">{item.realisasi?.toLocaleString('id-ID') || '0'}</p>
-                                                            </div>
-                                                            <div className="text-right">
-                                                              <p className="text-gray-500">Sisa</p>
-                                                              <p className="font-medium">{item.sisa?.toLocaleString('id-ID') || '0'}</p>
-                                                            </div>
-                                                          </div>
-                                                          
-                                                                                        {/* Conditional display for outstanding/komitmen per account */}
-                                                          
-                                                                                        {(budgetView !== 'realisasi-laporan') && (item.outstanding > 0 || item.komitmen > 0) && (
-                                                          
-                                                                                          <div className="mt-2 pt-2 border-t border-gray-100 flex justify-around text-xs text-center">
-                                                          
-                                                                                              {(budgetView === 'realisasi-outstanding' || budgetView === 'realisasi-komitmen') && item.outstanding > 0 && (
-                                                          
-                                                                                                  <div>
-                                                          
-                                                                                                      <p className="text-gray-500">Outstanding</p>
-                                                          
-                                                                                                      <p className="font-medium text-yellow-800">{formatCurrency(item.outstanding)}</p>
-                                                          
-                                                                                                  </div>
-                                                          
-                                                                                              )}
-                                                          
-                                                                                              {budgetView === 'realisasi-komitmen' && item.komitmen > 0 && (
-                                                          
-                                                                                                  <div>
-                                                          
-                                                                                                      <p className="text-gray-500">Komitmen</p>
-                                                          
-                                                                                                      <p className="font-medium text-orange-800">{formatCurrency(item.komitmen)}</p>
-                                                          
-                                                                                                  </div>
-                                                          
-                                                                                              )}
-                                                          
-                                                                                          </div>
-                                                          
-                                                                                        )}                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+            <AccountSummaryPanel
+              totals={level7Totals}
+              budgetView={budgetView}
+              onBudgetViewChange={setBudgetView}
+              show={showAccountSummary}
+              onToggle={() => setShowAccountSummary(prev => !prev)}
+              formatCurrency={formatCurrency}
+            />
+
+            {/* Analytics Panels */}
+            <MonthlyAnalyticsPanel
+              currentReport={currentReport}
+              allReports={allReports}
+              onAIAnalysis={(analysis) => {
+                const aiMessage: AiMessage = {
+                  id: generateMessageId(),
+                  sender: 'assistant',
+                  content: analysis,
+                  timestamp: new Date().toISOString()
+                };
+                setAiMessages(prev => [...prev, aiMessage]);
+              }}
+            />
+
+            <TrendAnalyticsPanel
+              allReports={allReports}
+              onAIAnalysis={(analysis) => {
+                const aiMessage: AiMessage = {
+                  id: generateMessageId(),
+                  sender: 'assistant',
+                  content: analysis,
+                  timestamp: new Date().toISOString()
+                };
+                setAiMessages(prev => [...prev, aiMessage]);
+              }}
+            />
 
             {/* Data Table with Search and Filter */}
             <div className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200 mb-6">
@@ -2394,13 +2222,38 @@ const HistoryDropdown = () => (
                       const isGroup = row.__isGroup;
                       const paguRevisi = row[2];
                       const sdPeriode = row[6];
+                      const level = Number(row.__level ?? 0);
+                      const indent = Math.max(level, 0) * 12;
+                      const rawCode = String(row[0] ?? '');
+                      const codeSegments = rawCode.split('.');
+                      const showFullCode = Boolean(searchTerm.trim());
+                      const displayCode = showFullCode
+                        ? rawCode
+                        : level > 0 && codeSegments.length > 0
+                          ? (codeSegments.pop() || rawCode)
+                          : rawCode;
                       return (
                         <tr key={`${row.__path}-${rowIndex}`} className={`transition-colors ${isGroup ? 'bg-gray-100 font-medium' : 'odd:bg-white even:bg-slate-50'} hover:bg-blue-50`}>
                           <td className="px-6 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
                             <div className="flex items-center">
-                              {showExpandCollapse && <button onClick={() => toggleNode(row.__path, row.__isDataGroup)} className="mr-2 w-4">{row.__isExpanded ? '▼' : '▶'}</button>}
-                              {!showExpandCollapse && <div className="w-6"></div>}
-                              <span>{row[0]}</span>
+                              <div className="flex items-center" style={{ marginLeft: `${indent}px` }}>
+                                {showExpandCollapse && (
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleNode(row.__path, row.__isDataGroup)}
+                                    className={`mr-2 w-6 h-6 flex items-center justify-center rounded-full border text-xs font-semibold transition-colors ${
+                                    row.__isExpanded
+                                      ? 'bg-blue-100 border-blue-300 text-blue-700'
+                                      : 'bg-gray-100 border-gray-300 text-gray-600'
+                                  }`}
+                                  aria-label={row.__isExpanded ? 'Collapse kode akun' : 'Expand kode akun'}
+                                  >
+                                    {row.__isExpanded ? '-' : '+'}
+                                  </button>
+                                )}
+                                {!showExpandCollapse && <div className="mr-2 w-6 h-6"></div>}
+                                <span>{displayCode}</span>
+                              </div>
                             </div>
                           </td>
                           <td className="px-6 py-3 text-sm text-gray-700">{row[1]}</td>
@@ -2595,12 +2448,14 @@ const HistoryDropdown = () => (
                                 <div className="space-y-8">
                                     {paginatedActivityGroups.map(group => (
                                         <div key={group.key} className="space-y-3">
-                                            <div className="flex items-center justify-between">
-                                                <h3 className="text-lg font-semibold text-gray-800">{group.label}</h3>
-                                                <span className="text-xs text-gray-500">
-                                                    {totalActivitiesByGroup.get(group.key) ?? group.activities.length} kegiatan
-                                                </span>
-                                            </div>
+                                            {group.label ? (
+                                                <div className="flex items-center justify-between">
+                                                    <h3 className="text-lg font-semibold text-gray-800">{group.label}</h3>
+                                                    <span className="text-xs text-gray-500">
+                                                        {totalActivitiesByGroup.get(group.key) ?? group.activities.length} kegiatan
+                                                    </span>
+                                                </div>
+                                            ) : null}
                                             <div className="border border-gray-200 rounded-lg shadow-sm overflow-hidden">
                                                 <div className="overflow-x-auto">
                                                     <table className="min-w-full md:min-w-[760px] table-fixed divide-y divide-gray-200">
@@ -2693,7 +2548,7 @@ const HistoryDropdown = () => (
                                                         </tbody>
                                                         <tfoot className="bg-gray-50 font-medium">
                                                             <tr>
-                                                                <td className="px-4 py-3 text-right" colSpan={2}>Total {group.label}</td>
+                                                                <td className="px-4 py-3 text-right" colSpan={2}>Total Alokasi Halaman Ini</td>
                                                                 <td className="px-4 py-3 text-right">
                                                                     {formatCurrency(group.activities.reduce((sum, activity) => 
                                                                         sum + activity.allocations.reduce((allocSum, alloc) => allocSum + (alloc.jumlah || 0), 0),
@@ -2927,6 +2782,169 @@ const HistoryDropdown = () => (
               </div>
               <div className="p-6 overflow-y-auto flex-1">
                 <div className="space-y-6 bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+                  {/* Lampiran */}
+                  <div className="space-y-3">
+                    <label className="block text-sm font-medium text-gray-700">Lampiran Kegiatan</label>
+
+                    {activityAttachments.length > 0 && (
+                      <div className="space-y-2">
+                        {activityAttachments.map(attachment => {
+                          const isMarked = attachmentsToRemove.has(attachment.attachmentId);
+                          const inlinePreview = isInlinePreview(attachment.fileName);
+                          const href = inlinePreview ? attachment.filePath : getAttachmentDownloadUrl(attachment);
+                          return (
+                            <div
+                              key={attachment.attachmentId}
+                              className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 border rounded-md text-sm ${isMarked ? 'border-red-300 bg-red-50' : 'border-gray-200 bg-gray-50'}`}
+                            >
+                              <div className="space-y-1">
+                                <p className={`break-all ${isMarked ? 'line-through text-red-600' : 'text-gray-700'}`}>
+                                  {attachment.fileName}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  Diunggah {new Date(attachment.uploadedAt).toLocaleString('id-ID')}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <a
+                                  href={href}
+                                  className="inline-flex items-center px-3 py-1.5 border border-blue-500 text-blue-600 rounded-md hover:bg-blue-100 transition"
+                                  {...(inlinePreview
+                                    ? { target: '_blank', rel: 'noopener noreferrer' }
+                                    : { download: attachment.fileName })}
+                                >
+                                  {inlinePreview ? 'Buka' : 'Unduh'}
+                                </a>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleAttachmentRemoval(attachment.attachmentId)}
+                                  className={`text-xs font-medium ${isMarked ? 'text-gray-600 hover:text-gray-700' : 'text-red-600 hover:text-red-700'}`}
+                                >
+                                  {isMarked ? 'Batalkan' : 'Hapus'}
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {attachmentsToRemove.size > 0 && (
+                      <p className="text-xs text-yellow-600">
+                        Lampiran bertanda akan dihapus setelah Anda menyimpan perubahan.
+                      </p>
+                    )}
+
+                    {newAttachmentFiles.length > 0 && (
+                      <div className="space-y-2 text-xs text-gray-600">
+                        <p className="font-medium text-gray-700">Lampiran baru:</p>
+                        {newAttachmentFiles.map((file, index) => (
+                          <div
+                            key={`${file.name}-${file.lastModified}`}
+                            className="flex items-center justify-between gap-3 border border-dashed border-blue-200 rounded-md px-3 py-2 bg-blue-50/60"
+                          >
+                            <span className="break-all">{file.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveNewAttachment(index)}
+                              className="text-red-500 hover:text-red-600"
+                            >
+                              Hapus
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div>
+                      <input
+                        id="activity-attachment"
+                        type="file"
+                        multiple
+                        className="block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                        onChange={(e) => {
+                          handleAttachmentSelection(e.target.files);
+                          if (e.target) {
+                            e.target.value = '';
+                          }
+                        }}
+                      />
+                      <p className="mt-1 text-xs text-gray-500">
+                        Anda dapat memilih beberapa file sekaligus. Format yang didukung: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG.
+                      </p>
+                      <div className="mt-3 flex flex-col sm:flex-row sm:items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={handleAutoFillFromPdf}
+                          disabled={isAiAutofilling}
+                          className={`inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-md border ${
+                            isAiAutofilling
+                              ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                              : 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700'
+                          }`}
+                        >
+                          {isAiAutofilling ? (
+                            <span className="flex items-center gap-2">
+                              <svg
+                                className="h-4 w-4 animate-spin text-current"
+                                xmlns="http://www.w3.org/2000/svg"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                              >
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path
+                                  className="opacity-75"
+                                  fill="currentColor"
+                                  d="M4 12a8 8 0 018-8V2a10 10 0 100 20 10 10 0 01-8-10z"
+                                ></path>
+                              </svg>
+                              <span>Proses AI sedang berjalan...</span>
+                            </span>
+                          ) : (
+                            'Isi Form Otomatis dengan AI'
+                          )}
+                        </button>
+                        <p className="text-xs text-gray-500 max-w-md">
+                          Unggah satu atau lebih dokumen PDF sebagai lampiran, lalu gunakan tombol ini agar AI menyalin data ke form.
+                        </p>
+                      </div>
+                      {aiAutofillSteps.length > 0 && (
+                        <div className="mt-3 space-y-2 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-gray-700">
+                          {aiAutofillSteps.map((step, index) => (
+                            <div key={index} className="flex items-start gap-2">
+                              {step.status === 'processing' && (
+                                <svg className="h-4 w-4 mt-[2px] animate-spin text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V2a10 10 0 100 20 10 10 0 01-8-10z"></path>
+                                </svg>
+                              )}
+                              {step.status === 'success' && (
+                                <svg className="h-4 w-4 mt-[2px] text-green-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                              {step.status === 'error' && (
+                                <svg className="h-4 w-4 mt-[2px] text-red-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                              )}
+                              <div>
+                                <p className="font-medium">{step.label}</p>
+                                {step.detail && <p className="mt-0.5 text-gray-600">{step.detail}</p>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {aiAutofillError && (
+                        <p className="mt-2 text-xs text-red-600">{aiAutofillError}</p>
+                      )}
+                      {aiAutofillSuccess && (
+                        <p className="mt-2 text-xs text-green-600">{aiAutofillSuccess}</p>
+                      )}
+                    </div>
+                  </div>
+
                   {/* Nama Kegiatan */}
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
@@ -2998,96 +3016,6 @@ const HistoryDropdown = () => (
                       </div>
                     </div>
                     <p id="status-description" className="mt-1 text-xs text-gray-500">Pilih status terkini dari kegiatan ini</p>
-                  </div>
-
-                  {/* Lampiran */}
-                  <div className="space-y-3">
-                    <label className="block text-sm font-medium text-gray-700">Lampiran Kegiatan</label>
-
-                    {activityAttachments.length > 0 && (
-                      <div className="space-y-2">
-                    {activityAttachments.map(attachment => {
-                      const isMarked = attachmentsToRemove.has(attachment.attachmentId);
-                      const inlinePreview = isInlinePreview(attachment.fileName);
-                      const href = inlinePreview ? attachment.filePath : getAttachmentDownloadUrl(attachment);
-                      return (
-                        <div
-                          key={attachment.attachmentId}
-                          className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 border rounded-md text-sm ${isMarked ? 'border-red-300 bg-red-50' : 'border-gray-200 bg-gray-50'}`}
-                        >
-                          <div className="space-y-1">
-                            <p className={`break-all ${isMarked ? 'line-through text-red-600' : 'text-gray-700'}`}>
-                              {attachment.fileName}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              Diunggah {new Date(attachment.uploadedAt).toLocaleString('id-ID')}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <a
-                              href={href}
-                              className="inline-flex items-center px-3 py-1.5 border border-blue-500 text-blue-600 rounded-md hover:bg-blue-100 transition"
-                              {...(inlinePreview
-                                ? { target: '_blank', rel: 'noopener noreferrer' }
-                                : { download: attachment.fileName })}
-                            >
-                              {inlinePreview ? 'Buka' : 'Unduh'}
-                            </a>
-                            <button
-                              type="button"
-                              onClick={() => toggleAttachmentRemoval(attachment.attachmentId)}
-                              className={`text-xs font-medium ${isMarked ? 'text-gray-600 hover:text-gray-700' : 'text-red-600 hover:text-red-700'}`}
-                            >
-                              {isMarked ? 'Batalkan' : 'Hapus'}
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                      </div>
-                    )}
-
-                    {attachmentsToRemove.size > 0 && (
-                      <p className="text-xs text-yellow-600">
-                        Lampiran bertanda akan dihapus setelah Anda menyimpan perubahan.
-                      </p>
-                    )}
-
-                    {newAttachmentFiles.length > 0 && (
-                      <div className="space-y-2 text-xs text-gray-600">
-                        <p className="font-medium text-gray-700">Lampiran baru:</p>
-                        {newAttachmentFiles.map((file, index) => (
-                          <div key={`${file.name}-${file.lastModified}`} className="flex items-center justify-between gap-3 border border-dashed border-blue-200 rounded-md px-3 py-2 bg-blue-50/60">
-                            <span className="break-all">{file.name}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveNewAttachment(index)}
-                              className="text-red-500 hover:text-red-600"
-                            >
-                              Hapus
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    <div>
-                      <input
-                        id="activity-attachment"
-                        type="file"
-                        multiple
-                        className="block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                        onChange={(e) => {
-                          handleAttachmentSelection(e.target.files);
-                          if (e.target) {
-                            e.target.value = '';
-                          }
-                        }}
-                      />
-                      <p className="mt-1 text-xs text-gray-500">
-                        Anda dapat memilih beberapa file sekaligus. Format yang didukung: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG.
-                      </p>
-                    </div>
                   </div>
 
                   {/* Alokasi Anggaran */}
@@ -3289,10 +3217,3 @@ const HistoryDropdown = () => (
 }
 
 export default App;
-
-
-
-
-
-
-
