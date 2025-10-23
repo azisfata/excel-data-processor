@@ -1646,7 +1646,7 @@ const HistoryDropdown = () => (
 
       updateStep(1, {
         status: 'success',
-        detail: `Respons AI (${modelUsed}) diterima. Field telah diisi, mohon ditinjau.`,
+        detail: `Respons AI diterima. Field telah diisi, mohon ditinjau.`,
       });
 
       setAiAutofillSuccess(`Field berhasil diisi dari ${pdfFiles.length} dokumen. Mohon tinjau sebelum menyimpan.`);
