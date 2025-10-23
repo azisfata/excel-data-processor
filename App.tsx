@@ -237,34 +237,52 @@ const App: React.FC = () => {
         }
       }
 
+      // Calculate column widths based on the available page width
+      const pageWidth = doc.internal.pageSize.width;
+      const margin = 16; // left + right margin
+      const availableWidth = pageWidth - margin;
+      
+      // Define proportional widths for each column
+      // Total of 177 units below, adjust as needed
+      const totalUnits = 177;
+      const unitWidth = availableWidth / totalUnits;
+      
       // Add table
       autoTable(doc, {
-        head: [['No.', 'Komponen Kegiatan', 'Judul Kegiatan', 'K/L/Unit Terkait', 'Tujuan', 'RBPN/PP/KP', 'Tanggal Pelaksanaan', 'Rencana Anggaran (Rp)', 'PIC']],
+        head: [['No.', 'Komponen Kegiatan', 'Judul Kegiatan', 'K/L/Unit Terkait', 'Tujuan', 'RB', 'PN/PP/KP', 'Tanggal Pelaksanaan', 'Rencana Anggaran (Rp)', 'PIC']],
         body: tableData,
         startY: 40,
         styles: {
-          fontSize: 9,
-          cellPadding: 4
+          fontSize: 8, // Slightly smaller font to fit more content
+          cellPadding: 3,
+          overflow: 'linebreak', // Handle text overflow by breaking lines
+          valign: 'middle'
         },
         headStyles: {
           fillColor: [30, 59, 175], // Blue color
           textColor: [255, 255, 255],
           fontStyle: 'bold'
         },
+        bodyStyles: {
+          textColor: [50, 50, 50]
+        },
         alternateRowStyles: {
           fillColor: [245, 245, 245]
         },
-        margin: { left: 10, right: 10 },
+        margin: { left: 8, right: 8 }, // Slightly more margin to ensure it fits on A4
+        tableWidth: 'wrap', // Make table width adapt to content but stay within bounds
+        // Calculate column widths based on content importance and available space
         columnStyles: {
-          0: { cellWidth: 15, halign: 'center' }, // No
-          1: { cellWidth: 35 }, // Komponen Kegiatan
-          2: { cellWidth: 40 }, // Judul Kegiatan
-          3: { cellWidth: 25 }, // K/L/Unit Terkait
-          4: { cellWidth: 35 }, // Tujuan
-          5: { cellWidth: 20, halign: 'center' }, // RBPN/PP/KP
-          6: { cellWidth: 25, halign: 'center' }, // Tanggal Pelaksanaan
-          7: { cellWidth: 30, halign: 'right' }, // Rencana Anggaran (Rp)
-          8: { cellWidth: 20 } // PIC
+          0: { cellWidth: Math.round(unitWidth * 6), halign: 'center' }, // No (narrow - 6 units)
+          1: { cellWidth: Math.round(unitWidth * 25), halign: 'left' }, // Komponen Kegiatan (wide - 25 units)
+          2: { cellWidth: Math.round(unitWidth * 25), halign: 'left' }, // Judul Kegiatan (wide - 25 units)
+          3: { cellWidth: Math.round(unitWidth * 15), halign: 'left' }, // K/L/Unit Terkait (medium - 15 units)
+          4: { cellWidth: Math.round(unitWidth * 20), halign: 'left' }, 
+          5: { cellWidth: Math.round(unitWidth * 12), halign: 'center' },// Tujuan (medium wide - 20 units)
+          6: { cellWidth: Math.round(unitWidth * 12), halign: 'center' }, // RBPN/PP/KP (narrow - 12 units)
+          7: { cellWidth: Math.round(unitWidth * 18), halign: 'center' }, // Tanggal Pelaksanaan (medium - 18 units)
+          8: { cellWidth: Math.round(unitWidth * 20), halign: 'right' }, // Rencana Anggaran (Rp) (medium - 20 units)
+          9: { cellWidth: Math.round(unitWidth * 16), halign: 'left' } // PIC (medium - 16 units)
         }
       });
 
@@ -1539,7 +1557,7 @@ const HistoryDropdown = () => (
         setActivities(prev => [...prev, activityWithAttachments]);
       }
 
-      setNewActivity({ nama: '', allocations: [], status: 'Rencana', attachments: [], tanggal_pelaksanaan: '', tujuan_kegiatan: '', kl_unit_terkait: '', rbpn_pp_kp: '', penanggung_jawab: '', capaian: '', pending_issue: '', rencana_tindak_lanjut: '' });
+      setNewActivity({ nama: '', allocations: [], status: 'Rencana', attachments: [], tanggal_pelaksanaan: '', tujuan_kegiatan: '', kl_unit_terkait: '', penanggung_jawab: '', capaian: '', pending_issue: '', rencana_tindak_lanjut: '' });
       setActivityAttachments([]);
       setNewAttachmentFiles([]);
       setAttachmentsToRemove(new Set());
@@ -1581,7 +1599,7 @@ const HistoryDropdown = () => (
   };
 
   const handleCancelEdit = () => {
-    setNewActivity({ nama: '', allocations: [], status: 'Rencana', attachments: [], tanggal_pelaksanaan: '', tujuan_kegiatan: '', kl_unit_terkait: '', rbpn_pp_kp: '', penanggung_jawab: '', capaian: '', pending_issue: '', rencana_tindak_lanjut: '' });
+    setNewActivity({ nama: '', allocations: [], status: 'Rencana', attachments: [], tanggal_pelaksanaan: '', tujuan_kegiatan: '', kl_unit_terkait: '', penanggung_jawab: '', capaian: '', pending_issue: '', rencana_tindak_lanjut: '' });
     setActivityAttachments([]);
     setNewAttachmentFiles([]);
     setAttachmentsToRemove(new Set());
