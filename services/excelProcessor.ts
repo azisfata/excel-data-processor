@@ -3,7 +3,6 @@ import { ExcelData, ProcessingResult } from '../types';
 import {
     normalizeCodeAndDescription,
     deriveAccountNameMap,
-    getLastSegmentFromCode,
     isSixDigitSegment,
 } from '../utils/dataNormalization';
 
@@ -250,7 +249,21 @@ function prosesDanStrukturData(data: ExcelData): ExcelData {
 function filterDanHitungTotal(data: ExcelData): { finalData: ExcelData; totals: number[] } {
     const filteredData = data.filter(row => {
         const kodeStr = typeof row[0] === 'string' ? row[0].trim() : '';
-        const lastSegment = getLastSegmentFromCode(kodeStr);
+        if (!kodeStr) {
+            return false;
+        }
+
+        const segments = kodeStr
+            .split('.')
+            .map(segment => segment.trim())
+            .filter(Boolean);
+
+        // Pastikan hanya kode lengkap (8 level) yang ikut ke hasil akhir.
+        if (segments.length < 8) {
+            return false;
+        }
+
+        const lastSegment = segments[segments.length - 1] || '';
         return isSixDigitSegment(lastSegment);
     });
 
