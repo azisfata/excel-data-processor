@@ -11,15 +11,13 @@ import {
   Legend,
 } from 'chart.js';
 import { Bar, Line } from 'react-chartjs-2';
-import { 
-  MonthlyReport, 
-  MonthlyTrendData, 
-  AccountTrendData,
+import {
+  MonthlyReport,
   createMonthlyTrendData,
   createAccountTrendData,
   getAllLevel7Accounts,
   createMonthlyCompositionData,
-  createCumulativeData
+  createCumulativeData,
 } from '../../../services/historicalDataService';
 
 // Register Chart.js components
@@ -39,10 +37,7 @@ interface TrendAnalyticsPanelProps {
   onAIAnalysis: (analysis: string) => void;
 }
 
-const TrendAnalyticsPanel: React.FC<TrendAnalyticsPanelProps> = ({
-  allReports,
-  onAIAnalysis
-}) => {
+const TrendAnalyticsPanel: React.FC<TrendAnalyticsPanelProps> = ({ allReports, onAIAnalysis }) => {
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
   const [selectedAccount, setSelectedAccount] = useState<string>('');
   const [viewType, setViewType] = useState<'total' | 'account'>('total');
@@ -90,7 +85,8 @@ const TrendAnalyticsPanel: React.FC<TrendAnalyticsPanelProps> = ({
       if (index === 0) return { ...data, change: 0, changePercent: 0 };
       const prevData = monthlyTrendData[index - 1];
       const change = data.totalRealisasi - prevData.totalRealisasi;
-      const changePercent = prevData.totalRealisasi > 0 ? (change / prevData.totalRealisasi) * 100 : 0;
+      const changePercent =
+        prevData.totalRealisasi > 0 ? (change / prevData.totalRealisasi) * 100 : 0;
       return { ...data, change, changePercent };
     });
 
@@ -99,24 +95,29 @@ const TrendAnalyticsPanel: React.FC<TrendAnalyticsPanelProps> = ({
       month: data.month,
       year: data.year,
       realisasi: data.totalRealisasi,
-      persentase: data.persentase
+      persentase: data.persentase,
     }));
 
     // Hitung velocity (kecepatan penyerapan)
-    const avgMonthlyAbsorption = trendAnalysis.reduce((sum, data) => sum + data.totalRealisasi, 0) / trendAnalysis.length;
+    const avgMonthlyAbsorption =
+      trendAnalysis.reduce((sum, data) => sum + data.totalRealisasi, 0) / trendAnalysis.length;
     const maxAbsorption = Math.max(...trendAnalysis.map(data => data.totalRealisasi));
     const minAbsorption = Math.min(...trendAnalysis.map(data => data.totalRealisasi));
     const volatility = ((maxAbsorption - minAbsorption) / avgMonthlyAbsorption) * 100;
 
     // Forecast sederhana (linear trend)
     const lastThreeMonths = trendAnalysis.slice(-3);
-    const avgGrowth = lastThreeMonths.length > 1 
-      ? (lastThreeMonths[lastThreeMonths.length - 1].totalRealisasi - lastThreeMonths[0].totalRealisasi) / (lastThreeMonths.length - 1)
-      : 0;
-    
-    const nextMonthForecast = trendAnalysis.length > 0 
-      ? trendAnalysis[trendAnalysis.length - 1].totalRealisasi + avgGrowth
-      : 0;
+    const avgGrowth =
+      lastThreeMonths.length > 1
+        ? (lastThreeMonths[lastThreeMonths.length - 1].totalRealisasi -
+            lastThreeMonths[0].totalRealisasi) /
+          (lastThreeMonths.length - 1)
+        : 0;
+
+    const nextMonthForecast =
+      trendAnalysis.length > 0
+        ? trendAnalysis[trendAnalysis.length - 1].totalRealisasi + avgGrowth
+        : 0;
 
     // Identifikasi dormant items
     const dormantAccounts = availableAccounts.filter(account => {
@@ -135,39 +136,65 @@ const TrendAnalyticsPanel: React.FC<TrendAnalyticsPanelProps> = ({
 - Volatilitas: ${volatility.toFixed(1)}% ${volatility > 50 ? '(Tinggi)' : volatility > 25 ? '(Sedang)' : '(Rendah)'}
 
 🔍 **Pola Belanja (Spending Pattern):**
-${spendingPattern.map(data => 
-  `- ${data.month} ${data.year}: Rp ${data.realisasi.toLocaleString('id-ID')} (${data.persentase.toFixed(1)}%)`
-).join('\n')}
+${spendingPattern
+  .map(
+    data =>
+      `- ${data.month} ${data.year}: Rp ${data.realisasi.toLocaleString('id-ID')} (${data.persentase.toFixed(1)}%)`
+  )
+  .join('\n')}
 
 📈 **Analisis Kecepatan Penyerapan (Absorption Velocity):**
 - ${avgGrowth > 0 ? '📈 Tren Positif' : avgGrowth < 0 ? '📉 Tren Negatif' : '➡️ Tren Stabil'}
 - Pertumbuhan rata-rata: Rp ${avgGrowth.toLocaleString('id-ID')}/bulan
-- ${volatility > 50 ? '⚠️ Volatilitas tinggi - pola belanja tidak konsisten' : 
-    volatility > 25 ? '⚠️ Volatilitas sedang - perlu monitoring' : 
-    '✅ Volatilitas rendah - pola belanja stabil'}
+- ${
+      volatility > 50
+        ? '⚠️ Volatilitas tinggi - pola belanja tidak konsisten'
+        : volatility > 25
+          ? '⚠️ Volatilitas sedang - perlu monitoring'
+          : '✅ Volatilitas rendah - pola belanja stabil'
+    }
 
 🎯 **Peramalan Sederhana:**
 - Forecast bulan depan: Rp ${nextMonthForecast.toLocaleString('id-ID')}
-- ${nextMonthForecast > avgMonthlyAbsorption ? '📈 Diperkirakan meningkat' : 
-    nextMonthForecast < avgMonthlyAbsorption ? '📉 Diperkirakan menurun' : 
-    '➡️ Diperkirakan stabil'}
+- ${
+      nextMonthForecast > avgMonthlyAbsorption
+        ? '📈 Diperkirakan meningkat'
+        : nextMonthForecast < avgMonthlyAbsorption
+          ? '📉 Diperkirakan menurun'
+          : '➡️ Diperkirakan stabil'
+    }
 
 🔕 **Akun "Tidur" (Dormant Items):**
 - Total akun tanpa realisasi: ${dormantAccounts.length} dari ${availableAccounts.length} akun
-- ${dormantAccounts.length > 0 ? 
-    `⚠️ Perlu review: ${dormantAccounts.slice(0, 5).map(a => a.uraian).join(', ')}${dormantAccounts.length > 5 ? '...' : ''}` : 
-    '✅ Tidak ada akun tidur signifikan'}
+- ${
+      dormantAccounts.length > 0
+        ? `⚠️ Perlu review: ${dormantAccounts
+            .slice(0, 5)
+            .map(a => a.uraian)
+            .join(', ')}${dormantAccounts.length > 5 ? '...' : ''}`
+        : '✅ Tidak ada akun tidur signifikan'
+    }
 
 💡 **Rekomendasi Strategis:**
-- ${volatility > 50 ? '🎯 Prioritaskan stabilisasi pola belanja bulanan' : 
-    volatility > 25 ? '🎯 Monitoring lebih ketat pada fluktuasi belanja' : 
-    '✅ Pertahankan konsistensi belanja'}
-- ${avgGrowth < 0 ? '🚨 Segera evaluasi penyebab penurunan tren' : 
-    avgGrowth > 0 ? '📈 Manfaatkan momentum tren positif' : 
-    '🎯 Cari opportunities untuk meningkatkan penyerapan'}
-- ${dormantAccounts.length > availableAccounts.length * 0.3 ? 
-    '🔍 Review ulang akun-akun yang tidak pernah terpakai' : 
-    '✅ Utilisasi akun sudah optimal'}
+- ${
+      volatility > 50
+        ? '🎯 Prioritaskan stabilisasi pola belanja bulanan'
+        : volatility > 25
+          ? '🎯 Monitoring lebih ketat pada fluktuasi belanja'
+          : '✅ Pertahankan konsistensi belanja'
+    }
+- ${
+      avgGrowth < 0
+        ? '🚨 Segera evaluasi penyebab penurunan tren'
+        : avgGrowth > 0
+          ? '📈 Manfaatkan momentum tren positif'
+          : '🎯 Cari opportunities untuk meningkatkan penyerapan'
+    }
+- ${
+      dormantAccounts.length > availableAccounts.length * 0.3
+        ? '🔍 Review ulang akun-akun yang tidak pernah terpakai'
+        : '✅ Utilisasi akun sudah optimal'
+    }
     `.trim();
 
     onAIAnalysis(analysis);
@@ -192,9 +219,9 @@ ${spendingPattern.map(data =>
               return `${label}: Rp ${value.toLocaleString('id-ID')}`;
             }
             return `${label}: ${value.toFixed(1)}%`;
-          }
-        }
-      }
+          },
+        },
+      },
     },
     scales: {
       y: {
@@ -202,10 +229,10 @@ ${spendingPattern.map(data =>
         ticks: {
           callback: (value: any) => {
             return `Rp ${(value / 1000000).toFixed(0)}M`;
-          }
-        }
-      }
-    }
+          },
+        },
+      },
+    },
   };
 
   const stackedBarOptions = {
@@ -220,9 +247,9 @@ ${spendingPattern.map(data =>
           label: (context: any) => {
             const value = context.parsed.y;
             return `${context.dataset.label}: Rp ${value.toLocaleString('id-ID')}`;
-          }
-        }
-      }
+          },
+        },
+      },
     },
     scales: {
       x: {
@@ -232,36 +259,41 @@ ${spendingPattern.map(data =>
         stacked: true,
         beginAtZero: true,
         ticks: {
-          callback: (value: any) => `Rp ${(value / 1000000).toFixed(0)}M`
-        }
-      }
-    }
+          callback: (value: any) => `Rp ${(value / 1000000).toFixed(0)}M`,
+        },
+      },
+    },
   };
 
   // Data untuk grafik garis tren realisasi
-  const trendLineData = viewType === 'total' ? {
-    labels: monthlyTrendData.map(d => `${d.month} ${d.year}`),
-    datasets: [
-      {
-        label: 'Total Realisasi (Rp)',
-        data: monthlyTrendData.map(d => d.totalRealisasi),
-        borderColor: 'rgb(59, 130, 246)',
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-        tension: 0.1
-      }
-    ]
-  } : accountTrendData ? {
-    labels: accountTrendData.data.map(d => `${d.month} ${d.year}`),
-    datasets: [
-      {
-        label: 'Realisasi Akun (Rp)',
-        data: accountTrendData.data.map(d => d.realisasi),
-        borderColor: 'rgb(34, 197, 94)',
-        backgroundColor: 'rgba(34, 197, 94, 0.1)',
-        tension: 0.1
-      }
-    ]
-  } : null;
+  const trendLineData =
+    viewType === 'total'
+      ? {
+          labels: monthlyTrendData.map(d => `${d.month} ${d.year}`),
+          datasets: [
+            {
+              label: 'Total Realisasi (Rp)',
+              data: monthlyTrendData.map(d => d.totalRealisasi),
+              borderColor: 'rgb(59, 130, 246)',
+              backgroundColor: 'rgba(59, 130, 246, 0.1)',
+              tension: 0.1,
+            },
+          ],
+        }
+      : accountTrendData
+        ? {
+            labels: accountTrendData.data.map(d => `${d.month} ${d.year}`),
+            datasets: [
+              {
+                label: 'Realisasi Akun (Rp)',
+                data: accountTrendData.data.map(d => d.realisasi),
+                borderColor: 'rgb(34, 197, 94)',
+                backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                tension: 0.1,
+              },
+            ],
+          }
+        : null;
 
   // Data untuk grafik garis ganda kumulatif vs target
   const cumulativeLineData = {
@@ -272,7 +304,7 @@ ${spendingPattern.map(data =>
         data: cumulativeData.map(d => d.cumulative),
         borderColor: 'rgb(59, 130, 246)',
         backgroundColor: 'rgba(59, 130, 246, 0.1)',
-        tension: 0.1
+        tension: 0.1,
       },
       {
         label: 'Target Kumulatif (Rp)',
@@ -280,9 +312,9 @@ ${spendingPattern.map(data =>
         borderColor: 'rgb(239, 68, 68)',
         backgroundColor: 'rgba(239, 68, 68, 0.1)',
         borderDash: [5, 5],
-        tension: 0.1
-      }
-    ]
+        tension: 0.1,
+      },
+    ],
   };
 
   // Data untuk stacked bar komposisi belanja
@@ -299,8 +331,16 @@ ${spendingPattern.map(data =>
 
     const categories = Array.from(allCategories);
     const colors = [
-      '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6',
-      '#EC4899', '#14B8A6', '#F97316', '#6B7280', '#84CC16'
+      '#3B82F6',
+      '#10B981',
+      '#F59E0B',
+      '#EF4444',
+      '#8B5CF6',
+      '#EC4899',
+      '#14B8A6',
+      '#F97316',
+      '#6B7280',
+      '#84CC16',
     ];
 
     return {
@@ -313,8 +353,8 @@ ${spendingPattern.map(data =>
         }),
         backgroundColor: colors[index % colors.length],
         borderColor: colors[index % colors.length],
-        borderWidth: 1
-      }))
+        borderWidth: 1,
+      })),
     };
   }, [compositionData]);
 
@@ -331,7 +371,7 @@ ${spendingPattern.map(data =>
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200">
       {/* Header */}
-      <div 
+      <div
         className="p-4 bg-gray-50 border-b border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors"
         onClick={() => setExpandedSection(expandedSection === 'trend' ? null : 'trend')}
       >
@@ -339,10 +379,10 @@ ${spendingPattern.map(data =>
           <h3 className="text-lg font-semibold text-gray-800">
             📈 Analisis Tren Bulanan ({allReports.length} bulan)
           </h3>
-          <svg 
-            className={`w-5 h-5 text-gray-500 transform transition-transform ${expandedSection === 'trend' ? 'rotate-180' : ''}`} 
-            fill="none" 
-            viewBox="0 0 24 24" 
+          <svg
+            className={`w-5 h-5 text-gray-500 transform transition-transform ${expandedSection === 'trend' ? 'rotate-180' : ''}`}
+            fill="none"
+            viewBox="0 0 24 24"
             stroke="currentColor"
           >
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -351,7 +391,9 @@ ${spendingPattern.map(data =>
       </div>
 
       {/* Content */}
-      <div className={`transition-all duration-200 ${expandedSection === 'trend' ? 'max-h-[3000px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}>
+      <div
+        className={`transition-all duration-200 ${expandedSection === 'trend' ? 'max-h-[3000px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}
+      >
         <div className="p-6 space-y-6">
           {/* View Selector */}
           <div className="flex flex-wrap items-center gap-4 p-4 bg-gray-50 rounded-lg">
@@ -359,20 +401,20 @@ ${spendingPattern.map(data =>
               <label className="text-sm font-medium text-gray-700">Tampilkan:</label>
               <select
                 value={viewType}
-                onChange={(e) => setViewType(e.target.value as 'total' | 'account')}
+                onChange={e => setViewType(e.target.value as 'total' | 'account')}
                 className="border border-gray-300 rounded-md px-3 py-1 text-sm"
               >
                 <option value="total">Total Anggaran</option>
                 <option value="account">Akun Tertentu</option>
               </select>
             </div>
-            
+
             {viewType === 'account' && (
               <div className="flex items-center gap-2">
                 <label className="text-sm font-medium text-gray-700">Akun:</label>
                 <select
                   value={selectedAccount}
-                  onChange={(e) => setSelectedAccount(e.target.value)}
+                  onChange={e => setSelectedAccount(e.target.value)}
                   className="border border-gray-300 rounded-md px-3 py-1 text-sm min-w-[300px]"
                 >
                   <option value="">Pilih akun...</option>
@@ -437,7 +479,12 @@ ${spendingPattern.map(data =>
               className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                />
               </svg>
               Analisis Tren dengan AI
             </button>

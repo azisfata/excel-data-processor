@@ -1,10 +1,16 @@
-import { SupabaseClient } from '@supabase/supabase-js';
+import { Database } from './importMeta';
 
-declare module '@supabase/supabase-js' {
-  interface SupabaseClient {
-    // allow storing global headers in the client instance in this codebase
-    global?: {
-      headers?: Record<string, string>;
-    };
-  }
+interface GlobalSupabase {
+  headers: Record<string, string>;
+  db: Database;
+}
+
+interface ExtendedSupabaseClient {
+  global?: GlobalSupabase;
+}
+
+declare global {
+  var supabase: ExtendedSupabaseClient & {
+    global?: GlobalSupabase;
+  };
 }

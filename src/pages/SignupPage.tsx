@@ -8,7 +8,7 @@ const SignupPage: React.FC = () => {
     username: '',
     unit: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -19,7 +19,7 @@ const SignupPage: React.FC = () => {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value
+      [e.target.name]: e.target.value,
     });
   };
 
@@ -52,8 +52,9 @@ const SignupPage: React.FC = () => {
       // Redirect to login page with a success message state
       navigate('/login', {
         state: {
-          message: 'Pendaftaran berhasil! Akun Anda harus disetujui oleh admin sebelum Anda dapat login.'
-        }
+          message:
+            'Pendaftaran berhasil! Akun Anda harus disetujui oleh admin sebelum Anda dapat login.',
+        },
       });
     } catch (err: any) {
       setError(err.message || 'Registrasi gagal');
@@ -94,7 +95,10 @@ const SignupPage: React.FC = () => {
           </div>
 
           <div>
-            <label htmlFor="email-username" className="block text-sm font-medium text-gray-700 mb-1">
+            <label
+              htmlFor="email-username"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
               Email <span className="text-red-500">*</span>
             </label>
             <div className="flex">
@@ -112,7 +116,9 @@ const SignupPage: React.FC = () => {
                 {emailDomain}
               </span>
             </div>
-            <p className="mt-1 text-xs text-gray-500">Hanya email @kemenkopmk.go.id yang diperbolehkan</p>
+            <p className="mt-1 text-xs text-gray-500">
+              Hanya email @kemenkopmk.go.id yang diperbolehkan
+            </p>
           </div>
 
           <div>
@@ -147,7 +153,10 @@ const SignupPage: React.FC = () => {
           </div>
 
           <div>
-            <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
+            <label
+              htmlFor="confirmPassword"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
               Konfirmasi Password <span className="text-red-500">*</span>
             </label>
             <input

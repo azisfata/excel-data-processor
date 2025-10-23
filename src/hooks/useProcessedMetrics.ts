@@ -57,8 +57,8 @@ export function useProcessedMetrics({
     }
 
     return result.finalData.map(row => {
-      const rowKode = row[0];
-      const rowUraian = row[1];
+      const rowKode = String(row[0]);
+      const rowUraian = String(row[1]);
       const compositeKey = `${rowKode}||${rowUraian}`;
       const additionalAmount = allocationMap.get(compositeKey);
 
@@ -70,7 +70,7 @@ export function useProcessedMetrics({
       }
       return row;
     });
-  }, [activities, budgetView, result?.finalData]);
+  }, [activities, budgetView, result]);
 
   const activeTotals = useMemo(() => {
     if (!activeData || activeData.length === 0) return [0, 0, 0, 0, 0];
@@ -145,7 +145,8 @@ export function useProcessedMetrics({
         current.paguRevisi += paguRevisi;
         current.realisasiLaporan += realisasiLaporan;
       } else {
-        const accountName = result.accountNameMap?.get(accountCode) || row[1] || `Akun ${accountCode}`;
+        const accountName =
+          result.accountNameMap?.get(accountCode) || String(row[1]) || `Akun ${accountCode}`;
         totalsMap.set(accountCode, {
           code: accountCode,
           uraian: accountName,

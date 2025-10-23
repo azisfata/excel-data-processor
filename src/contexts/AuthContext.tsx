@@ -58,7 +58,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             delete supabase.global.headers['Authorization'];
           }
         }
-      } catch (error) {
+      } catch {
         setUser(null);
         if (supabase.global?.headers) {
           delete supabase.global.headers['Authorization'];
@@ -119,8 +119,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         method: 'POST',
         credentials: 'include',
       });
-    } catch (error) {
-      console.error('Logout error:', error);
     } finally {
       // CRITICAL: Clear the user state BEFORE clearing the token.
       setUser(null);

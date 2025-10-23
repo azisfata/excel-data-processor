@@ -25,7 +25,9 @@ const BudgetOverviewPanel: React.FC<BudgetOverviewPanelProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 border-t-4 border-t-blue-500">
             <p className="text-sm font-medium text-gray-500">Pagu Revisi</p>
-            <p className="mt-1 text-2xl font-semibold text-gray-900">{formatCurrency(paguRevisi)}</p>
+            <p className="mt-1 text-2xl font-semibold text-gray-900">
+              {formatCurrency(paguRevisi)}
+            </p>
           </div>
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 border-t-4 border-t-green-500">
             <p className="text-sm font-medium text-gray-500">Realisasi</p>
