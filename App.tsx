@@ -17,6 +17,9 @@ import { useHierarchyTable } from './src/hooks/useHierarchyTable';
 import { useProcessedMetrics } from './src/hooks/useProcessedMetrics';
 import BudgetOverviewPanel from './src/components/dashboard/BudgetOverviewPanel';
 import AccountSummaryPanel from './src/components/dashboard/AccountSummaryPanel';
+import MonthlyAnalyticsPanel from './src/components/dashboard/MonthlyAnalyticsPanel';
+import TrendAnalyticsPanel from './src/components/dashboard/TrendAnalyticsPanel';
+import { useHistoricalData } from './src/hooks/useHistoricalData';
 
 const MONTH_NAMES_ID = [
   'Januari',
@@ -192,6 +195,19 @@ const App: React.FC = () => {
     progressPercentage,
     level7Totals,
   } = useProcessedMetrics({ result, activities, budgetView });
+
+  // Historical data for analytics
+  const {
+    monthlyReports,
+    currentReport,
+    allReports,
+    isLoading: isHistoricalLoading,
+    error: historicalError,
+    setCurrentReport,
+    refreshData,
+    availableAccounts,
+    currentMonthData
+  } = useHistoricalData(user?.id);
 
   const {
     hierarchicalData,
@@ -2081,6 +2097,34 @@ const HistoryDropdown = () => (
               formatCurrency={formatCurrency}
             />
 
+            {/* Analytics Panels */}
+            <MonthlyAnalyticsPanel
+              currentReport={currentReport}
+              allReports={allReports}
+              onAIAnalysis={(analysis) => {
+                const aiMessage: AiMessage = {
+                  id: generateMessageId(),
+                  sender: 'assistant',
+                  content: analysis,
+                  timestamp: new Date().toISOString()
+                };
+                setAiMessages(prev => [...prev, aiMessage]);
+              }}
+            />
+
+            <TrendAnalyticsPanel
+              allReports={allReports}
+              onAIAnalysis={(analysis) => {
+                const aiMessage: AiMessage = {
+                  id: generateMessageId(),
+                  sender: 'assistant',
+                  content: analysis,
+                  timestamp: new Date().toISOString()
+                };
+                setAiMessages(prev => [...prev, aiMessage]);
+              }}
+            />
+
             {/* Data Table with Search and Filter */}
             <div className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200 mb-6">
               {/* Collapsible Header */}
@@ -3167,4 +3211,3 @@ const HistoryDropdown = () => (
 }
 
 export default App;
-
