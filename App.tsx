@@ -1668,15 +1668,40 @@ const HistoryDropdown = () => (
     if (!searchTerm.trim()) return [];
 
     const orGroups = searchTerm.split(/\s+OR\s+/i).map(g => g.trim()).filter(Boolean);
-    return hierarchicalData.filter(item => {
-      const kode = String(item[0] || '').toLowerCase();
-      const uraian = String(item[1] || '').toLowerCase();
-      return orGroups.some(group => {
-        const andTerms = group.split(/\s+AND\s+/i).map(t => t.trim().toLowerCase()).filter(Boolean);
-        return andTerms.every(term => kode.includes(term) || uraian.includes(term));
+    if (!orGroups.length) return [];
+
+    return activeData
+      .map((row, rowIndex) => ({ row, rowIndex }))
+      .filter(({ row }) => {
+        const kode = typeof row?.[0] === 'string' ? row[0].trim() : '';
+        const segments = kode.split('.').map(segment => segment.trim()).filter(Boolean);
+        if (segments.length < 8) {
+          return false;
+        }
+
+        const kodeLower = kode.toLowerCase();
+        const uraianLower = typeof row?.[1] === 'string' ? row[1].toLowerCase() : '';
+
+        return orGroups.some(group => {
+          const andTerms = group.split(/\s+AND\s+/i).map(t => t.trim().toLowerCase()).filter(Boolean);
+          if (!andTerms.length) return false;
+          return andTerms.every(term => kodeLower.includes(term) || uraianLower.includes(term));
+        });
+      })
+      .map(({ row, rowIndex }) => {
+        const clonedRow: any = Array.isArray(row) ? [...row] : [];
+        const kode = typeof row?.[0] === 'string' ? row[0] : '';
+
+        clonedRow.__hasChildren = false;
+        clonedRow.__isDataGroup = false;
+        clonedRow.__isLeaf = true;
+        clonedRow.__isVisible = true;
+        clonedRow.__level = 7;
+        clonedRow.__path = kode || `search-${rowIndex}`;
+
+        return clonedRow;
       });
-    });
-  }, [searchTerm, hierarchicalData]);
+  }, [searchTerm, activeData]);
 
   useEffect(() => {
     if (!searchTerm.trim()) {
@@ -1689,43 +1714,7 @@ const HistoryDropdown = () => (
     }
     if (maxDepth < 8) setMaxDepth(8);
 
-    const pathToRow = new Map<string, any>();
-    hierarchicalData.forEach(row => {
-      if (row?.__path) {
-        pathToRow.set(String(row.__path), row);
-      }
-    });
-
-    const pathsToInclude = new Set<string>();
-    const addPathWithAncestors = (path: string) => {
-      let currentPath = path;
-      const visited = new Set<string>();
-      while (currentPath && !visited.has(currentPath)) {
-        visited.add(currentPath);
-        if (pathToRow.has(currentPath)) {
-          pathsToInclude.add(currentPath);
-        }
-        if (currentPath.includes('-')) {
-          const trimmed = currentPath.split('-')[0];
-          if (trimmed !== currentPath) {
-            currentPath = trimmed;
-            continue;
-          }
-        }
-        const lastDot = currentPath.lastIndexOf('.');
-        currentPath = lastDot === -1 ? '' : currentPath.slice(0, lastDot);
-      }
-    };
-
-    searchMatches.forEach(row => {
-      const path = String(row.__path || '');
-      if (path) {
-        addPathWithAncestors(path);
-      }
-    });
-
-    const merged = hierarchicalData.filter(row => pathsToInclude.has(String(row.__path)));
-    setDisplayedData(merged);
+    setDisplayedData(searchMatches);
   }, [searchTerm, searchMatches, hierarchicalData, maxDepth]);
 
   const searchTotals = useMemo(() => {
