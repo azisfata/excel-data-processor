@@ -32,13 +32,8 @@
     "express": "^4.21.1",
     "jsdom": "^27.0.1",
     "jsonwebtoken": "^9.0.2",
-<<<<<<< HEAD
-    "jspdf": "^3.0.3",
-    "jspdf-autotable": "^5.0.2",
-=======
     "jszip": "^3.10.1",
     "mammoth": "^1.11.0",
->>>>>>> 0ed9a0a8c4d3d35385dcb251c0b120ede43d3411
     "multer": "^2.0.2",
     "pdfjs-dist": "^5.4.296",
     "react": "^19.1.1",
