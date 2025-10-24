@@ -61,7 +61,10 @@ const LoginPage: React.FC = () => {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label htmlFor="email-username" className="block text-sm font-medium text-gray-700 mb-1">
+            <label
+              htmlFor="email-username"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
               Email
             </label>
             <div className="flex">
@@ -69,7 +72,7 @@ const LoginPage: React.FC = () => {
                 id="email-username"
                 type="text"
                 value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                onChange={e => setUsername(e.target.value)}
                 placeholder="nama.pengguna"
                 required
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-l-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
@@ -88,7 +91,7 @@ const LoginPage: React.FC = () => {
               id="password"
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={e => setPassword(e.target.value)}
               placeholder="Masukkan password"
               required
               className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"

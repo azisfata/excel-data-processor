@@ -32,8 +32,9 @@ const AccountSummaryPanel: React.FC<AccountSummaryPanelProps> = ({
         >
           <h3 className="text-lg font-medium text-gray-800">Rekapitulasi per Akun</h3>
           <svg
-            className={`w-5 h-5 text-gray-500 transform transition-transform duration-200 ${show ? 'rotate-180' : ''
-              }`}
+            className={`w-5 h-5 text-gray-500 transform transition-transform duration-200 ${
+              show ? 'rotate-180' : ''
+            }`}
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -64,7 +65,9 @@ const AccountSummaryPanel: React.FC<AccountSummaryPanelProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {totals.map(item => {
               const realisasiPercent =
-                item.paguRevisi > 0 ? Math.min(100, Math.round((item.realisasi / item.paguRevisi) * 100)) : 0;
+                item.paguRevisi > 0
+                  ? Math.min(100, Math.round((item.realisasi / item.paguRevisi) * 100))
+                  : 0;
 
               return (
                 <div
@@ -74,11 +77,15 @@ const AccountSummaryPanel: React.FC<AccountSummaryPanelProps> = ({
                   <div className="space-y-2">
                     <div className="flex justify-between items-start">
                       <div className="flex-1 min-w-0">
-                        <h4 className="text-sm font-medium text-gray-900 break-words">{item.uraian}</h4>
+                        <h4 className="text-sm font-medium text-gray-900 break-words">
+                          {item.uraian}
+                        </h4>
                         <p className="text-xs text-gray-500">{item.code}</p>
                       </div>
                       <span className="text-xs font-medium bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full ml-2">
-                        {item.paguRevisi > 0 ? `${((item.realisasi / item.paguRevisi) * 100).toFixed(2)}%` : '0.00%'}
+                        {item.paguRevisi > 0
+                          ? `${((item.realisasi / item.paguRevisi) * 100).toFixed(2)}%`
+                          : '0.00%'}
                       </span>
                     </div>
 
@@ -95,11 +102,15 @@ const AccountSummaryPanel: React.FC<AccountSummaryPanelProps> = ({
                     <div className="grid grid-cols-3 gap-1 text-xs">
                       <div>
                         <p className="text-gray-500">Pagu</p>
-                        <p className="font-medium">{item.paguRevisi?.toLocaleString('id-ID') || '0'}</p>
+                        <p className="font-medium">
+                          {item.paguRevisi?.toLocaleString('id-ID') || '0'}
+                        </p>
                       </div>
                       <div className="text-center">
                         <p className="text-gray-500">Realisasi</p>
-                        <p className="font-medium">{item.realisasi?.toLocaleString('id-ID') || '0'}</p>
+                        <p className="font-medium">
+                          {item.realisasi?.toLocaleString('id-ID') || '0'}
+                        </p>
                       </div>
                       <div className="text-right">
                         <p className="text-gray-500">Sisa</p>
@@ -107,23 +118,29 @@ const AccountSummaryPanel: React.FC<AccountSummaryPanelProps> = ({
                       </div>
                     </div>
 
-                    {budgetView !== 'realisasi-laporan' && (item.outstanding > 0 || item.komitmen > 0) && (
-                      <div className="mt-2 pt-2 border-t border-gray-100 flex justify-around text-xs text-center">
-                        {(budgetView === 'realisasi-outstanding' || budgetView === 'realisasi-komitmen') &&
-                          item.outstanding > 0 && (
+                    {budgetView !== 'realisasi-laporan' &&
+                      (item.outstanding > 0 || item.komitmen > 0) && (
+                        <div className="mt-2 pt-2 border-t border-gray-100 flex justify-around text-xs text-center">
+                          {(budgetView === 'realisasi-outstanding' ||
+                            budgetView === 'realisasi-komitmen') &&
+                            item.outstanding > 0 && (
+                              <div>
+                                <p className="text-gray-500">Outstanding</p>
+                                <p className="font-medium text-yellow-800">
+                                  {formatCurrency(item.outstanding)}
+                                </p>
+                              </div>
+                            )}
+                          {budgetView === 'realisasi-komitmen' && item.komitmen > 0 && (
                             <div>
-                              <p className="text-gray-500">Outstanding</p>
-                              <p className="font-medium text-yellow-800">{formatCurrency(item.outstanding)}</p>
+                              <p className="text-gray-500">Komitmen</p>
+                              <p className="font-medium text-orange-800">
+                                {formatCurrency(item.komitmen)}
+                              </p>
                             </div>
                           )}
-                        {budgetView === 'realisasi-komitmen' && item.komitmen > 0 && (
-                          <div>
-                            <p className="text-gray-500">Komitmen</p>
-                            <p className="font-medium text-orange-800">{formatCurrency(item.komitmen)}</p>
-                          </div>
-                        )}
-                      </div>
-                    )}
+                        </div>
+                      )}
                   </div>
                 </div>
               );

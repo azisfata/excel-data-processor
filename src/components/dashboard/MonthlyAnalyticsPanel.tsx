@@ -4,20 +4,18 @@ import {
   CategoryScale,
   LinearScale,
   BarElement,
-  LineElement,
   PointElement,
   Title,
   Tooltip,
   Legend,
   ArcElement,
 } from 'chart.js';
-import { Bar, Line, Pie, Doughnut } from 'react-chartjs-2';
-import { 
-  MonthlyReport, 
-  AccountLevel7Data, 
-  MonthlyTrendData, 
+import ChartDataLabels from 'chartjs-plugin-datalabels';
+import { Bar, Doughnut } from 'react-chartjs-2';
+import {
+  MonthlyReport,
+  AccountLevel7Data,
   getLevel7DataForMonth,
-  getAllLevel7Accounts 
 } from '../../../services/historicalDataService';
 
 // Register Chart.js components
@@ -25,24 +23,24 @@ ChartJS.register(
   CategoryScale,
   LinearScale,
   BarElement,
-  LineElement,
   PointElement,
   Title,
   Tooltip,
   Legend,
-  ArcElement
+  ArcElement,
+  ChartDataLabels
 );
 
 interface MonthlyAnalyticsPanelProps {
   currentReport: MonthlyReport | null;
-  allReports: MonthlyReport[];
+  _allReports: MonthlyReport[];
   onAIAnalysis: (analysis: string) => void;
 }
 
 const MonthlyAnalyticsPanel: React.FC<MonthlyAnalyticsPanelProps> = ({
   currentReport,
-  allReports,
-  onAIAnalysis
+  _allReports,
+  onAIAnalysis,
 }) => {
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
 
@@ -55,20 +53,23 @@ const MonthlyAnalyticsPanel: React.FC<MonthlyAnalyticsPanelProps> = ({
   // Top 5 dan Bottom 5 penyerapan anggaran (berdasarkan level 7 code)
   const { top5, bottom5 } = useMemo(() => {
     if (!currentMonthData.length) return { top5: [], bottom5: [] };
-    
+
     // Group by level 7 code dan jumlahkan pagu/realisasi
-    const groupedByLevel7 = new Map<string, {
-      kode: string;
-      uraian: string;
-      totalPagu: number;
-      totalRealisasi: number;
-      persentase: number;
-      sisa: number;
-    }>();
-    
+    const groupedByLevel7 = new Map<
+      string,
+      {
+        kode: string;
+        uraian: string;
+        totalPagu: number;
+        totalRealisasi: number;
+        persentase: number;
+        sisa: number;
+      }
+    >();
+
     currentMonthData.forEach(item => {
       if (item.pagu <= 0) return; // Skip yang tidak ada pagu
-      
+
       const existing = groupedByLevel7.get(item.kode);
       if (existing) {
         existing.totalPagu += item.pagu;
@@ -80,11 +81,11 @@ const MonthlyAnalyticsPanel: React.FC<MonthlyAnalyticsPanelProps> = ({
           totalPagu: item.pagu,
           totalRealisasi: item.realisasi,
           persentase: item.persentase,
-          sisa: item.sisa
+          sisa: item.sisa,
         });
       }
     });
-    
+
     // Hitung ulang persentase dan sisa untuk setiap group
     const aggregatedData = Array.from(groupedByLevel7.values()).map(item => ({
       kode: item.kode,
@@ -92,21 +93,21 @@ const MonthlyAnalyticsPanel: React.FC<MonthlyAnalyticsPanelProps> = ({
       pagu: item.totalPagu,
       realisasi: item.totalRealisasi,
       persentase: item.totalPagu > 0 ? (item.totalRealisasi / item.totalPagu) * 100 : 0,
-      sisa: item.totalPagu - item.totalRealisasi
+      sisa: item.totalPagu - item.totalRealisasi,
     }));
-    
+
     const sorted = aggregatedData.sort((a, b) => b.persentase - a.persentase);
-    
+
     return {
       top5: sorted.slice(0, 5),
-      bottom5: sorted.slice(-5).reverse()
+      bottom5: sorted.slice(-5).reverse(),
     };
   }, [currentMonthData]);
 
   // Data untuk pie chart komposisi realisasi
   const compositionData = useMemo(() => {
     if (!currentMonthData.length) return null;
-    
+
     // Group by uraian dan ambil top 8
     const composition = new Map<string, number>();
     currentMonthData.forEach(item => {
@@ -115,17 +116,17 @@ const MonthlyAnalyticsPanel: React.FC<MonthlyAnalyticsPanelProps> = ({
         composition.set(item.uraian, existing + item.realisasi);
       }
     });
-    
+
     const sorted = Array.from(composition.entries())
-      .sort(([,a], [,b]) => b - a)
+      .sort(([, a], [, b]) => b - a)
       .slice(0, 8);
-    
+
     // Group sisanya sebagai "Lainnya"
-    const others = sorted.slice(8).reduce((sum, [,value]) => sum + value, 0);
+    const others = sorted.slice(8).reduce((sum, [, value]) => sum + value, 0);
     if (others > 0) {
       sorted.push(['Lainnya', others]);
     }
-    
+
     return sorted;
   }, [currentMonthData]);
 
@@ -139,13 +140,16 @@ const MonthlyAnalyticsPanel: React.FC<MonthlyAnalyticsPanelProps> = ({
     const totalPagu = currentMonthData.reduce((sum, item) => sum + item.pagu, 0);
     const totalRealisasi = currentMonthData.reduce((sum, item) => sum + item.realisasi, 0);
     const totalSisa = totalPagu - totalRealisasi;
-    const avgPersentase = currentMonthData.reduce((sum, item) => sum + item.persentase, 0) / currentMonthData.length;
-    
+    const avgPersentase =
+      currentMonthData.reduce((sum, item) => sum + item.persentase, 0) / currentMonthData.length;
+
     // Kategorisasi kesehatan penyerapan
     const healthyItems = currentMonthData.filter(item => item.persentase >= 75).length;
-    const warningItems = currentMonthData.filter(item => item.persentase >= 50 && item.persentase < 75).length;
+    const warningItems = currentMonthData.filter(
+      item => item.persentase >= 50 && item.persentase < 75
+    ).length;
     const criticalItems = currentMonthData.filter(item => item.persentase < 50).length;
-    
+
     // Identifikasi kantong sisa besar
     const largeSisa = currentMonthData
       .filter(item => item.sisa > 100000000) // > 100 juta
@@ -157,7 +161,7 @@ const MonthlyAnalyticsPanel: React.FC<MonthlyAnalyticsPanelProps> = ({
 
 🔍 **Tingkat Kesehatan Penyerapan:**
 - Total Pagu: Rp ${totalPagu.toLocaleString('id-ID')}
-- Total Realisasi: Rp ${totalRealisasi.toLocaleString('id-ID')} (${((totalRealisasi/totalPagu)*100).toFixed(1)}%)
+- Total Realisasi: Rp ${totalRealisasi.toLocaleString('id-ID')} (${((totalRealisasi / totalPagu) * 100).toFixed(1)}%)
 - Sisa Anggaran: Rp ${totalSisa.toLocaleString('id-ID')}
 - Rata-rata Persentase: ${avgPersentase.toFixed(1)}%
 
@@ -167,14 +171,21 @@ const MonthlyAnalyticsPanel: React.FC<MonthlyAnalyticsPanelProps> = ({
 - Kritis (<50%): ${criticalItems} akun
 
 💰 **Kantong Sisa Anggaran Terbesar:**
-${largeSisa.map((item, index) => 
-  `${index + 1}. ${item.uraian}: Rp ${item.sisa.toLocaleString('id-ID')} (${((item.sisa/item.pagu)*100).toFixed(1)}% sisa)`
-).join('\n')}
+${largeSisa
+  .map(
+    (item, index) =>
+      `${index + 1}. ${item.uraian}: Rp ${item.sisa.toLocaleString('id-ID')} (${((item.sisa / item.pagu) * 100).toFixed(1)}% sisa)`
+  )
+  .join('\n')}
 
 🎯 **Insight & Rekomendasi:**
-- ${avgPersentase >= 75 ? '✅ Penyerapan anggaran overall SANGAT BAIK' : 
-    avgPersentase >= 50 ? '⚠️ Penyerapan anggaran cukup baik, namun perlu ditingkatkan' : 
-    '❌ Penyerapan anggaran perlu perhatian serius'}
+- ${
+      avgPersentase >= 75
+        ? '✅ Penyerapan anggaran overall SANGAT BAIK'
+        : avgPersentase >= 50
+          ? '⚠️ Penyerapan anggaran cukup baik, namun perlu ditingkatkan'
+          : '❌ Penyerapan anggaran perlu perhatian serius'
+    }
 - ${criticalItems > 0 ? `🚨 Ada ${criticalItems} akun dengan penyerapan kritis yang perlu immediate action` : '✅ Tidak ada akun dengan penyerapan kritis'}
 - ${largeSisa.length > 0 ? `💡 Fokus pada optimasi ${largeSisa.length} akun dengan sisa anggaran terbesar` : '✅ Tidak ada kantong sisa anggaran yang signifikan'}
     `.trim();
@@ -182,8 +193,8 @@ ${largeSisa.map((item, index) =>
     onAIAnalysis(analysis);
   };
 
-  // Chart configurations
-  const topBottomChartOptions = {
+  // Chart configurations dengan datalabel plugin
+  const topBottomChartOptions: any = {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
@@ -194,9 +205,34 @@ ${largeSisa.map((item, index) =>
           boxWidth: 12,
           padding: 15,
           font: {
-            size: 11
-          }
-        }
+            size: 11,
+          },
+        },
+      },
+      datalabels: {
+        // Tampilkan datalabel hanya untuk dataset Realisasi
+        display: (context: any) => context.datasetIndex === 1,
+        // Formatter untuk datalabel
+        formatter: (value: any, context: any) => {
+          const data = context.chart.data.datasets[0].data[context.dataIndex];
+          const nominalJT = (value / 1000000).toFixed(1);
+          const persentase = data.persentase || 0;
+          return `Rp ${nominalJT}JT\n(${persentase}%)`;
+        },
+        // Posisi datalabel di atas batang
+        anchor: 'end',
+        align: 'top',
+        // Styling
+        font: {
+          weight: 'bold',
+          size: 11,
+        },
+        // Warna teks
+        color: '#374151',
+        // Background datalabel
+        backgroundColor: 'rgba(34, 197, 94, 0.8)',
+        borderRadius: 4,
+        padding: 4,
       },
       tooltip: {
         callbacks: {
@@ -206,18 +242,15 @@ ${largeSisa.map((item, index) =>
             if (label === 'Target (Pagu)') {
               return `Target: Rp ${value.toLocaleString('id-ID')}`;
             } else if (label === 'Realisasi') {
-              const index = context.dataIndex;
-              const item = context.chart.data.datasets[0].data[index] as AccountLevel7Data;
+              const dataIndex = context.dataIndex;
+              const item = context.chart.data.datasets[0].data[dataIndex] as AccountLevel7Data;
               const persentase = item.persentase || 0;
-              return [
-                `Realisasi: Rp ${value.toLocaleString('id-ID')}`,
-                `Persentase: ${persentase.toFixed(1)}%`
-              ];
+              return [`Realisasi: Rp ${value.toLocaleString('id-ID')} (${persentase.toFixed(1)}%)`];
             }
             return `${label}: Rp ${value.toLocaleString('id-ID')}`;
-          }
-        }
-      }
+          },
+        },
+      },
     },
     scales: {
       y: {
@@ -231,16 +264,32 @@ ${largeSisa.map((item, index) =>
               return `Rp ${(value / 1000000).toFixed(0)}JT`;
             }
             return `Rp ${(value / 1000).toFixed(0)}K`;
-          }
-        }
-      }
-    }
+          },
+        },
+      },
+      x: {
+        // Kosongkan label sumbu X karena info sudah di atas batang
+        ticks: {
+          callback: (value: any, index: number, values: any[]) => {
+            const item = values[index] as AccountLevel7Data;
+            if (item) {
+              // Truncate nama jika terlalu panjang
+              return item.uraian.length > 20 ? item.uraian.substring(0, 20) + '...' : item.uraian;
+            }
+            return '';
+          },
+        },
+      },
+    },
   };
 
   const topBottomChartData = (data: AccountLevel7Data[], label: string) => {
     const isTop = label.includes('Top');
     return {
-      labels: data.map(item => item.uraian.length > 25 ? item.uraian.substring(0, 25) + '...' : item.uraian),
+      labels: data.map(item => {
+        // Kosongkan label karena info akan ditampilkan di atas batang
+        return item.uraian.length > 20 ? item.uraian.substring(0, 20) + '...' : item.uraian;
+      }),
       datasets: [
         {
           label: 'Target (Pagu)',
@@ -248,7 +297,7 @@ ${largeSisa.map((item, index) =>
           backgroundColor: isTop ? 'rgba(156, 163, 175, 0.7)' : 'rgba(156, 163, 175, 0.7)',
           borderColor: isTop ? 'rgb(156, 163, 175)' : 'rgb(156, 163, 175)',
           borderWidth: 1,
-          order: 2
+          order: 2,
         },
         {
           label: 'Realisasi',
@@ -256,34 +305,43 @@ ${largeSisa.map((item, index) =>
           backgroundColor: isTop ? 'rgba(34, 197, 94, 0.8)' : 'rgba(239, 68, 68, 0.8)',
           borderColor: isTop ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)',
           borderWidth: 1,
-          order: 1
-        }
+          order: 1,
+        },
       ],
       // Store original data for tooltip calculations
-      originalData: data
+      originalData: data,
     } as any;
   };
 
-  const compositionChartData = compositionData ? {
-    labels: compositionData.map(([name]) => name),
-    datasets: [
-      {
-        data: compositionData.map(([, value]) => value),
-        backgroundColor: [
-          '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6',
-          '#EC4899', '#14B8A6', '#F97316', '#6B7280'
+  const compositionChartData = compositionData
+    ? {
+        labels: compositionData.map(([name]) => name),
+        datasets: [
+          {
+            data: compositionData.map(([, value]) => value),
+            backgroundColor: [
+              '#3B82F6',
+              '#10B981',
+              '#F59E0B',
+              '#EF4444',
+              '#8B5CF6',
+              '#EC4899',
+              '#14B8A6',
+              '#F97316',
+              '#6B7280',
+            ],
+            borderWidth: 1,
+          },
         ],
-        borderWidth: 1
       }
-    ]
-  } : null;
+    : null;
 
-  const compositionChartOptions = {
+  const compositionChartOptions: any = {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
       legend: {
-        position: 'right' as const
+        position: 'right' as const,
       },
       tooltip: {
         callbacks: {
@@ -292,10 +350,10 @@ ${largeSisa.map((item, index) =>
             const total = context.dataset.data.reduce((sum: number, val: number) => sum + val, 0);
             const percentage = ((value / total) * 100).toFixed(1);
             return `Rp ${value.toLocaleString('id-ID')} (${percentage}%)`;
-          }
-        }
-      }
-    }
+          },
+        },
+      },
+    },
   };
 
   if (!currentReport) {
@@ -311,18 +369,22 @@ ${largeSisa.map((item, index) =>
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200">
       {/* Header */}
-      <div 
+      <div
         className="p-4 bg-gray-50 border-b border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors"
         onClick={() => setExpandedSection(expandedSection === 'monthly' ? null : 'monthly')}
       >
         <div className="flex justify-between items-center">
           <h3 className="text-lg font-semibold text-gray-800">
-            📊 Analisis Bulanan - {new Date(currentReport.reportDate).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}
+            📊 Analisis Bulanan -{' '}
+            {new Date(currentReport.reportDate).toLocaleDateString('id-ID', {
+              month: 'long',
+              year: 'numeric',
+            })}
           </h3>
-          <svg 
-            className={`w-5 h-5 text-gray-500 transform transition-transform ${expandedSection === 'monthly' ? 'rotate-180' : ''}`} 
-            fill="none" 
-            viewBox="0 0 24 24" 
+          <svg
+            className={`w-5 h-5 text-gray-500 transform transition-transform ${expandedSection === 'monthly' ? 'rotate-180' : ''}`}
+            fill="none"
+            viewBox="0 0 24 24"
             stroke="currentColor"
           >
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -331,13 +393,17 @@ ${largeSisa.map((item, index) =>
       </div>
 
       {/* Content */}
-      <div className={`transition-all duration-200 ${expandedSection === 'monthly' ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}>
+      <div
+        className={`transition-all duration-200 ${expandedSection === 'monthly' ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}
+      >
         <div className="p-6 space-y-6">
           {/* Top 5 & Bottom 5 */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Top 5 */}
             <div className="bg-green-50 rounded-lg p-4">
-              <h4 className="text-md font-semibold text-green-800 mb-4">🏆 Top 5 Penyerapan Terbaik</h4>
+              <h4 className="text-md font-semibold text-green-800 mb-4">
+                🏆 Top 5 Penyerapan Terbaik
+              </h4>
               {top5.length > 0 ? (
                 <div className="h-64">
                   <Bar data={topBottomChartData(top5, 'Top')} options={topBottomChartOptions} />
@@ -354,7 +420,10 @@ ${largeSisa.map((item, index) =>
               <h4 className="text-md font-semibold text-red-800 mb-4">⚠️ 5 Penyerapan Terendah</h4>
               {bottom5.length > 0 ? (
                 <div className="h-64">
-                  <Bar data={topBottomChartData(bottom5, 'Bottom')} options={topBottomChartOptions} />
+                  <Bar
+                    data={topBottomChartData(bottom5, 'Bottom')}
+                    options={topBottomChartOptions}
+                  />
                 </div>
               ) : (
                 <div className="h-64 flex items-center justify-center text-gray-500">
@@ -390,7 +459,12 @@ ${largeSisa.map((item, index) =>
               className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                />
               </svg>
               Analisis dengan AI
             </button>

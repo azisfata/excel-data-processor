@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
-import { 
-  getMonthlyReports, 
-  MonthlyReport, 
+import { useState, useEffect, useCallback } from 'react';
+import {
+  getMonthlyReports,
+  MonthlyReport,
   AccountLevel7Data,
   getAllLevel7Accounts,
-  getLevel7DataForMonth
+  getLevel7DataForMonth,
 } from '../../services/historicalDataService';
 
 export interface UseHistoricalDataReturn {
@@ -25,16 +25,16 @@ export const useHistoricalData = (userId: string | undefined): UseHistoricalData
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const refreshData = async () => {
+  const refreshData = useCallback(async () => {
     if (!userId) return;
-    
+
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const reports = await getMonthlyReports(userId);
       setMonthlyReports(reports);
-      
+
       // Set current report to the latest one if not already set
       if (!currentReport && reports.length > 0) {
         setCurrentReport(reports[reports.length - 1]);
@@ -44,11 +44,11 @@ export const useHistoricalData = (userId: string | undefined): UseHistoricalData
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [userId, currentReport]);
 
   useEffect(() => {
     refreshData();
-  }, [userId]);
+  }, [refreshData]);
 
   // Get all reports for trend analysis
   const allReports = monthlyReports;
@@ -68,6 +68,6 @@ export const useHistoricalData = (userId: string | undefined): UseHistoricalData
     setCurrentReport,
     refreshData,
     availableAccounts,
-    currentMonthData
+    currentMonthData,
   };
 };

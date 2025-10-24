@@ -25,7 +25,7 @@ const UserManagementPage: React.FC = () => {
     unit: '',
     role: 'user',
     password: '',
-    is_approved: true
+    is_approved: true,
   });
   const { user: currentUser, isAdmin, logout } = useAuth();
   const navigate = useNavigate();
@@ -41,7 +41,7 @@ const UserManagementPage: React.FC = () => {
   const fetchUsers = async () => {
     try {
       const response = await fetch(getAuthApiUrl('auth/users'), {
-        credentials: 'include'
+        credentials: 'include',
       });
 
       if (!response.ok) {
@@ -66,7 +66,7 @@ const UserManagementPage: React.FC = () => {
         unit: user.unit || '',
         role: user.role,
         password: '',
-        is_approved: user.is_approved
+        is_approved: user.is_approved,
       });
     } else {
       setEditingUser(null);
@@ -76,7 +76,7 @@ const UserManagementPage: React.FC = () => {
         unit: '',
         role: 'user',
         password: '',
-        is_approved: true
+        is_approved: true,
       });
     }
     setShowModal(true);
@@ -91,7 +91,7 @@ const UserManagementPage: React.FC = () => {
       unit: '',
       role: 'user',
       password: '',
-      is_approved: true
+      is_approved: true,
     });
     setError('');
   };
@@ -110,7 +110,7 @@ const UserManagementPage: React.FC = () => {
       const body: any = {
         name: formData.name,
         unit: formData.unit || null,
-        role: formData.role
+        role: formData.role,
       };
 
       if (!editingUser) {
@@ -132,10 +132,10 @@ const UserManagementPage: React.FC = () => {
       const response = await fetch(url, {
         method,
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
         credentials: 'include',
-        body: JSON.stringify(body)
+        body: JSON.stringify(body),
       });
 
       const data = await response.json();
@@ -159,7 +159,7 @@ const UserManagementPage: React.FC = () => {
     try {
       const response = await fetch(getAuthApiUrl(`auth/users/${userId}`), {
         method: 'DELETE',
-        credentials: 'include'
+        credentials: 'include',
       });
 
       const data = await response.json();
@@ -178,7 +178,7 @@ const UserManagementPage: React.FC = () => {
     try {
       const response = await fetch(getAuthApiUrl(`auth/users/${userId}/approve`), {
         method: 'PUT',
-        credentials: 'include'
+        credentials: 'include',
       });
 
       const data = await response.json();
@@ -188,7 +188,7 @@ const UserManagementPage: React.FC = () => {
       }
 
       // Update state lokal untuk merefleksikan perubahan
-      setUsers(users.map(u => u.id === userId ? { ...u, is_approved: true } : u));
+      setUsers(users.map(u => (u.id === userId ? { ...u, is_approved: true } : u)));
     } catch (err: any) {
       setError(err.message);
     }
@@ -208,9 +208,7 @@ const UserManagementPage: React.FC = () => {
   };
 
   const getStatusBadgeColor = (isApproved: boolean) => {
-    return isApproved
-      ? 'bg-green-100 text-green-800'
-      : 'bg-yellow-100 text-yellow-800';
+    return isApproved ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800';
   };
 
   if (loading) {
@@ -288,7 +286,7 @@ const UserManagementPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {users.map((user) => (
+                {users.map(user => (
                   <tr key={user.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">{user.name}</div>
@@ -298,12 +296,16 @@ const UserManagementPage: React.FC = () => {
                       <div className="text-sm text-gray-600">{user.email}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getRoleBadgeColor(user.role)}`}>
+                      <span
+                        className={`px-2.5 py-1 rounded-full text-xs font-medium ${getRoleBadgeColor(user.role)}`}
+                      >
                         {user.role}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getStatusBadgeColor(user.is_approved)}`}>
+                      <span
+                        className={`px-2.5 py-1 rounded-full text-xs font-medium ${getStatusBadgeColor(user.is_approved)}`}
+                      >
                         {user.is_approved ? 'Aktif' : 'Menunggu Persetujuan'}
                       </span>
                     </td>
@@ -372,7 +374,7 @@ const UserManagementPage: React.FC = () => {
                 <input
                   type="text"
                   value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  onChange={e => setFormData({ ...formData, name: e.target.value })}
                   required
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 />
@@ -385,7 +387,7 @@ const UserManagementPage: React.FC = () => {
                 <input
                   type="email"
                   value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  onChange={e => setFormData({ ...formData, email: e.target.value })}
                   required={!editingUser}
                   disabled={!!editingUser}
                   placeholder="nama@kemenkopmk.go.id"
@@ -394,13 +396,11 @@ const UserManagementPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Unit Kerja
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Unit Kerja</label>
                 <input
                   type="text"
                   value={formData.unit}
-                  onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
+                  onChange={e => setFormData({ ...formData, unit: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 />
               </div>
@@ -411,7 +411,7 @@ const UserManagementPage: React.FC = () => {
                 </label>
                 <select
                   value={formData.role}
-                  onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                  onChange={e => setFormData({ ...formData, role: e.target.value })}
                   required
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 >
@@ -427,7 +427,7 @@ const UserManagementPage: React.FC = () => {
                     <input
                       type="checkbox"
                       checked={formData.is_approved}
-                      onChange={(e) => setFormData({ ...formData, is_approved: e.target.checked })}
+                      onChange={e => setFormData({ ...formData, is_approved: e.target.checked })}
                       className="h-4 w-4 rounded text-blue-600 border-gray-300 focus:ring-blue-500"
                     />
                     <span className="text-sm text-gray-700">Disetujui (boleh akses aplikasi)</span>
@@ -442,9 +442,11 @@ const UserManagementPage: React.FC = () => {
                 <input
                   type="password"
                   value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  onChange={e => setFormData({ ...formData, password: e.target.value })}
                   required={!editingUser}
-                  placeholder={editingUser ? 'Kosongkan jika tidak ingin mengubah' : 'Minimal 6 karakter'}
+                  placeholder={
+                    editingUser ? 'Kosongkan jika tidak ingin mengubah' : 'Minimal 6 karakter'
+                  }
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 />
               </div>

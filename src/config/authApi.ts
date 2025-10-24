@@ -1,8 +1,7 @@
 const rawAuthUrl = (import.meta.env.VITE_AUTH_SERVER_URL || '').trim();
 
-const normalizedAuthUrl = rawAuthUrl.length > 0
-  ? rawAuthUrl.replace(/\/$/, '')
-  : 'http://localhost:3002';
+const normalizedAuthUrl =
+  rawAuthUrl.length > 0 ? rawAuthUrl.replace(/\/$/, '') : 'http://localhost:3002';
 
 export const AUTH_API_BASE_URL = `${normalizedAuthUrl}/api`;
 
