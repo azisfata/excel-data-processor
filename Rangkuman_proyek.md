@@ -2,25 +2,69 @@
 
 ## Informasi Umum
 - **Nama**: Excel Data Processor
-- **Tujuan**: Upload an Excel file, clean and restructure its contents, present hierarchical budget data with activity management, and enable downloads of processed spreadsheets
-- **Tech Stack**: React + TypeScript (Vite), Tailwind CSS utility classes, Supabase for persistence, Google Gemini AI for analysis
+- **Tujuan**: Upload file Excel realisasi anggaran SAKTI, membersihkan dan restrukturisasi konten, menyajikan data anggaran hierarkis dengan manajemen kegiatan, dan mengaktifkan download spreadsheet yang telah diproses
+- **Tech Stack**: React + TypeScript (Vite), Tailwind CSS utility classes, Supabase untuk persistence, Google Gemini AI untuk analisis data
 
 ## Overview
-Proyek ini adalah aplikasi web React + TypeScript untuk memproses file Excel realisasi anggaran dari Kementerian Koperasi dan UKM (Kemenkop UKM). Aplikasi ini dirancang untuk membantu dalam analisis data anggaran dengan fitur canggih termasuk AI, manajemen kegiatan, dan sistem autentikasi.
+Proyek ini adalah aplikasi web React + TypeScript yang komprehensif untuk memproses file Excel realisasi anggaran dari Kementerian Koordinator Bidang Pembangunan Manusia dan Kebudayaan Republik Indonesia (Kemenko PMK). Aplikasi dirancang khusus untuk membantu analisis data anggaran dengan fitur canggih termasuk AI assistant, manajemen kegiatan lengkap, dan sistem autentikasi yang robust.
+
+## 🏛️ Tentang Kemenko PMK
+
+### Pengertian
+Kemenko PMK adalah lembaga pemerintah yang berada di bawah dan bertanggung jawab langsung kepada Presiden, yang memiliki tugas utama mengkoordinasikan, menyinkronkan, dan mengendalikan kebijakan pemerintah di bidang pembangunan manusia dan kebudayaan.
+
+### Bidang Koordinasi
+Bidang ini mencakup isu-isu strategis seperti:
+- **Pendidikan** - Kemendikbudristek
+- **Kesehatan** - Kemenkes
+- **Sosial** - Kemensos
+- **Ketenagakerjaan** - Kemnaker
+- **Kebudayaan** - Kemendikbudristek
+- **Agama** - Kemenag
+- **Pemberdayaan Perempuan** - KemenPPPA
+- **Perlindungan Anak** - KemenPPPA
+- **Kepemudaan dan Olahraga** - Kemenpora
+
+### Tugas Pokok
+Sesuai Peraturan Presiden Nomor 47 Tahun 2020:
+> "Menyelenggarakan koordinasi, sinkronisasi, dan pengendalian urusan kementerian/lembaga dalam penyusunan serta pelaksanaan kebijakan di bidang pembangunan manusia dan kebudayaan."
+
+### Fungsi Utama
+- **Koordinasi** kebijakan lintas kementerian/lembaga terkait isu pembangunan manusia dan kebudayaan
+- **Sinkronisasi** program dan kegiatan antar-kementerian agar tidak tumpang-tindih dan lebih efisien
+- **Pemantauan dan Evaluasi** pelaksanaan kebijakan di bidang PMK
+- **Penyusunan Rekomendasi** kebijakan kepada Presiden berdasarkan hasil koordinasi
+
+### Contoh Program Strategis
+- **Penurunan stunting nasional**
+- **Pengentasan kemiskinan ekstrem**
+- **Program Indonesia Sehat dan Cerdas**
+- **Penguatan karakter dan kebudayaan bangsa**
+- **Reformasi perlindungan sosial**
+- **SPBE (Sistem Pemerintahan Berbasis Elektronik) di bidang PMK**
+
+### Relevansi dengan Excel Data Processor
+Aplikasi ini sangat relevan untuk mendukung tugas-tugas Kemenko PMK:
+1. **Budget Analysis for Human Development** - Analisis realisasi anggaran program pembangunan manusia
+2. **Cross-Ministry Coordination** - Integrasi data dari 10+ kementerian/lembaga yang dikoordinasikan
+3. **Policy Impact Analysis** - AI-powered insights untuk efektivitas program stunting, kemiskinan, dll
+4. **Social Impact Assessment** - Dashboard untuk monitoring kesejahteraan masyarakat
+5. **Cultural Heritage Budgeting** - Manajemen anggaran pelestarian kebudayaan
+6. **Real-time Program Monitoring** - Tracking progress program strategis nasional
 
 ## Teknologi Utama
 - **Frontend**: React ^19.1.1, TypeScript, Vite, TailwindCSS, React Router, React Dropzone
-- **Backend**: Express.js (Node.js)
-- **Database**: Supabase (PostgreSQL)
-- **AI**: Google Gemini AI (models/gemini-2.5-flash) for intelligent data analysis
-- **Library**: XLSX (Excel processing), Multer (file upload), cookie-parser, bcryptjs, @google/genai, concurrently, serve
+- **Backend**: Express.js (Node.js) dengan arsitektur microservices
+- **Database**: Supabase (PostgreSQL) dengan Row Level Security (RLS)
+- **AI**: Google Gemini AI (models/gemini-2.5-flash) untuk analisis data cerdas
+- **Library Penting**: XLSX (Excel processing), Multer (file upload), cookie-parser, bcryptjs, @google/genai, concurrently, serve, Chart.js (data visualization)
 
 ## Arsitektur Aplikasi
 
 ### Development Architecture
-- **Auth Server**: Berjalan di port 3002, menangani autentikasi
-- **API Server/Activity Upload Server**: Berjalan di port 3001, menangani upload file
-- **Frontend Client**: Berjalan di port 5173, antarmuka pengguna
+- **Auth Server**: Port 3002 - Menangani autentikasi, authorization, dan manajemen user
+- **Activity Upload Server**: Port 3001 - Menangani upload file lampiran kegiatan
+- **Frontend Client**: Port 5173 - Antarmuka pengguna dengan Vite HMR
 
 ### Production Architecture
 ```
@@ -44,663 +88,531 @@ Proyek ini adalah aplikasi web React + TypeScript untuk memproses file Excel rea
 └─────────────────────────────────────┘
 ```
 
-Catatan: Konfigurasi PM2 dalam production menggunakan:
-- excel-processor-frontend: berjalan dengan 'serve' di port 5173
-- excel-processor-auth-server: menjalankan server/auth-server.js di port 3002
-- excel-processor-activity-server: menjalankan server/activity-upload-server.js di port 3001
+Konfigurasi PM2 production:
+- `excel-processor-frontend`: Static file serving dengan 'serve' di port 5173
+- `excel-processor-auth-server`: Express server untuk autentikasi di port 3002
+- `excel-processor-activity-server`: Express server untuk upload file di port 3001
 
-## Struktur File
+## Struktur File & Komponen
 
-### Backend (Server)
-- `server/activity-upload-server.js` - Server untuk upload file (port 3001)
-- `server/auth-server.js` - Server autentikasi (port 3002)
+### Backend Services
+- `server/activity-upload-server.js` - Microservice untuk upload file lampiran (port 3001)
+- `server/auth-server.js` - Microservice autentikasi dan manajemen user (port 3002)
 
-Endpoints Auth Server:
-  - POST `/api/auth/signup` - Registrasi user baru
-  - POST `/api/auth/login` - Login user
-  - POST `/api/auth/logout` - Logout user
-  - GET `/api/auth/me` - Get current user
-  - GET `/api/users` - Get all users (admin only)
-  - POST `/api/users` - Create user (admin only)
-  - PUT `/api/users/:id` - Update user (admin only)
-  - DELETE `/api/users/:id` - Delete user (admin only)
+### Frontend Core
+- `App.tsx` - Komponen utama dengan state management kompleks
+- `index.tsx` - Entry point aplikasi dengan React StrictMode
+- `types.ts` - Definisi TypeScript untuk seluruh aplikasi
 
-Endpoints Activity Upload Server:
-  - GET `/api/activities/attachments` - Get all activity attachments
-  - GET `/api/activities/:id/attachment` - Get attachments for a specific activity
-  - POST `/api/activities/:id/attachment` - Upload an attachment for an activity
-  - DELETE `/api/activities/:id/attachment/:attachmentId?` - Delete an attachment (or all attachments for an activity)
-  - GET `/api/activities/:id/attachments/:attachmentId/download` - Download a specific attachment
+### Authentication System
+- `src/contexts/AuthContext.tsx` - Context untuk state autentikasi global
+- `src/pages/LoginPage.tsx` - Halaman login dengan form validation
+- `src/pages/SignupPage.tsx` - Halaman registrasi dengan validasi domain
+- `src/pages/UserManagementPage.tsx` - Halaman admin untuk CRUD users
+- `src/components/ProtectedRoute.tsx` - HOC untuk proteksi route berdasarkan role
 
-### Frontend (React)
-- `src/contexts/AuthContext.tsx` - Context untuk state autentikasi
-- `src/pages/LoginPage.tsx` - Halaman login
-- `src/pages/SignupPage.tsx` - Halaman registrasi
-- `src/pages/UserManagementPage.tsx` - Halaman manajemen user (admin only)
-- `src/components/ProtectedRoute.tsx` - HOC untuk protected routes
-- `src/main.tsx` - Setup routing
+### Business Logic Services
+- `services/excelProcessor.ts` - Core logic pemrosesan Excel dengan 7 tahap
+- `services/supabaseService.ts` - Database operations untuk processed results, activities, allocations
+- `services/aiService.ts` - Integration dengan Google Gemini AI dengan fallback model
+- `services/activityAttachmentService.ts` - File attachment operations dengan metadata management
 
-### Services
-- `services/excelProcessor.ts` - Core Excel processing logic
-- `services/aiService.ts` - Gemini AI integration
-- `services/supabaseService.ts` - Database operations (processed results, activities, user settings)
-- `services/activityAttachmentService.ts` - Activity attachment operations (upload, delete, fetch)
-
-### Utilities
-- `utils/hierarchy.ts` - Hierarchical data structure
+### Utility & Data Processing
+- `utils/hierarchy.ts` - Hierarchical data structure untuk tree view
 - `utils/supabase.ts` - Supabase client configuration
+- `utils/dataNormalization.ts` - Data normalization dan account name mapping
 
-### Components & Core Files
-- `App.tsx` - Main application component
-- `index.tsx` - Application entry point
-- `types.ts` - Type definitions
-- `vite.config.ts` - Vite build configuration (includes proxy setup for /api and /activity-uploads to the backend server at port 3001)
-- `ecosystem.config.cjs` - PM2 process configuration
+### Configuration
+- `vite.config.ts` - Vite configuration dengan proxy setup untuk API calls
+- `ecosystem.config.cjs` - PM2 process configuration untuk deployment
+- `.env.example` - Template environment variables
 
-### Scripts & Configuration
-- `scripts/create-admin.js` - Script untuk membuat admin pertama
-- `server/activity-upload-server.js` - Server untuk upload file (port 3001)
-- `server/auth-server.js` - Server autentikasi (port 3002)
+### Scripts & Utilities
+- `scripts/create-admin.js` - Script untuk membuat admin user pertama
+- `scripts/check-env.js` - Environment validation script
+- `start-production.sh` / `stop-production.sh` - Production management scripts
 
-### Features
-- `features/activities/` - Modul manajemen kegiatan
-  - `features/activities/components/` - Komponen-komponen terkait kegiatan
-  - `features/activities/hooks/` - Custom hooks untuk manajemen kegiatan
+## Fitur-Fitur Utama
 
-## Fitur Utama
+### 1. Excel Data Processing Pipeline
+**Smart Parsing & Cleaning:**
+- Parsing file Excel format Indonesian government budget dengan XLSX library
+- Deteksi otomatis header "Program Dukungan Manajemen" untuk trim noise
+- Removal footer notes seperti disclaimer "Lock Pagu"
+- Drop columns yang entirely empty untuk optimasi
 
-### 1. Excel Data Processing
-- **Smart parsing** of Indonesian government budget Excel files
-- **Hierarchical code processing** with 7-level depth structure
-- **Data cleaning and restructuring** to handle complex budget data
-- **Column filtering and totals calculation**
-- **Excel download** of processed data with proper formatting
-- **Parsing**: FileReader hands the binary string to `parseExcelFile`, wrapping `XLSX.read` to produce a two-dimensional array representation
-- **Cleaning** (`muatDanBersihkanData`):
-  - Removes footer notes such as the "Lock Pagu" disclaimer
-  - Finds the "Program Dukungan Manajemen" header to trim leading noise
-  - Drops columns that are entirely empty
-- **Restructuring** (`prosesDanStrukturData`):
-  - Realigns codes and descriptions into the first two columns by shifting values
-  - Builds trace codes to fill hierarchical identifiers, mirroring the Python prototype's logic
-- **Pruning columns**: After restructuring, columns 19–20 and 3–13 are stripped to match the expected export format
-- **Aggregation** (`filterDanHitungTotal`): Computes totals per account code, deriving sums, realization percentages, and remaining budgets
-- **Result bundle**: Returns `finalData`, per-row totals, preview slices, and a code→name map for UI lookup
+**Hierarchical Processing:**
+- Build hierarchical codes hingga 8 level depth (e.g., 1.01.01.01.01.01.01.123456)
+- Trace code construction untuk fill hierarchical identifiers
+- Normalisasi kode dan uraian akun anggaran
 
-### 2. Activity Management
-- CRUD (Create, Read, Update, Delete) untuk kegiatan anggaran
-- Manajemen alokasi anggaran
-- Manajemen status kegiatan (Rencana, Komitmen, Outstanding, Terbayar)
-- Upload dan manajemen file lampiran
-- Activities (`Activity` type) hold planned actions with optional status and multiple `BudgetAllocation` entries
-- `supabaseService.ts` exposes CRUD-style helpers:
-  - `getActivities` fetches activities and nested allocations
-  - `addActivity`, `updateActivity`, and `removeActivity` synchronize UI changes back to Supabase tables (`activities`, `allocations`)
-- Fitur tambahan:
-  - `getSetting` dan `saveSetting` untuk manajemen pengaturan pengguna
-  - `getAllProcessedResults`, `getLatestProcessedResult`, dan `getProcessedResultById` untuk manajemen hasil pemrosesan Excel
-  - `saveProcessedResult` untuk menyimpan hasil pemrosesan Excel ke database
-- Fitur filter dan pencarian kegiatan berdasarkan tahun, bulan, status, dan nama kegiatan
-- Fitur pagination untuk daftar kegiatan
-- Fitur pengelompokan kegiatan berdasarkan bulan pelaksanaan
-- Fitur penambahan metadata (tanggal realisasi, jenis laporan) saat upload Excel
-- Fitur penghapusan riwayat pemrosesan Excel
-- Fitur manajemen lampiran (upload, unduh, hapus) dengan dukungan berbagai format file
-- Fitur alokasi anggaran berdasarkan kode akun dengan validasi sisa anggaran
+**Data Transformation:**
+- Column pruning: hapus kolom 19-20 dan 3-13 sesuai format export
+- Data restructuring: realignment codes dan descriptions ke first two columns
+- Aggregation: hitung totals per account code dengan Indonesian locale formatting
 
-### 3. AI Assistant
-- Integrasi Google Gemini untuk analisis data
-- Dukungan bahasa Indonesia
-- Jawaban kontekstual berdasarkan data anggaran saat ini
-- Query analisis cepat untuk pertanyaan umum
-- Context-aware responses with data context
-- Context-aware prompts built from current budget data
-- Error handling with fallback model support
-- Rate limiting and timeout management
-- Fitur percakapan berbasis konteks (dengan riwayat percakapan)
-- Fitur quick prompts untuk pertanyaan-pertanyaan umum
-- Sanitasi output model AI untuk keamanan tampilan
-- Pembuatan snapshot data otomatis sebagai konteks untuk AI
-- Pembuatan prompt sistem yang dinamis berdasarkan data terbaru
-- Fitur format pesan dengan dukungan markup sederhana (bold, line breaks)
-- Pengelolaan error API key dan koneksi layanan AI
+**Export & Download:**
+- Generate Excel download dengan proper formatting dan styling
+- Dynamic column labels berdasarkan periode laporan
+- Auto-size columns dan header styling untuk readability
 
-### 4. Authentication & Authorization
-- Sistem autentikasi custom dengan batasan domain email @kemenkopmk.go.id
-- Sistem role-based access (Admin, User, Viewer)
-- Token JWT untuk manajemen session
-- Cookie httpOnly untuk mencegah XSS
+### 2. Activity Management System
+**CRUD Operations:**
+- Create, Read, Update, Delete kegiatan anggaran
+- Manajemen alokasi anggaran per kegiatan dengan validasi sisa budget
+- Status tracking: Rencana, Komitmen, Outstanding, Terbayar
+- Activity metadata: tujuan, unit terkait, penanggung jawab, capaian, pending issues
 
-#### Feature Autentikasi
-1. **Registrasi (Signup)**
-   - Hanya email dengan domain `@kemenkopmk.go.id` yang diperbolehkan
-   - Password minimal 6 karakter
-   - Field: Nama, Email, Unit Kerja (opsional), Password
+**Advanced Features:**
+- Filter & search berdasarkan tahun, bulan, status, nama kegiatan
+- Pagination dengan customizable page size (5, 10, 50, 100, all)
+- Grouping berdasarkan periode pelaksanaan
+- Bulk operations untuk effisiensi
 
-2. **Login**
-   - Menggunakan email dan password
-   - Validasi domain email
-   - Session menggunakan JWT token (disimpan di cookie)
+**Budget Allocation Management:**
+- Smart allocation search dengan dropdown autocomplete
+- Real-time validation sisa anggaran vs jumlah alokasi
+- Integration dengan processed Excel data untuk code validation
+- Multiple allocations per activity dengan total calculation
 
-3. **Manajemen User (Admin Only)**
-   - CRUD user (Create, Read, Update, Delete)
-   - Pengaturan role: admin, user, viewer
-   - Admin tidak bisa menghapus akun sendiri
+### 3. File Attachment System
+**Upload Management:**
+- Multi-file upload dengan drag & drop support
+- File validation untuk format PDF, DOC, DOCX, XLS, XLSX, JPG, PNG
+- Metadata-based storage dengan activity isolation
+- Unique file naming dengan UUID untuk prevent collisions
 
-#### Role & Permissions
-| Role | Dashboard | Input Data | Kelola User |
-|------|-----------|------------|-------------|
-| Admin | ✅ | ✅ | ✅ |
-| User | ✅ | ✅ | ❌ |
-| Viewer | ✅ | ❌ | ❌ |
+**File Operations:**
+- Download attachment dengan proper MIME type handling
+- Inline preview untuk PDF dan images
+- Bulk delete operations dengan confirmation
+- Directory cleanup otomatis saat activity dihapus
 
-### 5. Data Visualization
-- Tabel realisasi anggaran dengan struktur hierarki
-- Kalkulasi real-time total dan sisa anggaran
-- Ringkasan status kegiatan
-- Hierarchical presentation:
-  - `createHierarchy` constructs nested tree nodes keyed by dotted account codes
-  - `flattenTree` converts that tree into flat rows annotated with metadata such as levels, visibility, and computed aggregates for grouped nodes
-- Process history persistence:
-  - Processed results are stored in Supabase table `processed_results` via `saveProcessedResult`
-  - `getAllProcessedResults`/`getLatestProcessedResult` hydrate UI history dropdowns with formatted Indonesian locale timestamps
-- Visualisasi progres realisasi dalam bentuk progress bar
-- Rekapitulasi per akun (level 7) dengan visualisasi jumlah pagu, realisasi, dan sisa anggaran
-- Fitur pencarian dan filter pada data tabel (dengan operator AND/OR)
-- Fitur ekspansi/kolaps node pada struktur hierarki
-- Fitur pengaturan kedalaman tampilan hierarki (level 1-8)
-- Fitur tampilan berdasarkan jenis realisasi (laporan, outstanding, komitmen)
-- Fitur download hasil pemrosesan dalam format Excel
-- Fitur tampilan kolom yang dapat diubah untuk menyesuaikan kebutuhan
-- Fitur ringkasan visual untuk kebutuhan manajerial
+### 4. AI Assistant Integration
+**Context-Aware Conversation:**
+- Integration Google Gemini AI dengan multi-model fallback
+- Context building dari current budget data dan activities
+- Conversation history untuk contextual responses
+- Quick prompts untuk pertanyaan umum tentang data
+
+**Advanced Features:**
+- Auto-fill activity form dari PDF documents menggunakan AI
+- Real-time data snapshot untuk context building
+- Error handling dengan timeout dan rate limiting
+- Sanitasi output AI untuk security
+- Indonesian language support dengan proper formatting
+
+### 5. Authentication & Authorization
+**Security Features:**
+- Domain validation: hanya @kemenkopmk.go.id yang diperbolehkan
+- Password hashing dengan bcrypt (salt rounds 10)
+- JWT tokens dengan httpOnly cookies untuk XSS prevention
+- Session management dengan automatic token refresh
+
+**Role-Based Access Control:**
+- **Admin**: Full access - dashboard, input data, user management
+- **User**: Standard access - dashboard, input data
+- **Viewer**: Read-only access - dashboard only
+- Protected routes dengan middleware validation
+- Admin-only endpoints untuk user CRUD operations
+
+### 6. Data Visualization & Analytics
+**Hierarchical Table View:**
+- Expandable/collapsible tree structure untuk budget data
+- Level-based indentation dengan visual hierarchy
+- Real-time calculation totals, percentages, remaining budget
+- Advanced search dengan AND/OR operators
+
+**Dashboard Analytics:**
+- Budget overview panels dengan progress visualization
+- Account summary dengan pie/donut charts (Chart.js)
+- Monthly analytics dengan trend analysis
+- Historical data comparison dan variance analysis
+
+**Interactive Features:**
+- Configurable hierarchy depth (1-8 levels)
+- Column visibility toggle untuk customized views
+- Real-time search result highlighting
+- Export functionality untuk filtered data
 
 ## Struktur Database (Supabase)
 
-### Core Tables
-- **users**: Email, password_hash, role, name, unit, timestamps
-  - id uuid not null default gen_random_uuid ()
-  - email text not null
-  - password_hash text not null
-  - role text not null default 'user'::text
-  - created_at timestamp with time zone null default now()
-  - name text null
-  - unit text null
-  - constraint users_pkey primary key (id)
-  - constraint users_email_key unique (email)
-  - index: users_email_idx on public.users using btree (email)
-
-- **processed_results**: Excel data storage with metadata
-  - id uuid (primary key)
-  - file_name (text): nama file yang diproses
-  - processed_data (jsonb): data hasil pemrosesan Excel
-  - totals (jsonb): total anggaran
-  - account_name_map (jsonb): pemetaan kode akun ke nama
-  - report_type (text): jenis laporan (Akrual/SP2D)
-  - report_date (text): tanggal laporan
-  - user_id (uuid): id pengguna yang mengunggah
-  - created_at timestamp with time zone default now()
-
-- **activities**: Budget activity management
-  - id uuid (primary key)
-  - nama (text): nama kegiatan
-  - status (text): status kegiatan (Rencana, Komitmen, Outstanding, Terbayar)
-  - tanggal_pelaksanaan (text): tanggal pelaksanaan kegiatan
-  - tujuan_kegiatan (text): tujuan kegiatan
-  - kl_unit_terkait (text): kementerian/lembaga/unit terkait
-  - penanggung_jawab (text): penanggung jawab kegiatan
-  - capaian (text): capaian kegiatan
-  - pending_issue (text): permasalahan yang belum selesai
-  - rencana_tindak_lanjut (text): rencana tindak lanjut
-  - user_id (uuid): id pengguna yang membuat
-  - created_at timestamp with time zone default now()
-
-- **allocations**: Budget allocation details for activities
-  - id uuid (primary key)
-  - activity_id (uuid): foreign key ke tabel activities
-  - kode (text): kode akun anggaran
-  - uraian (text): uraian alokasi
-  - jumlah (numeric): jumlah dana yang dialokasikan
-
-- **activity_attachments**: File attachment references
-  - attachmentId (text): ID unik lampiran
-  - activityId (text): ID kegiatan terkait
-  - fileName (text): nama file
-  - storedFileName (text): nama file yang disimpan
-  - filePath (text): path file
-  - uploadedAt (text): tanggal unggah
-
-- **user_settings**: Pengaturan pengguna
-  - id uuid (primary key)
-  - user_id (uuid): foreign key ke tabel users
-  - key (text): kunci pengaturan
-  - value (text): nilai pengaturan
-  - updated_at timestamp with time zone default now()
-
-### Setup Database
+### Core Tables Design
 ```sql
--- Buat tabel users
-create table public.users (
-  id uuid not null default gen_random_uuid (),
-  email text not null,
-  password_hash text not null,
-  role text not null default 'user'::text,
-  created_at timestamp with time zone null default now(),
-  name text null,
-  unit text null,
-  constraint users_pkey primary key (id),
-  constraint users_email_key unique (email)
-) tablespace pg_default;
+-- Users table dengan role-based access
+CREATE TABLE users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'user',
+  name TEXT,
+  unit TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
--- Buat index untuk email
-create index if not exists users_email_idx 
-on public.users using btree (email) 
-tablespace pg_default;
+-- Processed Excel results storage
+CREATE TABLE processed_results (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  file_name TEXT,
+  processed_data JSONB,
+  totals JSONB,
+  account_name_map JSONB,
+  report_type TEXT, -- 'Akrual' atau 'SP2D'
+  report_date TEXT,
+  user_id UUID REFERENCES users(id),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
--- Buat tabel processed_results untuk menyimpan hasil pemrosesan Excel
-create table public.processed_results (
-  id uuid not null default gen_random_uuid (),
-  file_name text,
-  processed_data jsonb,
-  totals jsonb,
-  account_name_map jsonb,
-  report_type text,
-  report_date text,
-  user_id uuid references public.users(id),
-  created_at timestamp with time zone null default now(),
-  constraint processed_results_pkey primary key (id)
-) tablespace pg_default;
+-- Activities management
+CREATE TABLE activities (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  nama TEXT NOT NULL,
+  status TEXT, -- 'Rencana', 'Komitmen', 'Outstanding', 'Terbayar'
+  tanggal_pelaksanaan TEXT,
+  tujuan_kegiatan TEXT,
+  kl_unit_terkait TEXT,
+  penanggung_jawab TEXT,
+  capaian TEXT,
+  pending_issue TEXT,
+  rencana_tindak_lanjut TEXT,
+  user_id UUID REFERENCES users(id),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
--- Buat tabel activities untuk manajemen kegiatan
-create table public.activities (
-  id uuid not null default gen_random_uuid (),
-  nama text not null,
-  status text,
-  tanggal_pelaksanaan text,
-  tujuan_kegiatan text,
-  kl_unit_terkait text,
-  penanggung_jawab text,
-  capaian text,
-  pending_issue text,
-  rencana_tindak_lanjut text,
-  user_id uuid references public.users(id),
-  created_at timestamp with time zone null default now(),
-  constraint activities_pkey primary key (id)
-) tablespace pg_default;
+-- Budget allocations per activity
+CREATE TABLE allocations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  activity_id UUID REFERENCES activities(id) ON DELETE CASCADE,
+  kode TEXT NOT NULL,
+  uraian TEXT,
+  jumlah NUMERIC NOT NULL
+);
 
--- Buat tabel allocations untuk alokasi anggaran kegiatan
-create table public.allocations (
-  id uuid not null default gen_random_uuid (),
-  activity_id uuid references public.activities(id) on delete cascade,
-  kode text,
-  uraian text,
-  jumlah numeric,
-  constraint allocations_pkey primary key (id)
-) tablespace pg_default;
-
--- Buat tabel user_settings untuk menyimpan preferensi pengguna
-create table public.user_settings (
-  id uuid not null default gen_random_uuid (),
-  user_id uuid references public.users(id) on delete cascade,
-  key text not null,
-  value text,
-  updated_at timestamp with time zone null default now(),
-  constraint user_settings_pkey primary key (id),
-  constraint user_settings_unique_key_per_user unique (user_id, key)
-) tablespace pg_default;
+-- User preferences storage
+CREATE TABLE user_settings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  key TEXT NOT NULL,
+  value TEXT NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, key)
+);
 ```
 
-## Security Features
-- Validasi domain email @kemenkopmk.go.id di frontend dan backend
-- Hashing password dengan bcrypt dengan salt rounds 10
-- Session management dengan JWT token
-- File upload validation dan path traversal protection
-- CORS configuration untuk cross-origin requests
-- JWT Token disimpan di httpOnly cookie untuk mencegah XSS
-- Protected Routes dilindungi dengan middleware autentikasi
-- Role-Based Access admin-only routes untuk manajemen user
-- Service Role Key memiliki akses penuh ke database dan bypass semua RLS policies
+### Data Relationships
+- **One-to-Many**: Users → Activities, Users → Processed Results
+- **One-to-Many**: Activities → Allocations
+- **Foreign Key Constraints**: Cascade delete untuk data consistency
+- **Indexes**: Optimized untuk email lookup dan user-based queries
 
-### Keamanan Tambahan
-- Password Hashing: Menggunakan bcrypt dengan salt rounds 10
-- JWT Token: Token disimpan di httpOnly cookie untuk mencegah XSS
-- Domain Validation: Hanya email @kemenkopmk.go.id yang diperbolehkan
-- Protected Routes: Route dilindungi dengan middleware autentikasi
-- Role-Based Access: Admin-only routes untuk manajemen user
-- File type validation for Excel files only
-- Path traversal protection in file serving
-- Metadata-based access control for attachments
-- Directory isolation per activity
-- Sanitasi input untuk mencegah XSS dan injection
-- Validasi token JWT di sisi server
-- Penanganan error yang tidak bocor informasi sensitif ke klien
-- CORS configuration yang terbatas pada domain yang diizinkan
-- CSRF protection melalui kombinasi cookie HTTP-only dan validasi token
-- Validasi dan sanitasi konten file upload
-- Server-side validation untuk semua input pengguna
+## Security Implementation
 
-## Setup Development
-### 1. Install Dependencies
+### Authentication Security
+- **Password Security**: bcrypt hashing dengan 10 salt rounds
+- **Session Management**: JWT tokens dalam httpOnly cookies
+- **Domain Validation**: Server-side validation untuk @kemenkopmk.go.id
+- **Token Validation**: Middleware checks untuk setiap protected request
+- **CSRF Protection**: httpOnly cookies + token validation
+
+### File Upload Security
+- **File Type Validation**: Whitelist untuk allowed extensions
+- **Path Traversal Protection**: Sanitasi file paths
+- **Directory Isolation**: Separate folders per activity
+- **Size Limits**: Configurable max file size
+- **Metadata Access Control**: Database-based authorization
+
+### Data Security
+- **Input Sanitization**: XSS prevention untuk semua user inputs
+- **SQL Injection Prevention**: Parameterized queries via Supabase
+- **CORS Configuration**: Restricted origins untuk production
+- **Rate Limiting**: Protection untuk brute force attacks
+- **Error Handling**: Secure error messages tanpa information leakage
+
+## Development Workflow
+
+### Environment Setup
 ```bash
+# Install dependencies
 npm install
-```
 
-### 2. Setup Environment Variables
-Salin `.env.example` ke `.env` dan isi dengan nilai yang sesuai:
-```env
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key-here
-GEMINI_API_KEY=your-gemini-api-key-here
-JWT_SECRET=ganti-dengan-string-random-yang-aman
-```
+# Setup environment variables
+cp .env.example .env
+# Edit .env dengan actual values
 
-### 3. Setup Database di Supabase
-Buka Supabase Dashboard → SQL Editor, lalu jalankan query berikut:
-```sql
--- Buat tabel users
-create table public.users (
-  id uuid not null default gen_random_uuid (),
-  email text not null,
-  password_hash text not null,
-  role text not null default 'user'::text,
-  created_at timestamp with time zone null default now(),
-  name text null,
-  unit text null,
-  constraint users_pkey primary key (id),
-  constraint users_email_key unique (email)
-) tablespace pg_default;
+# Setup database di Supabase Dashboard
+# Jalankan SQL setup scripts
 
--- Buat index untuk email
-create index if not exists users_email_idx 
-on public.users using btree (email) 
-tablespace pg_default;
-```
-
-### 4. Buat Admin Pertama
-Jalankan script untuk membuat admin:
-```bash
+# Create admin user
 npm run create-admin
-```
 
-Anda akan diminta memasukkan:
-- SUPABASE_URL (dari file .env)
-- SUPABASE_ANON_KEY (dari file .env)
-- Nama admin
-- Email admin (harus @kemenkopmk.go.id)
-- Unit kerja (opsional)
-- Password (minimal 6 karakter)
-
-### 5. Jalankan Aplikasi
-```bash
+# Start development servers
 npm run dev
 ```
 
-Aplikasi akan berjalan di:
-- **Frontend (Client)**: http://localhost:5173
-- **API Server**: http://localhost:3001
-- **Auth Server**: http://localhost:3002
+### Hot Module Replacement (HMR)
+- **Instant Updates**: Vite provides HMR untuk frontend changes
+- **No Manual Refresh**: Changes automatically reflected in browser
+- **Component Hot Reloading**: State preserved during development
+- **Fast Iteration**: Rapid development cycle tanpa rebuild delays
 
-### Alur Kerja Pengembangan (Development Workflow)
-Aplikasi ini menggunakan Vite untuk server pengembangan frontend, yang dilengkapi dengan fitur **Hot Module Replacement (HMR)**.
-
-- **Tidak Perlu `npm run build` untuk Pengembangan**: Perintah `npm run build` hanya untuk membuat versi produksi. Saat pengembangan, cukup jalankan `npm run dev`.
-- **Perubahan Kode Otomatis**: Setiap kali Anda menyimpan perubahan pada file kode sumber (misalnya, file `.tsx` atau `.js`), Vite akan secara otomatis memperbarui aplikasi di browser Anda secara instan, seringkali tanpa perlu me-refresh halaman.
-- **Kapan Perlu Restart?**: Anda **hanya perlu** menghentikan (`Ctrl + C`) dan menjalankan kembali `npm run dev` jika Anda melakukan perubahan pada file-file konfigurasi, seperti:
-  - `vite.config.ts`
-  - `tailwind.config.js`
-  - `.env`
-  - Perubahan pada file server Node.js (`server/*.js`) juga memerlukan restart.
+### Development Servers
+- **Frontend**: http://localhost:5173 (Vite dev server)
+- **Auth API**: http://localhost:3002 (Express server)
+- **File Upload API**: http://localhost:3001 (Express server)
+- **Proxy Configuration**: Vite proxy `/api` dan `/activity-uploads` ke backend
 
 ## Production Deployment
-### Prerequisites
-1. **Node.js 18+** installed
-2. **PM2** installed globally: `npm install -g pm2`
-3. **Built frontend**: Run `npm run build` (already done)
-4. **Production environment variables** configured in `.env` file
 
-### Quick Start
-1. Configure Environment Variables
+### Prerequisites Checklist
+- [ ] Node.js 18+ installed
+- [ ] PM2 installed globally (`npm install -g pm2`)
+- [ ] Frontend built (`npm run build`)
+- [ ] Environment variables configured in `.env`
+- [ ] Database setup di Supabase
+- [ ] SSL certificate configured
+- [ ] Firewall rules untuk ports 3001, 3002, 5173
+
+### Deployment Commands
 ```bash
-# Copy the production template
-cp .env.production .env
-
-# Edit .env with your actual values:
-# - VITE_SUPABASE_URL
-# - VITE_SUPABASE_ANON_KEY
-# - SUPABASE_SERVICE_ROLE_KEY
-# - GEMINI_API_KEY
-# - JWT_SECRET (generate secure random string)
-# - CORS_ORIGIN (your production domain)
-```
-
-2. Start Production Application
-```bash
-# Option 1: Use the startup script
+# Production startup
 npm start
-# or
+# atau
 ./start-production.sh
 
-# Option 2: Use PM2 directly
-pm2 start ecosystem.config.js
+# Manual PM2 management
+pm2 start ecosystem.config.cjs
+pm2 status
+pm2 logs
+pm2 restart all
+pm2 stop all
 ```
 
-### Updating the Application
-To update the production website, you do not need to push changes to a Git repository first. The process is done directly on the server:
-1.  **Get Latest Code**: Pull the latest changes from the repository.
-    ```bash
-    git pull origin main
-    ```
-2.  **Install Dependencies**: Install or update any required packages.
-    ```bash
-    npm install
-    ```
-3.  **Rebuild Frontend**: Create a new production build of the frontend.
-    ```bash
-    npm run build
-    ```
-4.  **Restart Services**: Restart the application using PM2 to apply changes.
-    ```bash
-    npm run pm2:restart
-    ```
-
-### Available NPM Scripts
-```bash
-# Production Management
-npm start          # Start all services with PM2
-npm stop           # Stop all services
-npm run pm2:status # Check PM2 process status
-npm run pm2:logs   # View all logs
-npm run pm2:restart # Restart all services
-npm run pm2:stop   # Stop all PM2 services
-
-# Development
-npm run dev        # Start development servers
-npm run build      # Build for production
-
-# Utilities
-npm run create-admin # Create initial admin user
-npm run check-env    # Validate environment configuration
+### Environment Variables Production
+```env
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+GEMINI_API_KEY=your-gemini-api-key
+JWT_SECRET=your-secure-jwt-secret
+# Multiple origins supported (comma-separated)
+CORS_ORIGIN=https://sapa.kemenkopmk.go.id,https://sapa.azisfata.my.id
+NODE_ENV=production
+ACTIVITY_SERVER_PORT=3001
 ```
 
-## Environment Variables
+## API Endpoints Documentation
 
-### Required Variables
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `VITE_SUPABASE_URL` | Supabase project URL | `https://xyz.supabase.co` |
-| `VITE_SUPABASE_ANON_KEY` | Supabase anonymous key | `eyJ...` |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key | `eyJ...` |
-| `GEMINI_API_KEY` | Google Gemini AI API key | `AIza...` |
-| `JWT_SECRET` | JWT signing secret | `random-64-char-string` |
-
-### Optional Variables
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `CORS_ORIGIN` | Production domain for CORS | `http://localhost:3000` |
-| `NODE_ENV` | Node environment | `production` |
-| `ACTIVITY_SERVER_PORT` | Activity server port | `3001` |
-
-## Migrasi ke Database Lokal
-Sistem ini dirancang agar mudah dimigrasikan ke database lokal:
-1. Ganti Supabase client di `server/auth-server.js` dengan koneksi database lokal (PostgreSQL, MySQL, dll)
-2. Update query sesuai dengan driver database yang digunakan
-3. Tidak perlu mengubah frontend karena komunikasi melalui REST API
-
-Contoh untuk PostgreSQL lokal:
-```javascript
-import pg from 'pg';
-const { Pool } = pg;
-
-const pool = new Pool({
-  host: 'localhost',
-  port: 5432,
-  database: 'your_db',
-  user: 'your_user',
-  password: 'your_password'
-});
+### Authentication Server (Port 3002)
+```
+POST /api/auth/signup     - User registration
+POST /api/auth/login      - User login
+POST /api/auth/logout     - User logout
+GET  /api/auth/me        - Get current user
+GET  /api/users          - List all users (admin only)
+POST /api/users          - Create user (admin only)
+PUT  /api/users/:id      - Update user (admin only)
+DELETE /api/users/:id   - Delete user (admin only)
 ```
 
-## Security Considerations
+### Activity Upload Server (Port 3001)
+```
+GET  /api/activities/attachments                           - List all attachments
+GET  /api/activities/:id/attachment                       - Get activity attachments
+POST /api/activities/:id/attachment                       - Upload attachment
+DELETE /api/activities/:id/attachment/:attachmentId        - Delete attachment
+GET  /api/activities/:id/attachments/:attachmentId/download - Download attachment
+```
 
-### Input Validation & Sanitization
-- Semua endpoint harus dilengkapi dengan validasi input untuk mencegah injection attacks
-- File upload harus melalui validasi ekstensi dan ukuran file
-- Input dari AI service perlu disanitasi sebelum ditampilkan di UI
+## Performance Optimizations
 
-### Rate Limiting
-- Implementasi rate limiting untuk endpoint AI (Gemini) untuk mencegah biaya tinggi akibat penggunaan berlebihan
-- Endpoint autentikasi perlu dilindungi dari brute force attack
+### Frontend Optimizations
+- **Memoization**: React.memo dan useMemo untuk expensive calculations
+- **Virtual Scrolling**: Consider react-window untuk large datasets
+- **Code Splitting**: Lazy loading untuk heavy components
+- **Debouncing**: Search dan filter operations
+- **Image Optimization**: WebP format untuk attachments preview
 
-### Error Handling & Monitoring
-
-#### Error Handling Strategy
-- Penanganan error secara konsisten di seluruh layer aplikasi (frontend dan backend)
-- Pembungkus error handler untuk logging dan feedback pengguna
-- Penanganan khusus untuk kegagalan koneksi ke Supabase dan Gemini AI
-
-#### Logging Strategy
-- Logging aktivitas penting seperti login, perubahan data penting, dan error
-- Penyimpanan log dengan retensi yang sesuai kebijakan
-- Pemantauan error secara real-time
+### Backend Optimizations
+- **Database Indexing**: Optimal indexes untuk frequent queries
+- **Connection Pooling**: Supabase connection management
+- **File Caching**: Static file serving dengan proper headers
+- **Data Pagination**: Limit data transfer untuk large datasets
+- **Background Processing**: Async operations untuk file processing
 
 ## Testing Strategy
 
-### Testing Framework
-- Unit testing untuk fungsi-fungsi penting di `excelProcessor.ts`
-- Integration testing untuk endpoint API
-- End-to-end testing untuk alur bisnis utama
-
-### Testing Coverage
-- Target minimum 80% code coverage untuk fungsi-fungsi kritis
-- Testing untuk berbagai format dan jenis file Excel
-- Testing untuk skenario error dan edge cases
-
-## Troubleshooting
-
-### Common Issues
-- **Error: "Token tidak ditemukan"**: Pastikan cookie diaktifkan di browser, cek apakah auth server berjalan di port 3002
-- **Error: "Hanya email dengan domain @kemenkopmk.go.id yang diperbolehkan"**: Pastikan email yang digunakan memiliki domain yang benar, cek validasi di `server/auth-server.js` jika perlu mengubah domain
-- **Error: "Akses ditolak. Hanya admin yang dapat mengakses"**: Pastikan user memiliki role 'admin' di database, cek di tabel users: `SELECT * FROM users WHERE email = 'your-email@kemenkopmk.go.id';`
-- **PM2 not found**: `npm install -g pm2`
-- **Port conflicts**: 
-```bash
-# Check what's using the ports
-netstat -tulpn | grep :3001
-netstat -tulpn | grep :3002
-netstat -tulpn | grep :5173
-
-# Kill conflicting processes
-kill -9 <PID>
-```
-- **Database connection issues**: Pastikan variabel lingkungan untuk Supabase sudah benar
-- **AI service errors**: Cek apakah kunci API Gemini valid dan layanan tersedia
-
-## Testing Ideas
-- Unit-test `processExcelData` with fixture tables to lock down transformations
-- Add integration tests for `createHierarchy`/`flattenTree` to ensure expand/collapse totals remain consistent
-- Mock Supabase in UI tests to verify activity CRUD flows without network calls
-- Unit tests for `fetchAiResponse` with different input scenarios
-- Integration tests for file upload and processing workflows
-- End-to-end tests for authentication and authorization flows
-- Tests for data validation and error handling in all API calls
-- Component tests for UI interaction patterns
-
-## Refactor & Optimization Roadmap
-
-### Fokus Utama
-- **Pecah `App.tsx`**: Pisahkan header, upload, dashboard, tabel akun, modul AI, dan form kegiatan ke komponen mandiri. Bungkus logika berat (hierarki, upload, kegiatan, AI) dalam custom hook agar state tetap terkontrol dan mudah diuji.
-- **Perapihan layer data**: Buat modul akses data khusus (mis. `services/processedResults`) yang mengembalikan data bertipe kuat hasil normalisasi. Tambahkan validasi (Zod/TypeScript) saat membaca payload Supabase supaya error terdeteksi dini.
-- **Optimasi render hierarki/tabel**: Memoisasi `createHierarchy`/`flattenTree`, evaluasi pemakaian web worker untuk dataset besar, dan gunakan virtualisasi (`react-window`) agar tabel tetap lancar.
-- **Manajemen state terstruktur**: Alihkan state kompleks ke `useReducer` atau store ringan (Zustand) untuk kegiatan, filter, dan AI chat. Simpan preferensi UI (depth, panel visibility) lewat satu hook settings yang konsisten.
-- **Pipeline Excel modular**: Pecah fungsi besar di `excelProcessor.ts` menjadi tahapan pure function dengan unit test, cache hasil berat (mis. `accountNameMap`), dan dokumentasikan setiap transformasi.
-- **UX & performa**: Lazy-load panel berat (AI chat, form kegiatan), debounce pencarian/filter, dan batasi rerender melalui memo serta selector state.
-- **Tooling & testing**: Tambah linting (`@typescript-eslint` + Prettier) dan suite test (Jest/RTL) untuk hook/komponen krusial. Gunakan React Profiler/log custom buat mendeteksi regresi performa.
-
-### Tahapan Eksekusi
-1. **Strukturisasi** – Refactor `App.tsx` menjadi komponen/hook terpisah, kencangkan typing di service layer.
-2. **Performa UI** – Terapkan memoization, virtualisasi tabel, dan optimasi render hierarki.
-3. **Pipeline Data** – Modularisasi pengolahan Excel, tambahkan pengujian unit serta penanganan error yang jelas.
-4. **UX & Polishing** – Implementasi lazy loading, restruktur state global, integrasi linting dan test otomatis sebelum rilis.
-
-Setiap fase idealnya disertai regression test minimal dan review performa untuk memastikan tidak ada degradasi fungsional.
-
-### Progress
-- **Phase 1 (Strukturisasi) – selesai**: `App.tsx` dipecah ke komponen dashboard (`BudgetOverviewPanel`, `AccountSummaryPanel`) dan custom hooks (`useHierarchyTable`, `useProcessedMetrics`); logika pencarian dan perhitungan total dipindahkan agar lebih terisolasi; `services/supabaseService.ts` dan utilitas terkait diperkuat typenya menggunakan struktur row eksplisit.
-
-## Production Checklist
-- [ ] Environment variables configured
-- [ ] Frontend built (`dist/` folder exists)
-- [ ] PM2 installed globally
-- [ ] Logs directory created
-- [ ] Initial admin user created (if needed)
-- [ ] Firewall configured for required ports
-- [ ] Reverse proxy configured (nginx/apache)
-- [ ] SSL certificate installed (for HTTPS)
-- [ ] Domain DNS configured
-- [ ] Database backups configured
-- [ ] Error monitoring system implemented
-- [ ] Health check endpoints available for monitoring
-- [ ] Rate limiting configured for API endpoints
-- [ ] Regular security scanning scheduled
-
-## Keamanan Tambahan untuk Production
-1. **Environment Variables**: Never commit `.env` file to version control
-2. **JWT Secret**: Generate a cryptographically secure random string
-3. **CORS**: Configure `CORS_ORIGIN` for your production domain
-4. **Service Role Key**: Keep `SUPABASE_SERVICE_ROLE_KEY` secure (server-side only)
-5. Gunakan environment variables yang aman
-6. Rotate keys secara berkala
-7. Monitor access logs di Supabase Dashboard
-8. Gunakan HTTPS untuk semua requests
-9. Implementasikan rate limiting di server
-
-## Cara Menggunakan
-
-### Registrasi User Pertama
-1. Buka http://localhost:5173/signup
-2. Isi form dengan email @kemenkopmk.go.id
-3. Klik "Daftar"
-4. Setelah berhasil, login di http://localhost:5173/login
-
-### Membuat Admin Pertama
-Karena user pertama akan memiliki role 'user' secara default, Anda perlu mengubahnya menjadi 'admin' secara manual di database:
-```sql
-UPDATE users 
-SET role = 'admin' 
-WHERE email = 'email-anda@kemenkopmk.go.id';
+### Unit Testing
+```javascript
+// Excel processing tests
+describe('Excel Processor', () => {
+  test('should parse Indonesian budget format correctly', () => {
+    const testData = // test data
+    const result = processExcelData(testData)
+    expect(result.finalData).toBeDefined()
+  })
+})
 ```
 
-Setelah itu, admin bisa mengelola user lain melalui halaman `/users`.
+### Integration Testing
+```javascript
+// API endpoint tests
+describe('Activity API', () => {
+  test('should create activity with allocations', async () => {
+    const response = await request(app)
+      .post('/api/activities')
+      .send(mockActivity)
+    expect(response.status).toBe(201)
+  })
+})
+```
 
-### Akses Halaman Manajemen User
-1. Login sebagai admin
-2. Klik tombol "Kelola User" di header
-3. Atau akses langsung http://localhost:5173/users
+### End-to-End Testing
+- User registration dan login flow
+- File upload dan processing workflow
+- Activity CRUD operations
+- AI assistant interaction
+- Dashboard data visualization
 
-## Tujuan Proyek
-Membantu Kemenkop UKM dalam:
-- Mengelola dan menganalisis data realisasi anggaran
-- Mempermudah proses pelaporan dan monitoring anggaran
-- Meningkatkan efisiensi dalam pengolahan data Excel kompleks
-- Memberikan wawasan melalui AI yang terintegrasi
+## Monitoring & Maintenance
 
-This implementation represents a **production-ready, enterprise-grade application** specifically designed for Indonesian government budget management, with robust security, sophisticated data processing capabilities, and modern web development practices.
+### Application Monitoring
+- **Health Check Endpoints**: `/health` untuk service status
+- **Error Tracking**: Centralized error logging
+- **Performance Metrics**: Response time monitoring
+- **User Analytics**: Feature usage tracking
+
+### Database Maintenance
+- **Regular Backups**: Automated Supabase backups
+- **Data Retention**: Policy untuk historical data
+- **Index Optimization**: Periodic index analysis
+- **Query Performance**: Slow query monitoring
+
+## Troubleshooting Guide
+
+### Common Issues & Solutions
+
+**Authentication Issues:**
+```
+Error: "Token tidak ditemukan"
+Solution: Check browser cookies, verify auth server running on port 3002
+```
+
+**Domain Validation Issues:**
+```
+Error: "Hanya email dengan domain @kemenkopmk.go.id yang diperbolehkan"
+Solution: Verify email domain, check validation in auth-server.js
+```
+
+**Database Connection Issues:**
+```
+Error: Supabase connection failed
+Solution: Check VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env
+```
+
+**AI Service Issues:**
+```
+Error: Gemini API timeout
+Solution: Check GEMINI_API_KEY, verify network connectivity
+```
+
+**File Upload Issues:**
+```
+Error: File upload failed
+Solution: Check file size limits, verify server disk space
+```
+
+## Future Enhancement Roadmap
+
+### Phase 1: Performance & UX ✅ MOSTLY COMPLETED
+- [x] **Implement virtual scrolling untuk large datasets** - React Window sudah diimplementasi di `DataTable.tsx`
+- [x] **Lazy loading components** - `LazyLoad.tsx` dengan Intersection Observer untuk performance optimization
+- [x] **Add advanced filtering dengan date range picker** - Filter berdasarkan tahun/bulan sudah ada di activity management
+- [ ] **Implement drag-and-drop untuk activity reordering** - Belum diimplementasi
+- [ ] **Add keyboard shortcuts untuk power users** - Belum diimplementasi
+
+### Phase 2: Advanced Analytics ✅ COMPLETED
+- [x] **Custom report builder** - Dashboard analytics dengan multiple chart types sudah lengkap
+- [x] **Data export ke multiple formats (Excel)** - Excel export sudah diimplementasi dengan proper formatting
+- [x] **Budget variance analysis dengan alerts** - Trend analysis dengan variance detection di `TrendAnalyticsPanel.tsx`
+- [x] **Predictive analytics untuk budget planning** - Linear forecasting sudah diimplementasi di trend analysis
+
+### Phase 3: Integration & Automation ⚠️ PARTIALLY COMPLETED
+- [x] **Historical data analysis** - `historicalDataService.ts` dengan comprehensive data processing
+- [x] **Advanced data visualization** - Chart.js integration dengan multiple chart types
+- [ ] **API integration dengan SAKTI systems** - Belum diimplementasi
+- [ ] **Automated data synchronization** - Belum diimplementasi
+- [ ] **Email & WhatsApp notifications untuk budget alerts** - Notifikasi multi-channel saat:
+  - Budget mencapai threshold tertentu (contoh: >80% terpakai)
+  - Ada activity dengan status Outstanding yang lama tidak terupdate
+  - Approvals pending untuk admin
+  - Monthly reports tersedia
+  - AI assistant menemukan anomali data
+- [ ] **Mobile app development** - Belum diimplementasi
+
+### **Phase 4: Communication & Integration Enhancement (NEW)**
+- [ ] **WhatsApp Business API integration** - Notifikasi real-time via WhatsApp:
+  - Budget alerts dengan formatted messages
+  - Activity status updates
+  - Approval requests dengan quick reply buttons
+  - Monthly report summaries
+  - AI insights sharing
+  - Document sharing via WhatsApp
+- [ ] **Omnichannel notification system** - Centralized notification management:
+  - User preference untuk email/WhatsApp/SMS
+  - Smart notification routing berdasarkan urgency
+  - Delivery tracking dan fallback mechanisms
+  - Notification templates dengan dynamic content
+- [ ] **Integration dengan government systems** - API connectivity:
+  - SAKTI system integration untuk real-time data sync
+  - KPPN (Kantor Pelayanan Perbendaharaan Negara) integration
+  - SIMAK-BMN (Sistem Informasi Manajemen Aset Negara) connectivity
+  - E-budgeting system integration
+- [ ] **Automated workflow orchestration** - Process automation:
+  - Multi-level approval workflows
+  - Document routing dengan digital signatures
+  - Compliance checking otomatis
+  - Audit trail generation
+
+### **NEW: Already Implemented Advanced Features**
+- [x] **Hierarchical Data Processing** - 8-level budget code processing
+- [x] **AI-Powered Form Auto-fill** - PDF document processing dengan Gemini AI
+- [x] **Real-time Data Validation** - Budget allocation validation dengan sisa anggaran check
+- [x] **Advanced Search & Filtering** - AND/OR operators dengan multiple criteria
+- [x] **Comprehensive Dashboard** - Monthly analytics, trend analysis, budget overview panels
+- [x] **Multi-format File Upload** - PDF, DOC, DOCX, XLS, XLSX, JPG, PNG support
+- [x] **Role-based Access Control** - Admin/User/Viewer dengan proper authorization
+- [x] **Historical Data Tracking** - Monthly reports dengan trend comparison
+- [x] **Interactive Data Visualization** - Chart.js dengan pie, bar, line charts
+- [x] **Memory Management** - Lazy loading dan virtual scrolling untuk performance
+
+## Best Practices Implemented
+
+### Code Quality
+- **TypeScript**: Strong typing untuk entire application
+- **ESLint & Prettier**: Consistent code formatting
+- **Modular Architecture**: Separation of concerns
+- **Error Boundaries**: Graceful error handling
+
+### Security Best Practices
+- **Principle of Least Privilege**: Minimal required permissions
+- **Defense in Depth**: Multiple security layers
+- **Secure Defaults**: Secure configuration by default
+- **Regular Security Updates**: Dependency management
+
+### Performance Best Practices
+- **Lazy Loading**: Load components on demand
+- **Memoization**: Cache expensive computations
+- **Optimistic Updates**: Improve perceived performance
+- **Resource Optimization**: Minimize bundle size
+
+## Conclusion
+
+Excel Data Processor represents a **production-ready, enterprise-grade application** specifically designed for Indonesian government budget management at Kemenko PMK. The application demonstrates:
+
+- **Modern Architecture**: Microservices dengan clear separation of concerns
+- **Robust Security**: Multiple layers of security validation
+- **Advanced Features**: AI integration, hierarchical data processing, comprehensive activity management
+- **Scalable Design**: Optimized untuk large datasets dan concurrent users
+- **Maintainable Code**: Well-structured, documented, dan tested codebase
+
+The system successfully addresses the complex requirements of Indonesian government budget processing while providing an intuitive, feature-rich interface for budget analysts and administrators.
