@@ -68,8 +68,8 @@ const MonthlyAnalyticsPanel: React.FC<MonthlyAnalyticsPanelProps> = ({
     >();
 
     currentMonthData.forEach(item => {
-      if (item.pagu <= 0) return; // Skip yang tidak ada pagu
-
+      if (!item || item.pagu <= 0) return; // Skip yang tidak ada atau tidak valid
+      
       const existing = groupedByLevel7.get(item.kode);
       if (existing) {
         existing.totalPagu += item.pagu;
@@ -111,7 +111,7 @@ const MonthlyAnalyticsPanel: React.FC<MonthlyAnalyticsPanelProps> = ({
     // Group by uraian dan ambil top 8
     const composition = new Map<string, number>();
     currentMonthData.forEach(item => {
-      if (item.realisasi > 0) {
+      if (item && item.realisasi > 0 && item.uraian) {
         const existing = composition.get(item.uraian) || 0;
         composition.set(item.uraian, existing + item.realisasi);
       }
@@ -137,23 +137,23 @@ const MonthlyAnalyticsPanel: React.FC<MonthlyAnalyticsPanelProps> = ({
       return;
     }
 
-    const totalPagu = currentMonthData.reduce((sum, item) => sum + item.pagu, 0);
-    const totalRealisasi = currentMonthData.reduce((sum, item) => sum + item.realisasi, 0);
+    const totalPagu = currentMonthData.reduce((sum, item) => sum + (item?.pagu || 0), 0);
+    const totalRealisasi = currentMonthData.reduce((sum, item) => sum + (item?.realisasi || 0), 0);
     const totalSisa = totalPagu - totalRealisasi;
     const avgPersentase =
-      currentMonthData.reduce((sum, item) => sum + item.persentase, 0) / currentMonthData.length;
+      currentMonthData.reduce((sum, item) => sum + (item?.persentase || 0), 0) / currentMonthData.length;
 
     // Kategorisasi kesehatan penyerapan
-    const healthyItems = currentMonthData.filter(item => item.persentase >= 75).length;
+    const healthyItems = currentMonthData.filter(item => item && item.persentase >= 75).length;
     const warningItems = currentMonthData.filter(
-      item => item.persentase >= 50 && item.persentase < 75
+      item => item && item.persentase >= 50 && item.persentase < 75
     ).length;
-    const criticalItems = currentMonthData.filter(item => item.persentase < 50).length;
+    const criticalItems = currentMonthData.filter(item => item && item.persentase < 50).length;
 
     // Identifikasi kantong sisa besar
     const largeSisa = currentMonthData
-      .filter(item => item.sisa > 100000000) // > 100 juta
-      .sort((a, b) => b.sisa - a.sisa)
+      .filter(item => item && item.sisa > 100000000) // > 100 juta
+      .sort((a, b) => (b?.sisa || 0) - (a?.sisa || 0))
       .slice(0, 5);
 
     const analysis = `
@@ -174,7 +174,7 @@ const MonthlyAnalyticsPanel: React.FC<MonthlyAnalyticsPanelProps> = ({
 ${largeSisa
   .map(
     (item, index) =>
-      `${index + 1}. ${item.uraian}: Rp ${item.sisa.toLocaleString('id-ID')} (${((item.sisa / item.pagu) * 100).toFixed(1)}% sisa)`
+      `${index + 1}. ${item.uraian || 'N/A'}: Rp ${(item.sisa || 0).toLocaleString('id-ID')} (${(((item.sisa || 0) / (item.pagu || 1)) * 100).toFixed(1)}% sisa)`
   )
   .join('\n')}
 
@@ -214,10 +214,14 @@ ${largeSisa
         display: (context: any) => context.datasetIndex === 1,
         // Formatter untuk datalabel
         formatter: (value: any, context: any) => {
-          const data = context.chart.data.datasets[0].data[context.dataIndex];
-          const nominalJT = (value / 1000000).toFixed(1);
-          const persentase = data.persentase || 0;
-          return `Rp ${nominalJT}JT\n(${persentase}%)`;
+          const originalData = context.chart.data.originalData as AccountLevel7Data[];
+          if (originalData && originalData[context.dataIndex]) {
+            const dataItem = originalData[context.dataIndex];
+            const nominalJT = (value / 1000000).toFixed(1);
+            const persentase = dataItem.persentase || 0;
+            return `Rp ${nominalJT}JT\n(${persentase}%)`;
+          }
+          return '';
         },
         // Posisi datalabel di atas batang
         anchor: 'end',
@@ -238,16 +242,17 @@ ${largeSisa
         callbacks: {
           label: (context: any) => {
             const label = context.dataset.label || '';
-            const value = context.parsed.y;
+            const rawValue = context.parsed.y;
+            const originalData = context.chart.data.originalData as AccountLevel7Data[];
+            const dataItem = originalData && originalData[context.dataIndex];
+            
             if (label === 'Target (Pagu)') {
-              return `Target: Rp ${value.toLocaleString('id-ID')}`;
-            } else if (label === 'Realisasi') {
-              const dataIndex = context.dataIndex;
-              const item = context.chart.data.datasets[0].data[dataIndex] as AccountLevel7Data;
-              const persentase = item.persentase || 0;
-              return [`Realisasi: Rp ${value.toLocaleString('id-ID')} (${persentase.toFixed(1)}%)`];
+              return `Target: Rp ${rawValue.toLocaleString('id-ID')}`;
+            } else if (label === 'Realisasi' && dataItem) {
+              const persentase = dataItem.persentase || 0;
+              return [`Realisasi: Rp ${rawValue.toLocaleString('id-ID')} (${persentase.toFixed(1)}%)`];
             }
-            return `${label}: Rp ${value.toLocaleString('id-ID')}`;
+            return `${label}: Rp ${rawValue.toLocaleString('id-ID')}`;
           },
         },
       },
@@ -256,7 +261,7 @@ ${largeSisa
       y: {
         beginAtZero: true,
         ticks: {
-          callback: (value: any) => {
+          callback: function(value: any) {
             // Format dalam jutaan untuk readability
             if (value >= 1000000000) {
               return `Rp ${(value / 1000000000).toFixed(1)}M`;
@@ -270,12 +275,19 @@ ${largeSisa
       x: {
         // Kosongkan label sumbu X karena info sudah di atas batang
         ticks: {
-          callback: (value: any, index: number, values: any[]) => {
-            const item = values[index] as AccountLevel7Data;
-            if (item) {
-              // Truncate nama jika terlalu panjang
-              return item.uraian.length > 20 ? item.uraian.substring(0, 20) + '...' : item.uraian;
+          callback: function(value: any, index: number, values: any[]) {
+            // Di sini `values` adalah array nilai sumbu X, bukan data AccountLevel7Data
+            // Kita harus mengakses data dari chart object
+            const chart = this.chart;
+            if (chart && chart.data && chart.data.originalData) {
+              const originalData = chart.data.originalData as AccountLevel7Data[];
+              if (originalData && originalData[index]) {
+                const item = originalData[index];
+                // Truncate nama jika terlalu panjang
+                return item.uraian && item.uraian.length > 20 ? item.uraian.substring(0, 20) + '...' : item.uraian || '';
+              }
             }
+            // Jika tidak ada data original, fallback ke string kosong
             return '';
           },
         },
@@ -288,7 +300,8 @@ ${largeSisa
     return {
       labels: data.map(item => {
         // Kosongkan label karena info akan ditampilkan di atas batang
-        return item.uraian.length > 20 ? item.uraian.substring(0, 20) + '...' : item.uraian;
+        // Tambahkan pengecekan agar tidak mengakses properti dari item yang null/undefined
+        return item && item.uraian && item.uraian.length > 20 ? item.uraian.substring(0, 20) + '...' : (item?.uraian || '');
       }),
       datasets: [
         {
@@ -406,7 +419,7 @@ ${largeSisa
               </h4>
               {top5.length > 0 ? (
                 <div className="h-64">
-                  <Bar data={topBottomChartData(top5, 'Top')} options={topBottomChartOptions} />
+                  <Bar data={topBottomChartData(top5, 'Top')} options={topBottomChartOptions} key={`top5-chart-${top5.length}`} />
                 </div>
               ) : (
                 <div className="h-64 flex items-center justify-center text-gray-500">
@@ -423,6 +436,7 @@ ${largeSisa
                   <Bar
                     data={topBottomChartData(bottom5, 'Bottom')}
                     options={topBottomChartOptions}
+                    key={`bottom5-chart-${bottom5.length}`}
                   />
                 </div>
               ) : (
@@ -443,7 +457,7 @@ ${largeSisa
             </h4>
             {compositionChartData ? (
               <div className="h-80">
-                <Doughnut data={compositionChartData} options={compositionChartOptions} />
+                <Doughnut data={compositionChartData} options={compositionChartOptions} key={`composition-chart-${compositionData?.length || 0}`} />
               </div>
             ) : (
               <div className="h-80 flex items-center justify-center text-gray-500">
