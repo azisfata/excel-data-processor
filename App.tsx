@@ -2433,6 +2433,12 @@ const HistoryDropdown = () => (
                                             </label>
                                         );
                                     })}
+                                    <button 
+                                      onClick={() => generateRkbPdf(filteredActivityGroups, selectedYear, selectedMonth, selectedStatus)}
+                                      className='bg-blue-600 text-white px-4 py-1.5 rounded-md hover:bg-blue-700 text-sm'
+                                    >
+                                      RKB Lengkap PDF
+                                    </button>
                                 </div>
                             </div>
                         </div>
