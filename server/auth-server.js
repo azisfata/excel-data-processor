@@ -11,7 +11,7 @@ dotenv.config();
 
 const app = express();
 app.set('trust proxy', 1);
-const PORT = 3002;
+const PORT = process.env.AUTH_SERVER_PORT ? Number(process.env.AUTH_SERVER_PORT) : 3002;
 
 // JWT Secret - dalam production, simpan di environment variable
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this-in-production';

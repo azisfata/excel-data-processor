@@ -16,11 +16,11 @@ export default defineConfig(({ mode }) => {
         allowedHosts: true,
         proxy: {
           '/api': {
-            target: 'http://localhost:3001',
+            target: `http://localhost:${env.AUTH_SERVER_PORT || 3002}`,
             changeOrigin: true
           },
           '/activity-uploads': {
-            target: 'http://localhost:3001',
+            target: `http://localhost:${env.ACTIVITY_SERVER_PORT || 3001}`,
             changeOrigin: true
           }
         }

@@ -1,3 +1,11 @@
+const { config } = require('dotenv');
+
+// Load environment variables from .env file
+const envConfig = config({ path: '.env' }).parsed;
+
+// Helper function to get environment variable with fallback
+const getEnvVar = (key, fallback) => envConfig?.[key] || fallback;
+
 module.exports = {
   apps: [
     {
@@ -5,9 +13,10 @@ module.exports = {
       script: 'serve',
       env: {
         PM2_SERVE_PATH: './dist',
-        PM2_SERVE_PORT: 5173,
+        PM2_SERVE_PORT: getEnvVar('FRONTEND_PORT', 5173),
         PM2_SERVE_SPA: 'true',
-        PM2_SERVE_HOMEPAGE: '/index.html'
+        PM2_SERVE_HOMEPAGE: '/index.html',
+        NODE_ENV: 'production'
       },
       instances: 1,
       exec_mode: 'fork',
@@ -27,7 +36,9 @@ module.exports = {
       max_memory_restart: '200M',
       env: {
         NODE_ENV: 'production',
-        PORT: 3002
+        AUTH_SERVER_PORT: getEnvVar('AUTH_SERVER_PORT', 3002),
+        // Pass all environment variables to the server
+        ...envConfig
       },
       error_file: './logs/auth-err.log',
       out_file: './logs/auth-out.log',
@@ -43,7 +54,9 @@ module.exports = {
       max_memory_restart: '200M',
       env: {
         NODE_ENV: 'production',
-        ACTIVITY_SERVER_PORT: 3001
+        ACTIVITY_SERVER_PORT: getEnvVar('ACTIVITY_SERVER_PORT', 3001),
+        // Pass all environment variables to the server
+        ...envConfig
       },
       error_file: './logs/activity-err.log',
       out_file: './logs/activity-out.log',
