@@ -1,6 +1,15 @@
-# 📊 Excel Data Processor
+# 🧠 SAPA AI - Smart Analytics Platform
 
-Aplikasi web untuk processing data Excel dengan AI integration, user management, dan file upload capabilities.
+Platform web terintegrasi AI untuk processing data Excel, analisis cerdas, dan manajemen dokumen dengan kemampuan machine learning.
+
+## 📋 Repository Information
+
+**Note**: Repository name (`excel-data-processor`) maintains backward compatibility, 
+while the application has been rebranded to "SAPA AI - Smart Analytics Platform".
+
+**Package Name**: `sapa-ai-platform`
+**Application Name**: SAPA AI
+**Repository**: excel-data-processor (for compatibility)
 
 ## 🚀 Quick Start
 

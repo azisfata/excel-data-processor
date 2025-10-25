@@ -1,7 +1,16 @@
-# 📋 Panduan Konfigurasi Excel Data Processor
+# 📋 Panduan Konfigurasi SAPA AI - Smart Analytics Platform
 
 ## 🎯 Overview
 Proyek ini sekarang menggunakan sistem konfigurasi terpusat melalui environment variables untuk memudahkan setup di berbagai lingkungan (development, staging, production).
+
+## 📋 Repository vs Application Name
+
+**Note**: Repository name (`excel-data-processor`) maintains backward compatibility, 
+while application has been rebranded to "SAPA AI - Smart Analytics Platform".
+
+- **Repository**: `excel-data-processor` (GitHub compatibility)
+- **Application**: "SAPA AI" (brand name)
+- **Package**: `sapa-ai-platform` (npm package)
 
 ## 🔧 File Konfigurasi Utama
 
