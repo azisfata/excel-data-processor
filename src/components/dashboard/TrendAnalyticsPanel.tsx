@@ -438,7 +438,11 @@ ${spendingPattern
             </h4>
             {trendLineData && (
               <div className="h-80">
-                <Line data={trendLineData} options={lineChartOptions} key={`trend-line-chart-${monthlyTrendData.length}`} />
+                <Line
+                  data={trendLineData}
+                  options={lineChartOptions}
+                  key={`trend-line-chart-${monthlyTrendData.length}`}
+                />
               </div>
             )}
           </div>
@@ -449,7 +453,11 @@ ${spendingPattern
               📊 Laju Serapan Kumulatif vs Target
             </h4>
             <div className="h-80">
-              <Line data={cumulativeLineData} options={lineChartOptions} key={`cumulative-line-chart-${cumulativeData.length}`} />
+              <Line
+                data={cumulativeLineData}
+                options={lineChartOptions}
+                key={`cumulative-line-chart-${cumulativeData.length}`}
+              />
             </div>
           </div>
 
@@ -463,7 +471,11 @@ ${spendingPattern
             </h4>
             {stackedBarData ? (
               <div className="h-80">
-                <Bar data={stackedBarData} options={stackedBarOptions} key={`stacked-bar-chart-${compositionData.length}`} />
+                <Bar
+                  data={stackedBarData}
+                  options={stackedBarOptions}
+                  key={`stacked-bar-chart-${compositionData.length}`}
+                />
               </div>
             ) : (
               <div className="h-80 flex items-center justify-center text-gray-500">
