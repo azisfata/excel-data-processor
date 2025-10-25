@@ -3,7 +3,15 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
-    const env = loadEnv(mode, '.', '');
+    // Determine which .env file to load based on mode
+    let envFile = '';
+    if (mode === 'production') {
+        envFile = '.env.prod';
+    } else if (mode === 'development') {
+        envFile = '.env.loc';
+    }
+    
+    const env = loadEnv(mode, '.', envFile);
     return {
       define: {
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),

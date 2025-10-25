@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { getAuthApiUrl } from '../config/authApi';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 interface User {
   id: string;
@@ -19,6 +20,13 @@ const UserManagementPage: React.FC = () => {
   const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+    type: 'danger' as 'danger' | 'warning' | 'info'
+  });
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -151,47 +159,63 @@ const UserManagementPage: React.FC = () => {
     }
   };
 
-  const handleDelete = async (userId: string) => {
-    if (!window.confirm('Apakah Anda yakin ingin menghapus user ini?')) {
-      return;
-    }
+  const handleDelete = async (userId: string, userName: string) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Hapus User',
+      message: `Apakah Anda yakin ingin menghapus user "${userName}"? Tindakan ini tidak dapat dibatalkan.`,
+      onConfirm: async () => {
+        setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+        
+        try {
+          const response = await fetch(getAuthApiUrl(`auth/users/${userId}`), {
+            method: 'DELETE',
+            credentials: 'include',
+          });
 
-    try {
-      const response = await fetch(getAuthApiUrl(`auth/users/${userId}`), {
-        method: 'DELETE',
-        credentials: 'include',
-      });
+          const data = await response.json();
 
-      const data = await response.json();
+          if (!response.ok) {
+            throw new Error(data.error || 'Gagal menghapus user');
+          }
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Gagal menghapus user');
-      }
-
-      await fetchUsers();
-    } catch (err: any) {
-      setError(err.message);
-    }
+          await fetchUsers();
+        } catch (err: any) {
+          setError(err.message);
+        }
+      },
+      type: 'danger'
+    });
   };
 
-  const handleApprove = async (userId: string) => {
-    try {
-      const response = await fetch(getAuthApiUrl(`auth/users/${userId}/approve`), {
-        method: 'PUT',
-        credentials: 'include',
-      });
+  const handleApprove = async (userId: string, userName: string) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Setujui User',
+      message: `Apakah Anda yakin ingin menyetujui user "${userName}" untuk mengakses aplikasi?`,
+      onConfirm: async () => {
+        setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+        
+        try {
+          const response = await fetch(getAuthApiUrl(`auth/users/${userId}/approve`), {
+            method: 'PUT',
+            credentials: 'include',
+          });
 
-      const data = await response.json();
+          const data = await response.json();
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Gagal menyetujui user');
-      }
+          if (!response.ok) {
+            throw new Error(data.error || 'Gagal menyetujui user');
+          }
 
-      // Update state lokal untuk merefleksikan perubahan
-      setUsers(users.map(u => (u.id === userId ? { ...u, is_approved: true } : u)));
-    } catch (err: any) {
-      setError(err.message);
-    }
+          // Update state lokal untuk merefleksikan perubahan
+          setUsers(users.map(u => (u.id === userId ? { ...u, is_approved: true } : u)));
+        } catch (err: any) {
+          setError(err.message);
+        }
+      },
+      type: 'info'
+    });
   };
 
   const getRoleBadgeColor = (role: string) => {
@@ -317,7 +341,7 @@ const UserManagementPage: React.FC = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       {!user.is_approved && (
                         <button
-                          onClick={() => handleApprove(user.id)}
+                          onClick={() => handleApprove(user.id, user.name)}
                           className="text-green-600 hover:text-green-900 mr-4"
                         >
                           Setujui
@@ -331,7 +355,7 @@ const UserManagementPage: React.FC = () => {
                       </button>
                       {user.id !== currentUser?.id && (
                         <button
-                          onClick={() => handleDelete(user.id)}
+                          onClick={() => handleDelete(user.id, user.name)}
                           className="text-red-600 hover:text-red-900"
                         >
                           Hapus
@@ -470,6 +494,16 @@ const UserManagementPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+        type={confirmDialog.type}
+      />
     </div>
   );
 };

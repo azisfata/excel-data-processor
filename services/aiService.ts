@@ -40,6 +40,50 @@ const buildGeminiPayload = (messages: AiChatMessage[]) => {
   return payload;
 };
 
+const getApiKey = (): string => {
+  const key =
+    resolveEnv('VITE_GEMINI_API_KEY') ??
+    resolveEnv('GEMINI_API_KEY') ??
+    resolveEnv('VITE_API_KEY');
+  if (!key) {
+    throw new Error('AI API key Gemini belum dikonfigurasi. Tambahkan VITE_GEMINI_API_KEY pada berkas .env.');
+  }
+  return key;
+};
+
+const parseError = async (response: Response): Promise<Error> => {
+  let detail = '';
+  try {
+    const body = await response.json();
+    detail = body?.error?.message || JSON.stringify(body);
+  } catch {
+    try {
+      detail = await response.text();
+    } catch {
+      detail = 'Gagal membaca detail error dari respon.';
+    }
+  }
+  const hint = detail ? ` Detail: ${detail}` : '';
+  return new Error(`Permintaan ke layanan AI gagal (${response.status}).${hint}`);
+};
+
+const attemptRequest = async (model: string, apiKey: string, payload: Record<string, unknown>, signal: AbortSignal | null) => {
+  const url = `${GEMINI_API_BASE}/${model}:generateContent?key=${apiKey}`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal,
+  });
+
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+
+  const data = await response.json();
+  return data?.candidates?.[0]?.content?.parts?.map((part: { text?: string }) => part.text ?? '').join('').trim() ?? '';
+};
+
 export const fetchAiResponse = async (messages: AiChatMessage[]): Promise<string> => {
   const apiKey =
     resolveEnv('VITE_GEMINI_API_KEY') ??
@@ -71,67 +115,37 @@ export const fetchAiResponse = async (messages: AiChatMessage[]): Promise<string
     timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   }
 
-  const attemptRequest = async (model: string) => {
-    const url = `${GEMINI_API_BASE}/${model}:generateContent?key=${apiKey}`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(buildGeminiPayload(messages)),
-      signal: controller?.signal
-    });
-
-    if (!response.ok) {
-      let detail = '';
-      try {
-        const body = await response.json();
-        detail = body?.error?.message || JSON.stringify(body);
-      } catch {
-        try {
-          detail = await response.text();
-        } catch {
-          detail = '';
-        }
-      }
-      const hint = detail ? ` Detail: ${detail}` : '';
-      throw new Error(`Permintaan ke layanan AI gagal (${response.status}).${hint}`);
-    }
-
-    const data = await response.json();
-    const contentText: string | undefined =
-      data?.candidates?.[0]?.content?.parts
-        ?.map((part: { text?: string }) => part.text ?? '')
-        .join('')
-        .trim();
-
-    if (!contentText) {
-      throw new Error('Respon AI tidak mengandung jawaban yang dapat dibaca.');
-    }
-
-    lastSuccessfulModel = model;
-    return contentText;
-  };
-
   try {
     let lastError: Error | null = null;
+    const payload = buildGeminiPayload(messages);
+
     for (const candidate of candidates) {
       try {
-        return await attemptRequest(candidate);
+        const contentText = await attemptRequest(candidate, apiKey, payload, controller?.signal ?? null);
+        if (!contentText) {
+          throw new Error('Respon AI tidak mengandung jawaban yang dapat dibaca.');
+        }
+        lastSuccessfulModel = candidate;
+        return contentText;
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
         const message = lastError?.message?.toLowerCase() ?? '';
         console.warn(`[AI] Model ${candidate} gagal: ${lastError?.message ?? 'unknown error'}`);
+
+        // If the error is related to quota, rate limits, or server overload, try the next model.
+        // Otherwise, fail fast.
         if (
           message.includes('quota') ||
           message.includes('exceeded') ||
           message.includes('rate') ||
           message.includes('429') ||
           message.includes('503') ||
-          message.includes('overload')
+          message.includes('overload') ||
+          (error as Error).name === 'AbortError' // Also continue on timeout
         ) {
           continue;
         }
+        // For other errors (e.g., invalid API key, bad request), throw immediately.
         throw lastError;
       }
     }
