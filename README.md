@@ -5,7 +5,7 @@ Platform web terintegrasi AI untuk processing data Excel, analisis cerdas, dan m
 ## 📋 Repository Information
 
 **Note**: Repository name (`excel-data-processor`) maintains backward compatibility, 
-while the application has been rebranded to "SAPA AI - Smart Analytics Platform".
+while application has been rebranded to "SAPA AI - Smart Analytics Platform".
 
 **Package Name**: `sapa-ai-platform`
 **Application Name**: SAPA AI
@@ -144,6 +144,207 @@ Default ports yang digunakan:
 | Frontend | 5173 | `FRONTEND_PORT` |
 | Auth API | 3002 | `AUTH_SERVER_PORT` |
 | File Upload API | 3001 | `ACTIVITY_SERVER_PORT` |
+
+## 🗄️ Database Schema
+
+### Supabase Database Structure
+
+Platform SAPA AI menggunakan Supabase sebagai backend database dengan struktur tabel berikut:
+
+#### 🔐 **Authentication Tables**
+```sql
+-- Users table (managed by Supabase Auth)
+users (
+  id: uuid (primary key)
+  email: text (unique)
+  role: text (admin/user)
+  created_at: timestamp
+  updated_at: timestamp
+)
+```
+
+#### 📁 **File Management Tables**
+```sql
+-- Activity uploads tracking
+activity_uploads (
+  id: uuid (primary key)
+  filename: text
+  original_name: text
+  file_path: text
+  file_size: integer
+  mime_type: text
+  uploaded_by: uuid (foreign key to users.id)
+  upload_date: timestamp
+  processed: boolean
+  metadata: jsonb
+)
+
+-- File attachments metadata
+activity_attachments (
+  id: uuid (primary key)
+  upload_id: uuid (foreign key to activity_uploads.id)
+  attachment_type: text (pdf/document/image)
+  attachment_path: text
+  metadata: jsonb
+  created_at: timestamp
+)
+```
+
+#### 📊 **Data Analytics Tables**
+```sql
+-- Historical data storage
+monthly_reports (
+  id: uuid (primary key)
+  report_date: date
+  report_type: text
+  total_pagu: bigint
+  total_realisasi: bigint
+  persentase: decimal
+  created_by: uuid (foreign key to users.id)
+  created_at: timestamp
+  updated_at: timestamp
+)
+
+-- Account level 7 data for detailed analytics
+account_level7_data (
+  id: uuid (primary key)
+  report_id: uuid (foreign key to monthly_reports.id)
+  kode: text
+  uraian: text
+  pagu: bigint
+  realisasi: bigint
+  persentase: decimal
+  sisa: bigint
+  level: integer
+  created_at: timestamp
+)
+
+-- Hierarchical account structure
+account_hierarchy (
+  id: uuid (primary key)
+  parent_id: uuid (foreign key to account_hierarchy.id)
+  kode: text
+  uraian: text
+  level: integer
+  is_active: boolean
+  created_at: timestamp
+  updated_at: timestamp
+)
+```
+
+#### 🤖 **AI & Analytics Tables**
+```sql
+-- AI analysis cache
+ai_analysis_cache (
+  id: uuid (primary key)
+  analysis_type: text (monthly/trend/comparison)
+  input_data_hash: text (unique)
+  analysis_result: jsonb
+  model_used: text
+  created_at: timestamp
+  expires_at: timestamp
+)
+
+-- User sessions and preferences
+user_sessions (
+  id: uuid (primary key)
+  user_id: uuid (foreign key to users.id)
+  session_data: jsonb
+  last_activity: timestamp
+  created_at: timestamp
+)
+
+-- Audit trail for compliance
+audit_logs (
+  id: uuid (primary key)
+  user_id: uuid (foreign key to users.id)
+  action: text
+  resource: text
+  old_values: jsonb
+  new_values: jsonb
+  ip_address: text
+  user_agent: text
+  created_at: timestamp
+)
+```
+
+### 🔍 **Key Relationships**
+
+```mermaid
+erDiagram
+    users ||--o{ activity_uploads : uploads
+    users ||--o{ monthly_reports : creates
+    users ||--o{ audit_logs : performs
+    users ||--o{ user_sessions : has
+    
+    activity_uploads ||--o{ activity_attachments : contains
+    
+    monthly_reports ||--o{ account_level7_data : contains
+    
+    account_hierarchy ||--o{ account_hierarchy : parent_child
+    
+    ai_analysis_cache }o--|| users : cached_by
+```
+
+### 📊 **Data Flow Architecture**
+
+```mermaid
+graph TD
+    A[Excel Upload] --> B[Processing Service]
+    B --> C[Data Validation]
+    C --> D[Database Storage]
+    D --> E[Analytics Engine]
+    E --> F[AI Analysis]
+    F --> G[Dashboard Display]
+    
+    H[User Management] --> D
+    I[File Management] --> D
+    J[Audit Logging] --> D
+    
+    style A fill:#e1f5fe
+    style G fill:#f3e5f5
+    style D fill:#e8f5e8
+```
+
+### 🔧 **Database Configuration**
+
+#### **Environment Setup**
+```bash
+# Supabase Configuration
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key-here
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
+```
+
+#### **Required Supabase Extensions**
+- **pgcrypto** - Untuk enkripsi data sensitif
+- **uuid-ossp** - Untuk UUID generation
+- **btree_gin** - Untuk JSON indexing
+- **pg_trgm** - Untuk text search
+
+#### **Indexing Strategy**
+```sql
+-- Performance indexes
+CREATE INDEX idx_monthly_reports_date ON monthly_reports(report_date DESC);
+CREATE INDEX idx_account_level7_kode ON account_level7_data(kode);
+CREATE INDEX idx_activity_uploads_user ON activity_uploads(uploaded_by);
+CREATE INDEX idx_audit_logs_user_date ON audit_logs(user_id, created_at DESC);
+CREATE INDEX idx_ai_cache_hash ON ai_analysis_cache(input_data_hash);
+```
+
+### 🔄 **Data Migration & Seeding**
+
+#### **Initial Setup**
+```bash
+# Run database migrations
+npm run db:migrate
+
+# Seed initial data (admin users, default hierarchy)
+npm run db:seed
+
+# Verify database setup
+npm run db:verify
+```
 
 ## 🚀 Production Deployment
 
