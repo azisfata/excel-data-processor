@@ -1530,10 +1530,34 @@ const HistoryDropdown = () => (
   };
 
   const extractTextFromPdf = useCallback(async (file: File): Promise<string> => {
-    // For now, return empty string to avoid pdf.js import issues
-    // In production, you would implement proper PDF text extraction
-    console.warn('PDF text extraction is disabled');
-    return '';
+    try {
+      // Use pdfjs-dist for PDF text extraction
+      const pdfjsLib = await import('pdfjs-dist/build/pdf.mjs');
+      const workerSrcModule = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
+
+      // Ensure the worker version always matches the runtime library version
+      pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrcModule.default;
+
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      
+      let fullText = '';
+      const numPages = pdf.numPages;
+      
+      for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+        const page = await pdf.getPage(pageNum);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items
+          .map((item: any) => item.str)
+          .join(' ');
+        fullText += pageText + '\n';
+      }
+      
+      return fullText.trim();
+    } catch (error) {
+      console.error('PDF extraction error:', error);
+      throw new Error('Gagal mengekstrak teks dari PDF. Pastikan file PDF tidak terenkripsi dan dapat dibaca.');
+    }
   }, []);
 
   const handleAutoFillFromPdf = useCallback(async () => {
@@ -1777,7 +1801,12 @@ const HistoryDropdown = () => (
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16">
               <div>
-                <h1 className="text-xl font-bold text-gray-800">Excel Data Processor</h1>
+                <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                  <span>SAPA AI - Smart Analytics Platform</span>
+                </h1>
                 <p className="text-xs text-gray-500">Kelola realisasi dan kegiatan</p>
               </div>
               <div className="flex items-center gap-4">

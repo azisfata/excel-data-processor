@@ -23,6 +23,10 @@ export default defineConfig(({ mode }) => {
         host: true,
         allowedHosts: true,
         proxy: {
+          '/api/activities': {
+            target: `http://localhost:${env.ACTIVITY_SERVER_PORT || 3001}`,
+            changeOrigin: true
+          },
           '/api': {
             target: `http://localhost:${env.AUTH_SERVER_PORT || 3002}`,
             changeOrigin: true
