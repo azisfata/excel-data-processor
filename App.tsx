@@ -20,6 +20,7 @@ import BudgetOverviewPanel from './src/components/dashboard/BudgetOverviewPanel'
 import AccountSummaryPanel from './src/components/dashboard/AccountSummaryPanel';
 import MonthlyAnalyticsPanel from './src/components/dashboard/MonthlyAnalyticsPanel';
 import TrendAnalyticsPanel from './src/components/dashboard/TrendAnalyticsPanel';
+import ActivityCalendarPanel from './src/components/dashboard/ActivityCalendarPanel';
 import { useHistoricalData } from './src/hooks/useHistoricalData';
 
 // Add missing function import
@@ -184,6 +185,7 @@ const App: React.FC = () => {
   const [isTableExpanded, setIsTableExpanded] = useState(true);
   const [showAccountSummary, setShowAccountSummary] = useState(true);
   const [showActivities, setShowActivities] = useState(true);
+  const [showCalendar, setShowCalendar] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState<any[]>([]);
   const [lastUpdated, setLastUpdated] = useState('');
@@ -1821,7 +1823,7 @@ const HistoryDropdown = () => (
                 <div className="flex items-center gap-3 border-l pl-4">
                   <div className="text-right">
                     <p className="text-sm font-medium text-gray-800">{user?.name}</p>
-                    <p className="text-xs text-gray-500">{user?.role}</p>
+                    <p className="text-xs text-gray-500">{user?.unit || user?.role}</p>
                   </div>
                   <button
                     onClick={handleLogout}
@@ -2341,6 +2343,33 @@ const HistoryDropdown = () => (
                 </table>
               </div>
             </div>
+
+            {/* Calendar Section */}
+            {activities.length > 0 && (
+              <div className="bg-white shadow-xl rounded-xl overflow-hidden mt-8">
+                <div 
+                  className="p-4 bg-gray-50 border-b border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors duration-200 flex justify-between items-center"
+                  onClick={() => setShowCalendar(!showCalendar)}
+                >
+                  <h2 className="text-xl font-semibold text-gray-800">Kalender Kegiatan</h2>
+                  <svg 
+                    className={`w-5 h-5 text-gray-500 transform transition-transform duration-200 ${showCalendar ? 'rotate-180' : ''}`} 
+                    fill="none" 
+                    viewBox="0 0 24 24" 
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+                <div className={`transition-all duration-200 ${showCalendar ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}>
+                  <ActivityCalendarPanel
+                    activities={activities}
+                    formatActivityDate={formatActivityDate}
+                    onActivityClick={(activity) => setSelectedActivity(activity)}
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Activities Section */}
             <div className="bg-white shadow-xl rounded-xl overflow-hidden mt-8">
