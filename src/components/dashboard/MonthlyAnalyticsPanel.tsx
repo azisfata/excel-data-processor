@@ -43,6 +43,7 @@ const MonthlyAnalyticsPanel: React.FC<MonthlyAnalyticsPanelProps> = ({
   onAIAnalysis,
 }) => {
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
+  const [compositionView, setCompositionView] = useState<'realisasi' | 'pagu'>('realisasi');
 
   // Data untuk bulan ini saja
   const currentMonthData = useMemo(() => {
@@ -50,85 +51,106 @@ const MonthlyAnalyticsPanel: React.FC<MonthlyAnalyticsPanelProps> = ({
     return getLevel7DataForMonth(currentReport);
   }, [currentReport]);
 
-  // Top 5 dan Bottom 5 penyerapan anggaran (berdasarkan level 7 code)
-  const { top5, bottom5 } = useMemo(() => {
-    if (!currentMonthData.length) return { top5: [], bottom5: [] };
 
-    // Group by level 7 code dan jumlahkan pagu/realisasi
-    const groupedByLevel7 = new Map<
-      string,
-      {
-        kode: string;
-        uraian: string;
-        totalPagu: number;
-        totalRealisasi: number;
-        persentase: number;
-        sisa: number;
-      }
-    >();
-
-    currentMonthData.forEach(item => {
-      if (!item || item.pagu <= 0) return; // Skip yang tidak ada atau tidak valid
-
-      const existing = groupedByLevel7.get(item.kode);
-      if (existing) {
-        existing.totalPagu += item.pagu;
-        existing.totalRealisasi += item.realisasi;
-      } else {
-        groupedByLevel7.set(item.kode, {
-          kode: item.kode,
-          uraian: item.uraian,
-          totalPagu: item.pagu,
-          totalRealisasi: item.realisasi,
-          persentase: item.persentase,
-          sisa: item.sisa,
-        });
-      }
-    });
-
-    // Hitung ulang persentase dan sisa untuk setiap group
-    const aggregatedData = Array.from(groupedByLevel7.values()).map(item => ({
-      kode: item.kode,
-      uraian: item.uraian,
-      pagu: item.totalPagu,
-      realisasi: item.totalRealisasi,
-      persentase: item.totalPagu > 0 ? (item.totalRealisasi / item.totalPagu) * 100 : 0,
-      sisa: item.totalPagu - item.totalRealisasi,
-    }));
-
-    const sorted = aggregatedData.sort((a, b) => b.persentase - a.persentase);
-
-    return {
-      top5: sorted.slice(0, 5),
-      bottom5: sorted.slice(-5).reverse(),
-    };
-  }, [currentMonthData]);
-
-  // Data untuk pie chart komposisi realisasi
+  // Data untuk pie chart komposisi (realisasi atau pagu berdasarkan pilihan user)
   const compositionData = useMemo(() => {
     if (!currentMonthData.length) return null;
 
     // Group by uraian dan ambil top 8
     const composition = new Map<string, number>();
     currentMonthData.forEach(item => {
-      if (item && item.realisasi > 0 && item.uraian) {
-        const existing = composition.get(item.uraian) || 0;
-        composition.set(item.uraian, existing + item.realisasi);
+      if (!item || !item.uraian) return;
+      
+      let value = 0;
+      if (compositionView === 'realisasi') {
+        value = item.realisasi || 0;
+        if (value <= 0) return; // Skip yang tidak ada realisasi
+      } else {
+        value = item.pagu || 0;
+        if (value <= 0) return; // Skip yang tidak ada pagu
+      }
+      
+      const existing = composition.get(item.uraian) || 0;
+      composition.set(item.uraian, existing + value);
+    });
+
+    // Ambil semua data yang sudah diurutkan
+    const allSorted = Array.from(composition.entries())
+      .sort(([, a], [, b]) => b - a);
+
+    // Ambil 10 teratas untuk ditampilkan
+    const top10 = allSorted.slice(0, 10);
+
+    // Hitung "Lainnya" dari sisa data yang sudah diurutkan
+    const others = allSorted.slice(10).reduce((sum, [, value]) => sum + value, 0);
+
+    // Gabungkan 10 teratas dengan "Lainnya"
+    const finalData = [...top10];
+    if (others > 0) {
+      finalData.push(['Lainnya', others]);
+    }
+
+    return finalData;
+  }, [currentMonthData, compositionView]);
+
+  // Data untuk grafik Sisa Anggaran Terbanyak (berdasarkan uraian akun)
+  const sisaAnggaranTerbanyak = useMemo(() => {
+    if (!currentMonthData.length) return [];
+
+    // Group by uraian akun dan jumlahkan pagu/realisasi/sisa
+    const groupedByUraian = new Map<
+      string,
+      {
+        uraian: string;
+        totalPagu: number;
+        totalRealisasi: number;
+        totalSisa: number;
+        persentase: number;
+        count: number;
+      }
+    >();
+
+    currentMonthData.forEach(item => {
+      if (!item || item.pagu <= 0 || !item.uraian) return; // Skip yang tidak ada atau tidak valid
+
+      const existing = groupedByUraian.get(item.uraian);
+      if (existing) {
+        existing.totalPagu += item.pagu;
+        existing.totalRealisasi += item.realisasi;
+        existing.totalSisa += (item.pagu - item.realisasi);
+        existing.count += 1;
+      } else {
+        const sisa = item.pagu - item.realisasi;
+        groupedByUraian.set(item.uraian, {
+          uraian: item.uraian,
+          totalPagu: item.pagu,
+          totalRealisasi: item.realisasi,
+          totalSisa: sisa,
+          persentase: item.persentase,
+          count: 1,
+        });
       }
     });
 
-    const sorted = Array.from(composition.entries())
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, 8);
+    // Hitung ulang persentase untuk setiap group
+    const aggregatedData = Array.from(groupedByUraian.values()).map(item => ({
+      kode: item.uraian,
+      uraian: item.uraian,
+      pagu: item.totalPagu,
+      realisasi: item.totalRealisasi,
+      sisa: item.totalSisa,
+      persentase: item.totalPagu > 0 ? (item.totalRealisasi / item.totalPagu) * 100 : 0,
+      count: item.count,
+    }));
 
-    // Group sisanya sebagai "Lainnya"
-    const others = sorted.slice(8).reduce((sum, [, value]) => sum + value, 0);
-    if (others > 0) {
-      sorted.push(['Lainnya', others]);
-    }
+    // Filter hanya yang masih punya sisa > 0 dan urutkan dari yang terbesar
+    const withSisa = aggregatedData.filter(item => item.sisa > 0);
+    const sorted = withSisa.sort((a, b) => b.sisa - a.sisa);
 
-    return sorted;
+    return sorted.slice(0, 8); // Top 8 kategori dengan sisa terbanyak
   }, [currentMonthData]);
+
+
 
   // Generate AI analysis untuk bulan ini
   const generateMonthlyAnalysis = () => {
@@ -215,12 +237,13 @@ ${largeSisa
         display: (context: any) => context.datasetIndex === 1,
         // Formatter untuk datalabel
         formatter: (value: any, context: any) => {
-          const originalData = context.chart.data.originalData as AccountLevel7Data[];
+          const originalData = context.chart.data.originalData as any[];
           if (originalData && originalData[context.dataIndex]) {
             const dataItem = originalData[context.dataIndex];
             const nominalJT = (value / 1000000).toFixed(1);
             const persentase = dataItem.persentase || 0;
-            return `Rp ${nominalJT}JT\n(${persentase}%)`;
+            const countInfo = dataItem.count > 1 ? ` (${dataItem.count} item)` : '';
+            return `Rp ${nominalJT}JT\n(${persentase}%)${countInfo}`;
           }
           return '';
         },
@@ -244,15 +267,16 @@ ${largeSisa
           label: (context: any) => {
             const label = context.dataset.label || '';
             const rawValue = context.parsed.y;
-            const originalData = context.chart.data.originalData as AccountLevel7Data[];
+            const originalData = context.chart.data.originalData as any[];
             const dataItem = originalData && originalData[context.dataIndex];
 
             if (label === 'Target (Pagu)') {
               return `Target: Rp ${rawValue.toLocaleString('id-ID')}`;
             } else if (label === 'Realisasi' && dataItem) {
               const persentase = dataItem.persentase || 0;
+              const countInfo = dataItem.count > 1 ? ` (${dataItem.count} item digabung)` : '';
               return [
-                `Realisasi: Rp ${rawValue.toLocaleString('id-ID')} (${persentase.toFixed(1)}%)`,
+                `Realisasi: Rp ${rawValue.toLocaleString('id-ID')} (${persentase.toFixed(1)}%)${countInfo}`,
               ];
             }
             return `${label}: Rp ${rawValue.toLocaleString('id-ID')}`;
@@ -283,7 +307,7 @@ ${largeSisa
             // Kita harus mengakses data dari chart object
             const chart = this.chart;
             if (chart && chart.data && chart.data.originalData) {
-              const originalData = chart.data.originalData as AccountLevel7Data[];
+              const originalData = chart.data.originalData as any[];
               if (originalData && originalData[index]) {
                 const item = originalData[index];
                 // Truncate nama jika terlalu panjang
@@ -300,7 +324,7 @@ ${largeSisa
     },
   };
 
-  const topBottomChartData = (data: AccountLevel7Data[], label: string) => {
+  const topBottomChartData = (data: any[], label: string) => {
     const isTop = label.includes('Top');
     return {
       labels: data.map(item => {
@@ -349,12 +373,15 @@ ${largeSisa
               '#14B8A6',
               '#F97316',
               '#6B7280',
+              '#FCD34D',
             ],
             borderWidth: 1,
           },
         ],
       }
     : null;
+    
+    
 
   const compositionChartOptions: any = {
     responsive: true,
@@ -373,8 +400,169 @@ ${largeSisa
           },
         },
       },
+      datalabels: {
+        // Tampilkan persentase di tengah potongan pie
+        display: true,
+        formatter: (value: any, context: any) => {
+          const total = context.dataset.data.reduce((sum: number, val: number) => sum + val, 0);
+          const percentage = ((value / total) * 100).toFixed(1);
+          return `${percentage}%`;
+        },
+        // Posisi di tengah potongan pie
+        align: 'center',
+        anchor: 'center',
+        // Styling
+        font: {
+          weight: 'bold',
+          size: 12,
+        },
+        // Warna teks
+        color: '#FFFFFF',
+        // Background datalabel
+        backgroundColor: 'rgba(0, 0, 0, 0.6)',
+        borderRadius: 4,
+        padding: 4,
+        // Konfigurasi untuk menampilkan garis penghubung jika label tidak muat
+        // Jika potongan terlalu kecil, label akan ditampilkan di luar dengan garis penghubung
+        shouldDisplay: (context: any) => {
+          // Hitung persentase untuk menentukan apakah potongan cukup besar
+          const value = context.raw as number;
+          const total = context.dataset.data.reduce((sum: number, val: number) => sum + val, 0);
+          const percentage = (value / total) * 100;
+          
+          // Jika persentase < 5%, tampilkan di luar dengan garis penghubung
+          if (percentage < 5) {
+            return false;
+          }
+          return true;
+        },
+        // Fallback untuk label yang tidak muat di tengah
+        // Jika shouldDisplay: false, Chart.js akan otomatis menampilkan di luar dengan garis penghubung
+        // Kita perlu mengatur warna garis penghubung
+        connectorColor: '#374151',
+        connectorWidth: 1,
+      },
     },
   };
+
+  // Chart options untuk Sisa Anggaran Terbanyak
+  const sisaAnggaranChartOptions: any = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: false,
+      },
+      datalabels: {
+        // Tampilkan datalabel untuk sisa anggaran
+        display: true,
+        // Formatter untuk datalabel
+        formatter: (value: any, context: any) => {
+          const originalData = context.chart.data.originalData as any[];
+          if (originalData && originalData[context.dataIndex]) {
+            const dataItem = originalData[context.dataIndex];
+            const nominalJT = (value / 1000000).toFixed(1);
+            const persentase = dataItem.persentase || 0;
+            const countInfo = dataItem.count > 1 ? ` (${dataItem.count} item)` : '';
+            return `Rp ${nominalJT}JT\n(${persentase.toFixed(1)}%)${countInfo}`;
+          }
+          return '';
+        },
+        // Posisi datalabel di atas batang
+        anchor: 'end',
+        align: 'top',
+        // Styling
+        font: {
+          weight: 'bold',
+          size: 11,
+        },
+        // Warna teks
+        color: '#374151',
+        // Background datalabel
+        backgroundColor: 'rgba(251, 146, 60, 0.8)',
+        borderRadius: 4,
+        padding: 4,
+      },
+      tooltip: {
+        callbacks: {
+          label: (context: any) => {
+            const rawValue = context.parsed.y;
+            const originalData = context.chart.data.originalData as any[];
+            const dataItem = originalData && originalData[context.dataIndex];
+
+            if (dataItem) {
+              const persentase = dataItem.persentase || 0;
+              const countInfo = dataItem.count > 1 ? ` (${dataItem.count} item digabung)` : '';
+              return [
+                `Sisa: Rp ${rawValue.toLocaleString('id-ID')}`,
+                `Pagu: Rp ${dataItem.pagu.toLocaleString('id-ID')}`,
+                `Realisasi: Rp ${dataItem.realisasi.toLocaleString('id-ID')} (${persentase.toFixed(1)}%)${countInfo}`,
+              ];
+            }
+            return `Sisa: Rp ${rawValue.toLocaleString('id-ID')}`;
+          },
+        },
+      },
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        ticks: {
+          callback: function (value: any) {
+            // Format dalam jutaan untuk readability
+            if (value >= 1000000000) {
+              return `Rp ${(value / 1000000000).toFixed(1)}M`;
+            } else if (value >= 1000000) {
+              return `Rp ${(value / 1000000).toFixed(0)}JT`;
+            }
+            return `Rp ${(value / 1000).toFixed(0)}K`;
+          },
+        },
+      },
+      x: {
+        ticks: {
+          callback: function (_value: any, index: number, _values: any[]) {
+            const chart = this.chart;
+            if (chart && chart.data && chart.data.originalData) {
+              const originalData = chart.data.originalData as any[];
+              if (originalData && originalData[index]) {
+                const item = originalData[index];
+                // Truncate nama jika terlalu panjang
+                return item.uraian && item.uraian.length > 20
+                  ? item.uraian.substring(0, 20) + '...'
+                  : item.uraian || '';
+              }
+            }
+            return '';
+          },
+        },
+      },
+    },
+  };
+
+  // Data untuk grafik Sisa Anggaran Terbanyak
+  const sisaAnggaranChartData = {
+    labels: sisaAnggaranTerbanyak.map(item => {
+      // Kosongkan label karena info akan ditampilkan di atas batang
+      return item && item.uraian && item.uraian.length > 20
+        ? item.uraian.substring(0, 20) + '...'
+        : item?.uraian || '';
+    }),
+    datasets: [
+      {
+        label: 'Sisa Anggaran',
+        data: sisaAnggaranTerbanyak.map(item => item.sisa),
+        backgroundColor: 'rgba(251, 146, 60, 0.8)',
+        borderColor: 'rgb(251, 146, 60)',
+        borderWidth: 1,
+      },
+    ],
+    // Store original data for tooltip calculations
+    originalData: sisaAnggaranTerbanyak,
+  } as any;
+
+
+
 
   if (!currentReport) {
     return (
@@ -417,69 +605,44 @@ ${largeSisa
         className={`transition-all duration-200 ${expandedSection === 'monthly' ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}
       >
         <div className="p-6 space-y-6">
-          {/* Top 5 & Bottom 5 */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Top 5 */}
-            <div className="bg-green-50 rounded-lg p-4">
-              <h4 className="text-md font-semibold text-green-800 mb-4">
-                🏆 Top 5 Penyerapan Terbaik
-              </h4>
-              {top5.length > 0 ? (
-                <div className="h-64">
-                  <Bar
-                    data={topBottomChartData(top5, 'Top')}
-                    options={topBottomChartOptions}
-                    key={`top5-chart-${top5.length}`}
-                  />
-                </div>
-              ) : (
-                <div className="h-64 flex items-center justify-center text-gray-500">
-                  <p>Tidak ada data penyerapan</p>
-                </div>
-              )}
-            </div>
 
-            {/* Bottom 5 */}
-            <div className="bg-red-50 rounded-lg p-4">
-              <h4 className="text-md font-semibold text-red-800 mb-4">⚠️ 5 Penyerapan Terendah</h4>
-              {bottom5.length > 0 ? (
-                <div className="h-64">
-                  <Bar
-                    data={topBottomChartData(bottom5, 'Bottom')}
-                    options={topBottomChartOptions}
-                    key={`bottom5-chart-${bottom5.length}`}
-                  />
-                </div>
-              ) : (
-                <div className="h-64 flex items-center justify-center text-gray-500">
-                  <p>Tidak ada data penyerapan</p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Komposisi Realisasi */}
+          {/* Komposisi Anggaran */}
           <div className="bg-blue-50 rounded-lg p-4">
-            <h4 className="text-md font-semibold text-blue-800 mb-4">
-              💰 Komposisi Realisasi Anggaran
-              <span className="text-sm font-normal text-gray-600 ml-2">
-                (Uang kita paling banyak habis untuk apa?)
-              </span>
-            </h4>
+            <div className="flex justify-between items-center mb-4">
+              <h4 className="text-md font-semibold text-blue-800">
+                💰 Komposisi {compositionView === 'realisasi' ? 'Realisasi' : 'Pagu'} Anggaran
+                <span className="text-sm font-normal text-gray-600 ml-2">
+                  ({compositionView === 'realisasi' ? 'Uang kita paling banyak habis untuk apa?' : 'Uang kita dialokasikan untuk apa?'})
+                </span>
+              </h4>
+              <div className="flex items-center space-x-2">
+                <label className="text-sm font-medium text-gray-700">Tampilkan:</label>
+                <select
+                  value={compositionView}
+                  onChange={(e) => setCompositionView(e.target.value as 'realisasi' | 'pagu')}
+                  className="border border-gray-300 rounded-md px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="realisasi">Realisasi</option>
+                  <option value="pagu">Pagu</option>
+                </select>
+              </div>
+            </div>
             {compositionChartData ? (
               <div className="h-80">
                 <Doughnut
                   data={compositionChartData}
                   options={compositionChartOptions}
-                  key={`composition-chart-${compositionData?.length || 0}`}
+                  key={`composition-chart-${compositionData?.length || 0}-${compositionView}`}
                 />
               </div>
             ) : (
               <div className="h-80 flex items-center justify-center text-gray-500">
-                <p>Tidak ada data realisasi</p>
+                <p>Tidak ada data {compositionView}</p>
               </div>
             )}
           </div>
+
+
 
           {/* AI Analysis Button */}
           <div className="flex justify-center">
