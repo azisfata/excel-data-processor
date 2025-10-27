@@ -124,7 +124,7 @@ const MonthlyAnalyticsPanel: React.FC<MonthlyAnalyticsPanelProps> = ({
     return finalData;
   }, [currentMonthData, compositionView]);
 
-  // Data agregasi anggaran per uraian akun
+  // Data agregasi anggaran per uraian akun - Tampilkan semua uraian tanpa pembatasan
   const sisaAnggaranTerbanyak = useMemo(() => {
     if (!currentMonthData.length) return [];
 
@@ -160,6 +160,7 @@ const MonthlyAnalyticsPanel: React.FC<MonthlyAnalyticsPanelProps> = ({
       }
     });
 
+    // Tampilkan semua uraian tanpa pembatasan, hanya filter yang memiliki pagu > 0
     return Array.from(groupedByUraian.values())
       .map(item => {
         const sisa = item.pagu - item.realisasi;
@@ -170,7 +171,7 @@ const MonthlyAnalyticsPanel: React.FC<MonthlyAnalyticsPanelProps> = ({
           persentase,
         };
       })
-      .filter(item => item.pagu > 0)
+      .filter(item => item.pagu > 0) // Hanya filter yang memiliki pagu, tanpa batasan jumlah
       .sort((a, b) => b.pagu - a.pagu);
   }, [currentMonthData]);
 
@@ -484,6 +485,7 @@ ${largeSisa
       return '#F87171'; // Light Red
     };
 
+    // Tampilkan semua uraian tanpa batasan
     return {
       labels: anggaranPerUraian.map(item => item.uraian),
       datasets: [
@@ -586,16 +588,18 @@ ${largeSisa
           ticks: {
             callback: (_value: any, index: number) => {
               const label = anggaranPerUraian[index]?.uraian || '';
-              if (label.length > 35) {
-                return `${label.substring(0, 35)}...`;
-              }
+              // Tampilkan label lengkap tanpa pemotongan untuk memastikan semua uraian terlihat
               return label;
             },
             font: {
-              size: 12,
+              size: 11, // Sedikit lebih kecil untuk mengakomodasi lebih banyak data
               weight: '500',
             },
             color: '#374151',
+            // Auto-skip dinonaktifkan untuk memastikan semua label ditampilkan
+            autoSkip: false,
+            maxRotation: 0,
+            minRotation: 0,
           },
         },
       },
@@ -755,10 +759,15 @@ ${largeSisa
             <div className="flex justify-between items-center mb-6">
               <div>
                 <h4 className="text-lg font-semibold text-gray-800 mb-1">
-                  📊 Visualisasi Penyerapan Anggaran per Uraian
+                  📊 Penyerapan Anggaran per Uraian
                 </h4>
                 <p className="text-sm text-gray-600">
                   Monitoring realisasi anggaran dengan indikator kesehatan penyerapan
+                  {anggaranPerUraian.length > 0 && (
+                    <span className="ml-2 font-medium text-blue-600">
+                      (Menampilkan {anggaranPerUraian.length} uraian)
+                    </span>
+                  )}
                 </p>
               </div>
               <div className="flex items-center space-x-4">
@@ -781,7 +790,7 @@ ${largeSisa
 
             {anggaranChartData ? (
               <div className="relative">
-                <div className="h-[400px] bg-gradient-to-br from-gray-50 to-white rounded-lg p-4 border border-gray-100">
+                <div className="h-[600px] bg-gradient-to-br from-gray-50 to-white rounded-lg p-4 border border-gray-100 overflow-auto">
                   <Bar
                     data={anggaranChartData}
                     options={anggaranChartOptions}
