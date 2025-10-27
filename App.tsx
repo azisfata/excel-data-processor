@@ -1064,7 +1064,8 @@ const HistoryDropdown = () => (
   const handleDownloadRkbPdf = async () => {
     try {
       // Generate the PDF with currently filtered activities based on year, month, and status filters
-      const pdfBlob = await generateRkbPdf(filteredActivities, selectedYear, selectedMonth, selectedStatus);
+      // Pass the result data for realisasi values
+      const pdfBlob = await generateRkbPdf(filteredActivities, selectedYear, selectedMonth, selectedStatus, result);
       
       // Create download link
       const url = URL.createObjectURL(pdfBlob);
@@ -2533,12 +2534,12 @@ const HistoryDropdown = () => (
                                     type="button"
                                     onClick={handleDownloadRkbPdf}
                                     className="inline-flex items-center px-3 py-1.5 text-xs text-white bg-red-600 hover:bg-red-700 rounded-md transition-colors whitespace-nowrap"
-                                    title="Unduh Rencana Kegiatan Bulanan (RKB) dalam format PDF"
+                                    title="Unduh LKBB dalam format PDF"
                                 >
                                     <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
                                     </svg>
-                                    Unduh RKB
+                                    Unduh RKB  dan LKBB
                                 </button>
                             </div>
                         </div>

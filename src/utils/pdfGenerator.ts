@@ -1,25 +1,27 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { Activity } from '../../types';
+import { Activity, ProcessingResult } from '../../types';
 
 /**
  * Generates an RKB (Rencana Kegiatan Bulanan) PDF based on pre-filtered activities
  * The activities passed to this function are already filtered according to user selections
  * This function only formats the data for PDF output
  */
+
 export const generateRkbPdf = async (
   activities: Activity[],
   selectedYear: number | 'all',
   selectedMonth: number | 'all' | 'no-date',
-  selectedStatus: Set<string>
+  selectedStatus: Set<string>,
+  resultData?: ProcessingResult
 ): Promise<Blob> => {
-  const doc = new jsPDF('p', 'mm', 'a4');
+  const doc = new jsPDF('l', 'mm', 'a4');
   const pageWidth = doc.internal.pageSize.getWidth();
   
   // Add header
   doc.setFontSize(16);
   doc.setFont(undefined, 'bold');
-  doc.text('Rencana Kegiatan Bulanan (RKB)', pageWidth / 2, 20, { align: 'center' });
+  doc.text('LKBB', pageWidth / 2, 20, { align: 'center' });
   
   // Add filter information
   doc.setFontSize(12);
@@ -65,38 +67,41 @@ export const generateRkbPdf = async (
     
     const totalAlokasi = activity.allocations.reduce((sum, alloc) => sum + (alloc.jumlah || 0), 0);
     
-    // Format allocations for display
-    let allocationText = '';
-    if (activity.allocations.length === 0) {
-      allocationText = 'Tidak ada alokasi';
-    } else if (activity.allocations.length === 1) {
-      const allocation = activity.allocations[0];
-      allocationText = `${allocation.kode}: Rp ${formatCurrency(allocation.jumlah)}`;
-    } else {
-      const firstAllocation = activity.allocations[0];
-      allocationText = `${firstAllocation.kode}: Rp ${formatCurrency(firstAllocation.jumlah)}`;
-      
-      if (activity.allocations.length > 2) {
-        allocationText += `\n+${activity.allocations.length - 1} alokasi lainnya`;
-      } else {
-        const secondAllocation = activity.allocations[1];
-        allocationText += `\n${secondAllocation.kode}: Rp ${formatCurrency(secondAllocation.jumlah)}`;
+    // For Komponen Kegiatan, use first allocation kode or '-' if no allocations
+    const komponenKegiatan = activity.allocations.length > 0 
+      ? activity.allocations[0].kode 
+      : '-';
+    
+    // Calculate realisasi value by looking up in the result data
+    let realisasiValue = 0;
+    if (resultData && resultData.finalData) {
+      // Look for matching allocation codes in the processed data
+      for (const allocation of activity.allocations) {
+        const matchingRow = resultData.finalData.find((row: any[]) => row[0] === allocation.kode);
+        if (matchingRow && matchingRow[6]) { // Realisasi is typically in the 6th column (index 6)
+          realisasiValue += Number(matchingRow[6]) || 0;
+        }
       }
     }
     
     return [
-      (index + 1).toString(),
-      activity.nama,
-      scheduledDate,
-      activity.status || '-',
-      `Rp ${formatCurrency(totalAlokasi)}`,
-      allocationText
+      (index + 1).toString(),                           // No
+      komponenKegiatan,                                // Komponen Kegiatan
+      activity.nama,                                   // Judul Kegiatan
+      `Rp ${formatCurrency(totalAlokasi)}`,            // RB (Rencana Biaya/Anggaran)
+      activity.penanggung_jawab || '-',                // PN/PP/KP (Penanggung Jawab)
+      activity.kl_unit_terkait || '-',                 // K/L/Unit Terkait
+      scheduledDate,                                   // Tanggal Pelaksanaan
+      `Rp ${formatCurrency(realisasiValue)}`,          // Realisasi Anggaran
+      activity.capaian || '-',                         // Capaian
+      activity.pending_issue || '-',                   // Pending Issue
+      activity.rencana_tindak_lanjut || '-'            // Rencana Tindak Lanjut
     ];
   });
   
   // Use autoTable to create the table
   autoTable(doc, {
-    head: [['No', 'Nama Kegiatan', 'Tanggal', 'Status', 'Total Alokasi', 'Alokasi']],
+    head: [['No.', 'Komponen Kegiatan', 'Judul Kegiatan', 'RB', 'PN/PP/KP', 'K/L/Unit Terkait', 'Tanggal Pelaksanaan', 'Realisasi Anggaran', 'Capaian', 'Pending Issue', 'Rencana Tindak Lanjut']],
     body: tableData,
     startY: 45,
     styles: {
@@ -113,12 +118,17 @@ export const generateRkbPdf = async (
       fillColor: [241, 245, 249] // Light gray for alternate rows
     },
     columnStyles: {
-      0: { cellWidth: 15 }, // No
-      1: { cellWidth: 50 }, // Nama Kegiatan
-      2: { cellWidth: 30 }, // Tanggal
-      3: { cellWidth: 30 }, // Status
-      4: { cellWidth: 30 }, // Total Alokasi
-      5: { cellWidth: 70 }  // Alokasi
+      0: { cellWidth: 12 },  // No.
+      1: { cellWidth: 25 },  // Komponen Kegiatan
+      2: { cellWidth: 40 },  // Judul Kegiatan
+      3: { cellWidth: 25 },  // RB
+      4: { cellWidth: 25 },  // PN/PP/KP
+      5: { cellWidth: 30 },  // K/L/Unit Terkait
+      6: { cellWidth: 25 },  // Tanggal Pelaksanaan
+      7: { cellWidth: 25 },  // Realisasi Anggaran
+      8: { cellWidth: 20 },  // Capaian
+      9: { cellWidth: 25 },  // Pending Issue
+      10: { cellWidth: 25 }  // Rencana Tindak Lanjut
     },
     margin: { left: 15, right: 15 },
     didDrawPage: function(data) {
@@ -145,4 +155,3 @@ const formatCurrency = (amount: number): string => {
   }).format(amount);
 };
 
-export default generateRkbPdf;
