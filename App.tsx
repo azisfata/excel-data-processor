@@ -23,13 +23,8 @@ import TrendAnalyticsPanel from './src/components/dashboard/TrendAnalyticsPanel'
 import ActivityCalendarPanel from './src/components/dashboard/ActivityCalendarPanel';
 import { useHistoricalData } from './src/hooks/useHistoricalData';
 
-// Add missing function import
-const generateRkbPdf = async (activityGroups: any[], selectedYear: number | 'all', selectedMonth: number | 'all' | 'no-date', selectedStatus: Set<string>) => {
-  // This is a placeholder implementation
-  console.log('Generating RKB PDF...', { activityGroups, selectedYear, selectedMonth, selectedStatus });
-  // In a real implementation, this would generate a PDF
-  return new Blob(['RKB PDF content'], { type: 'application/pdf' });
-};
+// Import the PDF generation function
+import { generateRkbPdf } from './src/utils/pdfGenerator';
 
 const MONTH_NAMES_ID = [
   'Januari',
@@ -1063,6 +1058,32 @@ const HistoryDropdown = () => (
     } else {
       const parsed = Number(value);
       setActivitiesPerPage(Number.isNaN(parsed) ? 10 : parsed);
+    }
+  };
+
+  const handleDownloadRkbPdf = async () => {
+    try {
+      // Generate the PDF with currently filtered activities based on year, month, and status filters
+      const pdfBlob = await generateRkbPdf(filteredActivities, selectedYear, selectedMonth, selectedStatus);
+      
+      // Create download link
+      const url = URL.createObjectURL(pdfBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      const monthLabel = 
+        selectedMonth === 'all' 
+          ? 'all' 
+          : selectedMonth === 'no-date' 
+            ? 'no-date' 
+            : MONTH_NAMES_ID[selectedMonth];
+      a.download = `RKB_${selectedYear}_${monthLabel}_${new Date().toISOString().slice(0, 10)}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      setError('Gagal membuat file PDF. Silakan coba lagi.');
     }
   };
 
@@ -2503,6 +2524,22 @@ const HistoryDropdown = () => (
                                         );
                                     })}
                                 </div>
+                            </div>
+                            <div className="space-y-1">
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                                    Aksi
+                                </label>
+                                <button
+                                    type="button"
+                                    onClick={handleDownloadRkbPdf}
+                                    className="inline-flex items-center px-3 py-1.5 text-xs text-white bg-red-600 hover:bg-red-700 rounded-md transition-colors whitespace-nowrap"
+                                    title="Unduh Rencana Kegiatan Bulanan (RKB) dalam format PDF"
+                                >
+                                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                                    </svg>
+                                    Unduh RKB
+                                </button>
                             </div>
                         </div>
 
