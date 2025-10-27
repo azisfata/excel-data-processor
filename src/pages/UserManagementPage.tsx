@@ -25,7 +25,7 @@ const UserManagementPage: React.FC = () => {
     title: '',
     message: '',
     onConfirm: () => {},
-    type: 'danger' as 'danger' | 'warning' | 'info'
+    type: 'danger' as 'danger' | 'warning' | 'info',
   });
   const [formData, setFormData] = useState({
     name: '',
@@ -166,7 +166,7 @@ const UserManagementPage: React.FC = () => {
       message: `Apakah Anda yakin ingin menghapus user "${userName}"? Tindakan ini tidak dapat dibatalkan.`,
       onConfirm: async () => {
         setConfirmDialog(prev => ({ ...prev, isOpen: false }));
-        
+
         try {
           const response = await fetch(getAuthApiUrl(`auth/users/${userId}`), {
             method: 'DELETE',
@@ -184,7 +184,7 @@ const UserManagementPage: React.FC = () => {
           setError(err.message);
         }
       },
-      type: 'danger'
+      type: 'danger',
     });
   };
 
@@ -195,7 +195,7 @@ const UserManagementPage: React.FC = () => {
       message: `Apakah Anda yakin ingin menyetujui user "${userName}" untuk mengakses aplikasi?`,
       onConfirm: async () => {
         setConfirmDialog(prev => ({ ...prev, isOpen: false }));
-        
+
         try {
           const response = await fetch(getAuthApiUrl(`auth/users/${userId}/approve`), {
             method: 'PUT',
@@ -214,7 +214,7 @@ const UserManagementPage: React.FC = () => {
           setError(err.message);
         }
       },
-      type: 'info'
+      type: 'info',
     });
   };
 

@@ -25,7 +25,7 @@ const ActivityCalendarPanel: React.FC<ActivityCalendarPanelProps> = ({
   // Get activities mapped by date for efficient lookup
   const activitiesByDate = useMemo(() => {
     const map = new Map<string, Activity[]>();
-    
+
     activities.forEach(activity => {
       if (activity.tanggal_pelaksanaan) {
         const date = new Date(activity.tanggal_pelaksanaan);
@@ -38,7 +38,7 @@ const ActivityCalendarPanel: React.FC<ActivityCalendarPanelProps> = ({
         }
       }
     });
-    
+
     return map;
   }, [activities]);
 
@@ -46,30 +46,30 @@ const ActivityCalendarPanel: React.FC<ActivityCalendarPanelProps> = ({
   const calendarDays = useMemo(() => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
-    
+
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
     const startDate = new Date(firstDay);
     startDate.setDate(startDate.getDate() - firstDay.getDay());
-    
+
     const days: CalendarDay[] = [];
     const today = new Date();
-    
+
     for (let i = 0; i < 42; i++) {
       const date = new Date(startDate);
       date.setDate(startDate.getDate() + i);
-      
+
       const dateKey = date.toISOString().split('T')[0];
       const dayActivities = activitiesByDate.get(dateKey) || [];
-      
+
       days.push({
         date,
         isCurrentMonth: date.getMonth() === month,
         activities: dayActivities,
-        isToday: date.toDateString() === today.toDateString()
+        isToday: date.toDateString() === today.toDateString(),
       });
     }
-    
+
     return days;
   }, [currentDate, activitiesByDate]);
 
@@ -109,11 +109,11 @@ const ActivityCalendarPanel: React.FC<ActivityCalendarPanelProps> = ({
   // Month and year display
   const monthYear = currentDate.toLocaleDateString('id-ID', {
     month: 'long',
-    year: 'numeric'
+    year: 'numeric',
   });
 
   // Get activities for selected date
-  const selectedDateActivities = selectedDate 
+  const selectedDateActivities = selectedDate
     ? activitiesByDate.get(selectedDate.toISOString().split('T')[0]) || []
     : [];
 
@@ -137,7 +137,12 @@ const ActivityCalendarPanel: React.FC<ActivityCalendarPanelProps> = ({
                 title="Bulan sebelumnya"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15 19l-7-7 7-7"
+                  />
                 </svg>
               </button>
               <span className="px-3 py-1 text-sm font-medium text-gray-700 min-w-[120px] text-center">
@@ -149,7 +154,12 @@ const ActivityCalendarPanel: React.FC<ActivityCalendarPanelProps> = ({
                 title="Bulan berikutnya"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 5l7 7-7 7"
+                  />
                 </svg>
               </button>
             </div>
@@ -159,12 +169,15 @@ const ActivityCalendarPanel: React.FC<ActivityCalendarPanelProps> = ({
         {/* Calendar Grid */}
         <div className="grid grid-cols-7 gap-px bg-gray-200 rounded-lg overflow-hidden">
           {/* Day headers */}
-          {['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'].map((day) => (
-            <div key={day} className="bg-gray-50 p-2 text-center text-xs font-semibold text-gray-700">
+          {['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'].map(day => (
+            <div
+              key={day}
+              className="bg-gray-50 p-2 text-center text-xs font-semibold text-gray-700"
+            >
               {day}
             </div>
           ))}
-          
+
           {/* Calendar days */}
           {calendarDays.map((day, index) => (
             <div
@@ -172,19 +185,21 @@ const ActivityCalendarPanel: React.FC<ActivityCalendarPanelProps> = ({
               className={`bg-white p-2 min-h-[80px] cursor-pointer transition-colors ${
                 !day.isCurrentMonth ? 'bg-gray-50 text-gray-400' : 'hover:bg-blue-50'
               } ${day.isToday ? 'bg-blue-50' : ''} ${
-                selectedDate && day.date.toDateString() === selectedDate.toDateString() 
-                  ? 'ring-2 ring-blue-500' 
+                selectedDate && day.date.toDateString() === selectedDate.toDateString()
+                  ? 'ring-2 ring-blue-500'
                   : ''
               }`}
               onClick={() => setSelectedDate(day.isCurrentMonth ? day.date : null)}
             >
               <div className="flex flex-col h-full">
-                <div className={`text-sm font-medium mb-1 ${
-                  day.isToday ? 'text-blue-600 font-bold' : ''
-                }`}>
+                <div
+                  className={`text-sm font-medium mb-1 ${
+                    day.isToday ? 'text-blue-600 font-bold' : ''
+                  }`}
+                >
                   {day.date.getDate()}
                 </div>
-                
+
                 {/* Activities indicator */}
                 {day.activities.length > 0 && (
                   <div className="flex-1 space-y-1">
@@ -193,13 +208,13 @@ const ActivityCalendarPanel: React.FC<ActivityCalendarPanelProps> = ({
                         key={actIndex}
                         className={`text-xs px-1 py-0.5 rounded truncate border ${getStatusColor(activity.status)}`}
                         title={`${activity.nama} - ${activity.status}`}
-                        onClick={(e) => {
+                        onClick={e => {
                           e.stopPropagation();
                           onActivityClick(activity);
                         }}
                       >
-                        {activity.nama.length > 15 
-                          ? activity.nama.substring(0, 15) + '...' 
+                        {activity.nama.length > 15
+                          ? activity.nama.substring(0, 15) + '...'
                           : activity.nama}
                       </div>
                     ))}
@@ -219,15 +234,16 @@ const ActivityCalendarPanel: React.FC<ActivityCalendarPanelProps> = ({
         {selectedDate && selectedDateActivities.length > 0 && (
           <div className="mt-6 p-4 bg-gray-50 rounded-lg">
             <h3 className="font-semibold text-gray-800 mb-3">
-              Kegiatan pada {selectedDate.toLocaleDateString('id-ID', {
+              Kegiatan pada{' '}
+              {selectedDate.toLocaleDateString('id-ID', {
                 weekday: 'long',
                 year: 'numeric',
                 month: 'long',
-                day: 'numeric'
+                day: 'numeric',
               })}
             </h3>
             <div className="space-y-2">
-              {selectedDateActivities.map((activity) => (
+              {selectedDateActivities.map(activity => (
                 <div
                   key={activity.id}
                   className="flex items-center justify-between p-3 bg-white rounded border border-gray-200 hover:border-blue-300 cursor-pointer transition-colors"
@@ -236,15 +252,30 @@ const ActivityCalendarPanel: React.FC<ActivityCalendarPanelProps> = ({
                   <div className="flex-1">
                     <div className="font-medium text-gray-800">{activity.nama}</div>
                     <div className="text-sm text-gray-500">
-                      Total: {activity.allocations.reduce((sum, alloc) => sum + (alloc.jumlah || 0), 0).toLocaleString('id-ID')}
+                      Total:{' '}
+                      {activity.allocations
+                        .reduce((sum, alloc) => sum + (alloc.jumlah || 0), 0)
+                        .toLocaleString('id-ID')}
                     </div>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <span className={`px-2 py-1 text-xs rounded-full border ${getStatusColor(activity.status)}`}>
+                    <span
+                      className={`px-2 py-1 text-xs rounded-full border ${getStatusColor(activity.status)}`}
+                    >
                       {activity.status || 'Tanpa Status'}
                     </span>
-                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    <svg
+                      className="w-4 h-4 text-gray-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 5l7 7-7 7"
+                      />
                     </svg>
                   </div>
                 </div>
@@ -257,11 +288,12 @@ const ActivityCalendarPanel: React.FC<ActivityCalendarPanelProps> = ({
         {selectedDate && selectedDateActivities.length === 0 && (
           <div className="mt-6 p-4 bg-gray-50 rounded-lg text-center">
             <p className="text-gray-500">
-              Tidak ada kegiatan pada {selectedDate.toLocaleDateString('id-ID', {
+              Tidak ada kegiatan pada{' '}
+              {selectedDate.toLocaleDateString('id-ID', {
                 weekday: 'long',
                 year: 'numeric',
                 month: 'long',
-                day: 'numeric'
+                day: 'numeric',
               })}
             </p>
           </div>
@@ -270,7 +302,7 @@ const ActivityCalendarPanel: React.FC<ActivityCalendarPanelProps> = ({
         {/* Legend */}
         <div className="mt-6 flex flex-wrap items-center gap-4 text-xs">
           <span className="font-medium text-gray-700">Status:</span>
-          {['rencana', 'komitmen', 'outstanding', 'terbayar'].map((status) => (
+          {['rencana', 'komitmen', 'outstanding', 'terbayar'].map(status => (
             <div key={status} className="flex items-center space-x-1">
               <div className={`w-3 h-3 rounded-full border ${getStatusColor(status)}`}></div>
               <span className="text-gray-600 capitalize">{status}</span>

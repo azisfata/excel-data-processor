@@ -12,11 +12,7 @@ import {
 } from 'chart.js';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
 import { Bar, Doughnut } from 'react-chartjs-2';
-import {
-  MonthlyReport,
-  AccountLevel7Data,
-  getLevel7DataForMonth,
-} from '../../../services/historicalDataService';
+import { MonthlyReport, getLevel7DataForMonth } from '../../../services/historicalDataService';
 
 // Register Chart.js components
 ChartJS.register(
@@ -30,6 +26,43 @@ ChartJS.register(
   ArcElement,
   ChartDataLabels
 );
+
+const formatToShortCurrency = (value: number): string => {
+  if (!Number.isFinite(value)) {
+    return 'Rp 0';
+  }
+
+  const absValue = Math.abs(value);
+
+  if (absValue >= 1_000_000_000) {
+    const normalized = value / 1_000_000_000;
+    const formatted = normalized.toLocaleString('id-ID', {
+      minimumFractionDigits: Math.abs(normalized) < 10 ? 1 : 0,
+      maximumFractionDigits: Math.abs(normalized) < 10 ? 1 : 0,
+    });
+    return `Rp ${formatted} M`;
+  }
+
+  if (absValue >= 1_000_000) {
+    const normalized = value / 1_000_000;
+    const formatted = normalized.toLocaleString('id-ID', {
+      minimumFractionDigits: Math.abs(normalized) < 10 ? 1 : 0,
+      maximumFractionDigits: Math.abs(normalized) < 10 ? 1 : 0,
+    });
+    return `Rp ${formatted} Jt`;
+  }
+
+  if (absValue >= 1_000) {
+    const normalized = value / 1_000;
+    const formatted = normalized.toLocaleString('id-ID', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    });
+    return `Rp ${formatted} Rb`;
+  }
+
+  return `Rp ${value.toLocaleString('id-ID')}`;
+};
 
 interface MonthlyAnalyticsPanelProps {
   currentReport: MonthlyReport | null;
@@ -51,7 +84,6 @@ const MonthlyAnalyticsPanel: React.FC<MonthlyAnalyticsPanelProps> = ({
     return getLevel7DataForMonth(currentReport);
   }, [currentReport]);
 
-
   // Data untuk pie chart komposisi (realisasi atau pagu berdasarkan pilihan user)
   const compositionData = useMemo(() => {
     if (!currentMonthData.length) return null;
@@ -60,7 +92,7 @@ const MonthlyAnalyticsPanel: React.FC<MonthlyAnalyticsPanelProps> = ({
     const composition = new Map<string, number>();
     currentMonthData.forEach(item => {
       if (!item || !item.uraian) return;
-      
+
       let value = 0;
       if (compositionView === 'realisasi') {
         value = item.realisasi || 0;
@@ -69,14 +101,13 @@ const MonthlyAnalyticsPanel: React.FC<MonthlyAnalyticsPanelProps> = ({
         value = item.pagu || 0;
         if (value <= 0) return; // Skip yang tidak ada pagu
       }
-      
+
       const existing = composition.get(item.uraian) || 0;
       composition.set(item.uraian, existing + value);
     });
 
     // Ambil semua data yang sudah diurutkan
-    const allSorted = Array.from(composition.entries())
-      .sort(([, a], [, b]) => b - a);
+    const allSorted = Array.from(composition.entries()).sort(([, a], [, b]) => b - a);
 
     // Ambil 10 teratas untuk ditampilkan
     const top10 = allSorted.slice(0, 10);
@@ -93,64 +124,58 @@ const MonthlyAnalyticsPanel: React.FC<MonthlyAnalyticsPanelProps> = ({
     return finalData;
   }, [currentMonthData, compositionView]);
 
-  // Data untuk grafik Sisa Anggaran Terbanyak (berdasarkan uraian akun)
+  // Data agregasi anggaran per uraian akun
   const sisaAnggaranTerbanyak = useMemo(() => {
     if (!currentMonthData.length) return [];
 
-    // Group by uraian akun dan jumlahkan pagu/realisasi/sisa
     const groupedByUraian = new Map<
       string,
       {
         uraian: string;
-        totalPagu: number;
-        totalRealisasi: number;
-        totalSisa: number;
+        pagu: number;
+        realisasi: number;
+        sisa: number;
         persentase: number;
-        count: number;
       }
     >();
 
     currentMonthData.forEach(item => {
-      if (!item || item.pagu <= 0 || !item.uraian) return; // Skip yang tidak ada atau tidak valid
+      if (!item || !item.uraian) return;
+
+      const pagu = item.pagu || 0;
+      const realisasi = item.realisasi || 0;
 
       const existing = groupedByUraian.get(item.uraian);
       if (existing) {
-        existing.totalPagu += item.pagu;
-        existing.totalRealisasi += item.realisasi;
-        existing.totalSisa += (item.pagu - item.realisasi);
-        existing.count += 1;
+        existing.pagu += pagu;
+        existing.realisasi += realisasi;
       } else {
-        const sisa = item.pagu - item.realisasi;
         groupedByUraian.set(item.uraian, {
           uraian: item.uraian,
-          totalPagu: item.pagu,
-          totalRealisasi: item.realisasi,
-          totalSisa: sisa,
-          persentase: item.persentase,
-          count: 1,
+          pagu,
+          realisasi,
+          sisa: 0,
+          persentase: 0,
         });
       }
     });
 
-    // Hitung ulang persentase untuk setiap group
-    const aggregatedData = Array.from(groupedByUraian.values()).map(item => ({
-      kode: item.uraian,
-      uraian: item.uraian,
-      pagu: item.totalPagu,
-      realisasi: item.totalRealisasi,
-      sisa: item.totalSisa,
-      persentase: item.totalPagu > 0 ? (item.totalRealisasi / item.totalPagu) * 100 : 0,
-      count: item.count,
-    }));
-
-    // Filter hanya yang masih punya sisa > 0 dan urutkan dari yang terbesar
-    const withSisa = aggregatedData.filter(item => item.sisa > 0);
-    const sorted = withSisa.sort((a, b) => b.sisa - a.sisa);
-
-    return sorted.slice(0, 8); // Top 8 kategori dengan sisa terbanyak
+    return Array.from(groupedByUraian.values())
+      .map(item => {
+        const sisa = item.pagu - item.realisasi;
+        const persentase = item.pagu > 0 ? (item.realisasi / item.pagu) * 100 : 0;
+        return {
+          ...item,
+          sisa: sisa > 0 ? sisa : 0,
+          persentase,
+        };
+      })
+      .filter(item => item.pagu > 0)
+      .sort((a, b) => b.pagu - a.pagu);
   }, [currentMonthData]);
 
-
+  // Alias agar nama variabel lama tetap ada jika masih dipakai di bagian lain
+  const anggaranPerUraian = sisaAnggaranTerbanyak;
 
   // Generate AI analysis untuk bulan ini
   const generateMonthlyAnalysis = () => {
@@ -191,7 +216,7 @@ const MonthlyAnalyticsPanel: React.FC<MonthlyAnalyticsPanelProps> = ({
 📈 **Distribusi Kesehatan Akun:**
 - Sehat (≥75%): ${healthyItems} akun
 - Perhatian (50-74%): ${warningItems} akun  
-- Kritis (<50%): ${criticalItems} akun
+- Kritis (&lt;50%): ${criticalItems} akun
 
 💰 **Kantong Sisa Anggaran Terbesar:**
 ${largeSisa
@@ -380,8 +405,6 @@ ${largeSisa
         ],
       }
     : null;
-    
-    
 
   const compositionChartOptions: any = {
     responsive: true,
@@ -429,7 +452,7 @@ ${largeSisa
           const value = context.raw as number;
           const total = context.dataset.data.reduce((sum: number, val: number) => sum + val, 0);
           const percentage = (value / total) * 100;
-          
+
           // Jika persentase < 5%, tampilkan di luar dengan garis penghubung
           if (percentage < 5) {
             return false;
@@ -445,124 +468,246 @@ ${largeSisa
     },
   };
 
-  // Chart options untuk Sisa Anggaran Terbanyak
-  const sisaAnggaranChartOptions: any = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        display: false,
-      },
-      datalabels: {
-        // Tampilkan datalabel untuk sisa anggaran
-        display: true,
-        // Formatter untuk datalabel
-        formatter: (value: any, context: any) => {
-          const originalData = context.chart.data.originalData as any[];
-          if (originalData && originalData[context.dataIndex]) {
-            const dataItem = originalData[context.dataIndex];
-            const nominalJT = (value / 1000000).toFixed(1);
-            const persentase = dataItem.persentase || 0;
-            const countInfo = dataItem.count > 1 ? ` (${dataItem.count} item)` : '';
-            return `Rp ${nominalJT}JT\n(${persentase.toFixed(1)}%)${countInfo}`;
-          }
-          return '';
-        },
-        // Posisi datalabel di atas batang
-        anchor: 'end',
-        align: 'top',
-        // Styling
-        font: {
-          weight: 'bold',
-          size: 11,
-        },
-        // Warna teks
-        color: '#374151',
-        // Background datalabel
-        backgroundColor: 'rgba(251, 146, 60, 0.8)',
-        borderRadius: 4,
-        padding: 4,
-      },
-      tooltip: {
-        callbacks: {
-          label: (context: any) => {
-            const rawValue = context.parsed.y;
-            const originalData = context.chart.data.originalData as any[];
-            const dataItem = originalData && originalData[context.dataIndex];
+  const anggaranChartData = useMemo(() => {
+    if (!anggaranPerUraian.length) return null;
 
-            if (dataItem) {
-              const persentase = dataItem.persentase || 0;
-              const countInfo = dataItem.count > 1 ? ` (${dataItem.count} item digabung)` : '';
-              return [
-                `Sisa: Rp ${rawValue.toLocaleString('id-ID')}`,
-                `Pagu: Rp ${dataItem.pagu.toLocaleString('id-ID')}`,
-                `Realisasi: Rp ${dataItem.realisasi.toLocaleString('id-ID')} (${persentase.toFixed(1)}%)${countInfo}`,
-              ];
-            }
-            return `Sisa: Rp ${rawValue.toLocaleString('id-ID')}`;
-          },
-        },
-      },
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        ticks: {
-          callback: function (value: any) {
-            // Format dalam jutaan untuk readability
-            if (value >= 1000000000) {
-              return `Rp ${(value / 1000000000).toFixed(1)}M`;
-            } else if (value >= 1000000) {
-              return `Rp ${(value / 1000000).toFixed(0)}JT`;
-            }
-            return `Rp ${(value / 1000).toFixed(0)}K`;
-          },
-        },
-      },
-      x: {
-        ticks: {
-          callback: function (_value: any, index: number, _values: any[]) {
-            const chart = this.chart;
-            if (chart && chart.data && chart.data.originalData) {
-              const originalData = chart.data.originalData as any[];
-              if (originalData && originalData[index]) {
-                const item = originalData[index];
-                // Truncate nama jika terlalu panjang
-                return item.uraian && item.uraian.length > 20
-                  ? item.uraian.substring(0, 20) + '...'
-                  : item.uraian || '';
+    // Function to determine color based on percentage
+    const getHealthColor = (percentage: number) => {
+      if (percentage >= 75) return '#10B981'; // Green - Sehat
+      if (percentage >= 50) return '#F59E0B'; // Yellow - Warning
+      return '#EF4444'; // Red - Kritis
+    };
+
+    const getHealthColorLight = (percentage: number) => {
+      if (percentage >= 75) return '#34D399'; // Light Green
+      if (percentage >= 50) return '#FCD34D'; // Light Yellow
+      return '#F87171'; // Light Red
+    };
+
+    return {
+      labels: anggaranPerUraian.map(item => item.uraian),
+      datasets: [
+        {
+          label: 'Realisasi',
+          data: anggaranPerUraian.map(item => item.realisasi),
+          backgroundColor: anggaranPerUraian.map(item => getHealthColorLight(item.persentase)),
+          borderColor: anggaranPerUraian.map(item => getHealthColor(item.persentase)),
+          borderWidth: 2,
+          borderRadius: 8,
+          borderSkipped: false,
+          maxBarThickness: 32,
+          datalabels: {
+            display: (context: any) => {
+              const value = context.dataset.data[context.dataIndex] as number;
+              return value > 0;
+            },
+            formatter: (_value: number, context: any) => {
+              const originalData = (context.chart.data as any).originalData?.[context.dataIndex];
+              if (!originalData || !originalData.pagu) {
+                return '';
               }
-            }
-            return '';
+              const percentage =
+                originalData.pagu > 0 ? (originalData.realisasi / originalData.pagu) * 100 : 0;
+              return `${percentage.toFixed(0)}%`;
+            },
+            color: '#FFFFFF',
+            anchor: 'center',
+            align: 'center',
+            font: {
+              weight: 'bold',
+              size: 12,
+            },
+            textStroke: '1px rgba(0,0,0,0.3)',
+            textStrokeColor: 'rgba(0,0,0,0.3)',
+            clip: false,
+          },
+        },
+        {
+          label: 'Sisa',
+          data: anggaranPerUraian.map(item => item.sisa),
+          backgroundColor: '#E5E7EB',
+          borderColor: '#9CA3AF',
+          borderWidth: 1,
+          borderRadius: 8,
+          borderSkipped: false,
+          maxBarThickness: 32,
+          datalabels: {
+            display: false, // Hide labels for better readability
+          },
+        },
+      ],
+      originalData: anggaranPerUraian,
+    } as any;
+  }, [anggaranPerUraian]);
+
+  const anggaranChartOptions = useMemo(() => {
+    return {
+      indexAxis: 'y' as const,
+      responsive: true,
+      maintainAspectRatio: false,
+      layout: {
+        padding: {
+          right: 60,
+          left: 10,
+          top: 10,
+          bottom: 10,
+        },
+      },
+      scales: {
+        x: {
+          stacked: true,
+          beginAtZero: true,
+          grid: {
+            drawBorder: false,
+            color: 'rgba(156, 163, 175, 0.1)',
+          },
+          ticks: {
+            callback: (value: any) => {
+              const numericValue =
+                typeof value === 'string' ? parseFloat(value) : (value as number);
+              if (!Number.isFinite(numericValue)) {
+                return value;
+              }
+              return formatToShortCurrency(numericValue);
+            },
+            font: {
+              size: 11,
+              weight: '500',
+            },
+            color: '#6B7280',
+          },
+        },
+        y: {
+          stacked: true,
+          grid: {
+            display: false,
+            drawBorder: false,
+          },
+          ticks: {
+            callback: (_value: any, index: number) => {
+              const label = anggaranPerUraian[index]?.uraian || '';
+              if (label.length > 35) {
+                return `${label.substring(0, 35)}...`;
+              }
+              return label;
+            },
+            font: {
+              size: 12,
+              weight: '500',
+            },
+            color: '#374151',
           },
         },
       },
-    },
-  };
-
-  // Data untuk grafik Sisa Anggaran Terbanyak
-  const sisaAnggaranChartData = {
-    labels: sisaAnggaranTerbanyak.map(item => {
-      // Kosongkan label karena info akan ditampilkan di atas batang
-      return item && item.uraian && item.uraian.length > 20
-        ? item.uraian.substring(0, 20) + '...'
-        : item?.uraian || '';
-    }),
-    datasets: [
-      {
-        label: 'Sisa Anggaran',
-        data: sisaAnggaranTerbanyak.map(item => item.sisa),
-        backgroundColor: 'rgba(251, 146, 60, 0.8)',
-        borderColor: 'rgb(251, 146, 60)',
-        borderWidth: 1,
+      plugins: {
+        legend: {
+          position: 'top' as const,
+          labels: {
+            usePointStyle: true,
+            boxWidth: 12,
+            padding: 20,
+            font: {
+              size: 12,
+              weight: '600',
+            },
+            // Add custom legend items for health status
+            generateLabels: function (chart: any) {
+              const data = chart.data;
+              return [
+                {
+                  text: 'Realisasi',
+                  fillStyle: '#22C55E',
+                  strokeStyle: '#16A34A',
+                  lineWidth: 2,
+                  pointStyle: 'rect',
+                  hidden: false,
+                  index: 0,
+                },
+                {
+                  text: 'Sisa Anggaran',
+                  fillStyle: '#E5E7EB',
+                  strokeStyle: '#9CA3AF',
+                  lineWidth: 1,
+                  pointStyle: 'rect',
+                  hidden: false,
+                  index: 1,
+                },
+              ];
+            },
+          },
+        },
+        datalabels: {
+          display: false, // We'll handle this in the dataset
+        },
+        tooltip: {
+          enabled: true,
+          backgroundColor: 'rgba(17, 24, 39, 0.95)',
+          titleColor: '#FFFFFF',
+          bodyColor: '#E5E7EB',
+          borderColor: '#374151',
+          borderWidth: 1,
+          padding: 12,
+          cornerRadius: 8,
+          displayColors: true,
+          callbacks: {
+            title: (items: any[]) => {
+              const firstItem = items[0];
+              const original = firstItem?.chart?.data?.originalData?.[firstItem.dataIndex] || null;
+              return original
+                ? {
+                    label: original.uraian,
+                    health:
+                      original.persentase >= 75
+                        ? '🟢 Sehat'
+                        : original.persentase >= 50
+                          ? '🟡 Perhatian'
+                          : '🔴 Kritis',
+                  }
+                : '';
+            },
+            label: (context: any) => {
+              const label = context.dataset.label || '';
+              const value = context.parsed.x;
+              if (label === 'Realisasi') {
+                return `Realisasi: Rp ${value.toLocaleString('id-ID')}`;
+              }
+              return `Sisa: Rp ${value.toLocaleString('id-ID')}`;
+            },
+            afterBody: (items: any[]) => {
+              const firstItem = items[0];
+              const original = firstItem?.chart?.data?.originalData?.[firstItem.dataIndex] || null;
+              if (!original) {
+                return [];
+              }
+              const persentase = original.pagu > 0 ? (original.realisasi / original.pagu) * 100 : 0;
+              const healthStatus =
+                persentase >= 75
+                  ? 'Sehat (≥75%)'
+                  : persentase >= 50
+                    ? 'Perhatian (50-74%)'
+                    : 'Kritis (&lt;50%)';
+              return [
+                '',
+                `📊 Total Pagu: Rp ${original.pagu.toLocaleString('id-ID')}`,
+                `💰 Total Realisasi: Rp ${original.realisasi.toLocaleString('id-ID')}`,
+                `💸 Sisa Anggaran: Rp ${original.sisa.toLocaleString('id-ID')}`,
+                `📈 Persentase: ${persentase.toFixed(1)}%`,
+                `🏥 Status: ${healthStatus}`,
+              ];
+            },
+          },
+        },
       },
-    ],
-    // Store original data for tooltip calculations
-    originalData: sisaAnggaranTerbanyak,
-  } as any;
-
-
-
+      interaction: {
+        intersect: false,
+        mode: 'index',
+      },
+      animation: {
+        duration: 750,
+        easing: 'easeInOutQuart' as const,
+      },
+    } as any;
+  }, [anggaranPerUraian]);
 
   if (!currentReport) {
     return (
@@ -605,6 +750,146 @@ ${largeSisa
         className={`transition-all duration-200 ${expandedSection === 'monthly' ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}
       >
         <div className="p-6 space-y-6">
+          {/* Visualisasi Anggaran per Uraian */}
+          <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h4 className="text-lg font-semibold text-gray-800 mb-1">
+                  📊 Visualisasi Penyerapan Anggaran per Uraian
+                </h4>
+                <p className="text-sm text-gray-600">
+                  Monitoring realisasi anggaran dengan indikator kesehatan penyerapan
+                </p>
+              </div>
+              <div className="flex items-center space-x-4">
+                <div className="flex items-center space-x-2 text-xs">
+                  <div className="flex items-center">
+                    <div className="w-3 h-3 bg-green-500 rounded-full mr-1"></div>
+                    <span className="text-gray-600">Sehat (≥75%)</span>
+                  </div>
+                  <div className="flex items-center">
+                    <div className="w-3 h-3 bg-yellow-500 rounded-full mr-1"></div>
+                    <span className="text-gray-600">Warning (50-74%)</span>
+                  </div>
+                  <div className="flex items-center">
+                    <div className="w-3 h-3 bg-red-500 rounded-full mr-1"></div>
+                    <span className="text-gray-600">Kritis (&lt;50%)</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {anggaranChartData ? (
+              <div className="relative">
+                <div className="h-[400px] bg-gradient-to-br from-gray-50 to-white rounded-lg p-4 border border-gray-100">
+                  <Bar
+                    data={anggaranChartData}
+                    options={anggaranChartOptions}
+                    key={`anggaran-chart-${anggaranPerUraian.length}`}
+                  />
+                </div>
+
+                {/* Summary Statistics */}
+                <div className="grid grid-cols-3 gap-4 mt-6">
+                  <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs text-green-600 font-medium">Sehat</p>
+                        <p className="text-2xl font-bold text-green-700">
+                          {anggaranPerUraian.filter(item => item.persentase >= 75).length}
+                        </p>
+                      </div>
+                      <div className="bg-green-100 rounded-full p-2">
+                        <svg
+                          className="w-5 h-5 text-green-600"
+                          fill="currentColor"
+                          viewBox="0 0 20 20"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs text-yellow-600 font-medium">Perhatian</p>
+                        <p className="text-2xl font-bold text-yellow-700">
+                          {
+                            anggaranPerUraian.filter(
+                              item => item.persentase >= 50 && item.persentase < 75
+                            ).length
+                          }
+                        </p>
+                      </div>
+                      <div className="bg-yellow-100 rounded-full p-2">
+                        <svg
+                          className="w-5 h-5 text-yellow-600"
+                          fill="currentColor"
+                          viewBox="0 0 20 20"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-red-50 rounded-lg p-4 border border-red-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs text-red-600 font-medium">Kritis</p>
+                        <p className="text-2xl font-bold text-red-700">
+                          {anggaranPerUraian.filter(item => item.persentase < 50).length}
+                        </p>
+                      </div>
+                      <div className="bg-red-100 rounded-full p-2">
+                        <svg
+                          className="w-5 h-5 text-red-600"
+                          fill="currentColor"
+                          viewBox="0 0 20 20"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="h-80 flex flex-col items-center justify-center text-gray-500 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+                <svg
+                  className="w-16 h-16 text-gray-400 mb-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                    d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                  />
+                </svg>
+                <p className="text-lg font-medium text-gray-600 mb-1">Tidak ada data anggaran</p>
+                <p className="text-sm text-gray-500">
+                  Upload file laporan untuk melihat visualisasi penyerapan anggaran
+                </p>
+              </div>
+            )}
+          </div>
 
           {/* Komposisi Anggaran */}
           <div className="bg-blue-50 rounded-lg p-4">
@@ -612,14 +897,18 @@ ${largeSisa
               <h4 className="text-md font-semibold text-blue-800">
                 💰 Komposisi {compositionView === 'realisasi' ? 'Realisasi' : 'Pagu'} Anggaran
                 <span className="text-sm font-normal text-gray-600 ml-2">
-                  ({compositionView === 'realisasi' ? 'Uang kita paling banyak habis untuk apa?' : 'Uang kita dialokasikan untuk apa?'})
+                  (
+                  {compositionView === 'realisasi'
+                    ? 'Uang kita paling banyak habis untuk apa?'
+                    : 'Uang kita dialokasikan untuk apa?'}
+                  )
                 </span>
               </h4>
               <div className="flex items-center space-x-2">
                 <label className="text-sm font-medium text-gray-700">Tampilkan:</label>
                 <select
                   value={compositionView}
-                  onChange={(e) => setCompositionView(e.target.value as 'realisasi' | 'pagu')}
+                  onChange={e => setCompositionView(e.target.value as 'realisasi' | 'pagu')}
                   className="border border-gray-300 rounded-md px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option value="realisasi">Realisasi</option>
@@ -641,8 +930,6 @@ ${largeSisa
               </div>
             )}
           </div>
-
-
 
           {/* AI Analysis Button */}
           <div className="flex justify-center">
