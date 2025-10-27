@@ -529,8 +529,8 @@ ${largeSisa
           data: anggaranPerUraian.map(item => item.sisa),
           backgroundColor: '#E5E7EB',
           borderColor: '#9CA3AF',
-          borderWidth: 1,
-          borderRadius: 8,
+          borderWidth: 2,
+          borderRadius: 0,
           borderSkipped: false,
           maxBarThickness: 32,
           datalabels: {
@@ -703,8 +703,8 @@ ${largeSisa
         },
       },
       interaction: {
-        intersect: false,
-        mode: 'index',
+        intersect: true,
+        mode: 'nearest',
       },
       animation: {
         duration: 750,
