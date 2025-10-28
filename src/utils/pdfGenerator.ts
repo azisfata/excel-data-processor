@@ -78,8 +78,8 @@ export const generateRkbPdf = async (
 
     const totalAlokasi = activity.allocations.reduce((sum, alloc) => sum + (alloc.jumlah || 0), 0);
 
-    // For Komponen Kegiatan, use first allocation kode or '-' if no allocations
-    const komponenKegiatan = activity.allocations.length > 0 ? activity.allocations[0].kode : '-';
+    // For Komponen Kegiatan, set default value to "PL: Rapat"
+    const komponenKegiatan = 'PL: Rapat';
 
     // Calculate realisasi value by looking up in the result data
     let realisasiValue = 0;
@@ -94,11 +94,18 @@ export const generateRkbPdf = async (
       }
     }
 
+    // Format current date as DD/MM/YYYY
+    const currentDate = new Date().toLocaleDateString('id-ID', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+
     return [
       (index + 1).toString(), // No
       komponenKegiatan, // Komponen Kegiatan
       activity.nama, // Judul Kegiatan
-      `Rp ${formatCurrency(totalAlokasi)}`, // RB (Rencana Biaya/Anggaran)
+      currentDate, // RB (Changed to show current date)
       activity.penanggung_jawab || '-', // PN/PP/KP (Penanggung Jawab)
       activity.kl_unit_terkait || '-', // K/L/Unit Terkait
       scheduledDate, // Tanggal Pelaksanaan
@@ -116,7 +123,7 @@ export const generateRkbPdf = async (
         'No.',
         'Komponen Kegiatan',
         'Judul Kegiatan',
-        'RB',
+        'RB', 
         'PN/PP/KP',
         'K/L/Unit Terkait',
         'Tanggal Pelaksanaan',
@@ -145,7 +152,7 @@ export const generateRkbPdf = async (
       0: { cellWidth: 12 }, // No.
       1: { cellWidth: 25 }, // Komponen Kegiatan
       2: { cellWidth: 40 }, // Judul Kegiatan
-      3: { cellWidth: 25 }, // RB
+      3: { cellWidth: 25 }, // Tanggal (Changed from RB)
       4: { cellWidth: 25 }, // PN/PP/KP
       5: { cellWidth: 30 }, // K/L/Unit Terkait
       6: { cellWidth: 25 }, // Tanggal Pelaksanaan
