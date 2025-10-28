@@ -9,6 +9,7 @@ import {
   Title,
   Tooltip,
   Legend,
+  Filler,
 } from 'chart.js';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
 import { Bar, Line } from 'react-chartjs-2';
@@ -31,6 +32,7 @@ ChartJS.register(
   Title,
   Tooltip,
   Legend,
+  Filler,
   ChartDataLabels
 );
 
@@ -71,14 +73,12 @@ const TrendAnalyticsPanel: React.FC<TrendAnalyticsPanelProps> = ({ allReports, o
   const accountTrendData = useMemo(() => {
     if (!selectedUraian || !allReports.length) return null;
     const data = createAccountTrendData(allReports, selectedUraian);
-    console.log('accountTrendData:', data);
     return data;
   }, [allReports, selectedUraian]);
 
   const availableAccounts = useMemo(() => {
     if (!allReports.length) return [];
     const accounts = getAllLevel7Accounts(allReports);
-    console.log('availableAccounts:', accounts);
     return accounts;
   }, [allReports]);
 
