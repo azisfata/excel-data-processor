@@ -48,17 +48,29 @@ const UserManagementPage: React.FC = () => {
 
   const fetchUsers = async () => {
     try {
+      console.log('=== DEBUG: fetchUsers called ===');
+      console.log('Current user:', currentUser);
+      console.log('Is admin:', isAdmin);
+      console.log('Request URL:', getAuthApiUrl('auth/users'));
+      
       const response = await fetch(getAuthApiUrl('auth/users'), {
         credentials: 'include',
       });
 
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+
       if (!response.ok) {
-        throw new Error('Gagal mengambil data user');
+        const errorText = await response.text();
+        console.log('Error response:', errorText);
+        throw new Error(`Gagal mengambil data user (${response.status}): ${errorText}`);
       }
 
       const data = await response.json();
+      console.log('Response data:', data);
       setUsers(data.users);
     } catch (err: any) {
+      console.error('Fetch users error:', err);
       setError(err.message);
     } finally {
       setLoading(false);

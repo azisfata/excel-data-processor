@@ -68,6 +68,15 @@ const AI_QUICK_PROMPTS = [
   'Berapa jumlah lampiran yang sudah diunggah?'
 ] as const;
 
+const HEADER_TABS = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'activities', label: 'Kegiatan' },
+  { id: 'analytics', label: 'Data Analitik' },
+  { id: 'chat', label: 'Chat AI' },
+] as const;
+
+type HeaderTabKey = typeof HEADER_TABS[number]['id'];
+
 const formatCurrency = (amount: number): string => {
   return new Intl.NumberFormat('id-ID', { 
     style: 'currency', 
@@ -196,6 +205,7 @@ const App: React.FC = () => {
   const [aiAutofillError, setAiAutofillError] = useState<string | null>(null);
   const [aiAutofillSuccess, setAiAutofillSuccess] = useState<string | null>(null);
   const [aiAutofillSteps, setAiAutofillSteps] = useState<AiAutofillStep[]>([]);
+  const [activeHeaderTab, setActiveHeaderTab] = useState<HeaderTabKey>('overview');
 
   // State for confirmation dialogs
   const [confirmDialog, setConfirmDialog] = useState({
@@ -1856,34 +1866,62 @@ const HistoryDropdown = () => (
         {/* Header */}
         <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center h-16">
-              <div>
-                <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                  </svg>
-                  <span>SAPA AI</span>
-                </h1>
-                <p className="text-xs text-gray-500">Sistem Analitik Program & Anggaran dengan AI</p>
+            <div className="h-20 flex items-center justify-between">
+              <div className="flex items-center gap-6">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-indigo-100">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h1 className="text-2xl font-bold text-gray-900 tracking-tight">SAPA AI</h1>
+                    <p className="text-xs uppercase tracking-[0.2em] text-gray-400">Sistem Analitik Program & Anggaran</p>
+                  </div>
+                </div>
+                <nav className="flex items-center gap-2 rounded-full bg-gray-100/60 px-2 py-1" role="tablist" aria-label="Navigasi panel dashboard">
+                  {HEADER_TABS.map(tab => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setActiveHeaderTab(tab.id)}
+                      className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
+                        activeHeaderTab === tab.id
+                          ? 'bg-white text-indigo-600 shadow-sm'
+                          : 'text-gray-600 hover:text-indigo-600'
+                      }`}
+                      role="tab"
+                      aria-selected={activeHeaderTab === tab.id}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </nav>
               </div>
               <div className="flex items-center gap-4">
                 {isAdmin && (
                   <button
                     onClick={() => navigate('/users')}
-                    className="px-3 py-1.5 text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-md transition"
+                    className="hidden sm:inline-flex items-center gap-2 rounded-full border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:border-indigo-200 hover:text-indigo-600"
                   >
+                    <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M9 11a4 4 0 100-8 4 4 0 000 8zm0 0c-3.17 0-6 2.005-6 5v3h6m6-11a4 4 0 110-8 4 4 0 010 8zm0 0c.88 0 1.717.195 2.472.54M13 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2h12z" />
+                    </svg>
                     Kelola User
                   </button>
                 )}
-                <div className="flex items-center gap-3 border-l pl-4">
-                  <div className="text-right">
-                    <p className="text-sm font-medium text-gray-800">{user?.name}</p>
+                <div className="flex items-center gap-3 rounded-full border border-gray-200 bg-white/80 px-3 py-1.5 shadow-sm">
+                  <div className="text-right leading-tight">
+                    <p className="text-sm font-semibold text-gray-800">{user?.name}</p>
                     <p className="text-xs text-gray-500">{user?.unit || user?.role}</p>
                   </div>
                   <button
                     onClick={handleLogout}
-                    className="px-3 py-1.5 text-sm text-white bg-red-600 hover:bg-red-700 rounded-md transition"
+                    className="inline-flex items-center gap-2 rounded-full bg-red-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-red-700"
                   >
+                    <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
                     Logout
                   </button>
                 </div>
