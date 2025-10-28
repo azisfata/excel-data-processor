@@ -10,6 +10,7 @@ import {
   Tooltip,
   Legend,
 } from 'chart.js';
+import ChartDataLabels from 'chartjs-plugin-datalabels';
 import { Bar, Line } from 'react-chartjs-2';
 import {
   MonthlyReport,
@@ -17,7 +18,6 @@ import {
   createAccountTrendData,
   getAllLevel7Accounts,
   createMonthlyCompositionData,
-  createCumulativeData,
 } from '../../../services/historicalDataService';
 
 // Register Chart.js components
@@ -29,7 +29,8 @@ ChartJS.register(
   PointElement,
   Title,
   Tooltip,
-  Legend
+  Legend,
+  ChartDataLabels
 );
 
 interface TrendAnalyticsPanelProps {
@@ -51,12 +52,16 @@ const TrendAnalyticsPanel: React.FC<TrendAnalyticsPanelProps> = ({ allReports, o
 
   const accountTrendData = useMemo(() => {
     if (!selectedAccount || !allReports.length) return null;
-    return createAccountTrendData(allReports, selectedAccount);
+    const data = createAccountTrendData(allReports, selectedAccount);
+    console.log('accountTrendData:', data);
+    return data;
   }, [allReports, selectedAccount]);
 
   const availableAccounts = useMemo(() => {
     if (!allReports.length) return [];
-    return getAllLevel7Accounts(allReports);
+    const accounts = getAllLevel7Accounts(allReports);
+    console.log('availableAccounts:', accounts);
+    return accounts;
   }, [allReports]);
 
   const compositionData = useMemo(() => {
@@ -64,10 +69,6 @@ const TrendAnalyticsPanel: React.FC<TrendAnalyticsPanelProps> = ({ allReports, o
     return createMonthlyCompositionData(allReports);
   }, [allReports]);
 
-  const cumulativeData = useMemo(() => {
-    if (!allReports.length) return [];
-    return createCumulativeData(allReports);
-  }, [allReports]);
 
   // Generate AI analysis untuk tren
   const generateTrendAnalysis = () => {
@@ -210,13 +211,30 @@ ${spendingPattern
   const lineChartOptions = {
     responsive: true,
     maintainAspectRatio: false,
+    interaction: {
+      mode: 'index' as const,
+      intersect: false,
+    },
     plugins: {
       legend: {
         position: 'top' as const,
+        labels: {
+          usePointStyle: true,
+          padding: 20,
+          font: {
+            size: 12,
+            weight: 500 as any
+          }
+        }
       },
       tooltip: {
-        mode: 'index' as const,
-        intersect: false,
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+        titleColor: '#fff',
+        bodyColor: '#fff',
+        borderColor: '#ddd',
+        borderWidth: 1,
+        padding: 12,
+        displayColors: true,
         callbacks: {
           label: (context: any) => {
             const label = context.dataset.label || '';
@@ -228,17 +246,63 @@ ${spendingPattern
           },
         },
       },
+      datalabels: {
+        display: true,
+        align: 'top' as const,
+        anchor: 'end' as const,
+        offset: 8,
+        font: {
+          size: 10,
+          weight: 'bold' as any
+        },
+        formatter: (value: number) => {
+          return `Rp ${(value / 1000000).toFixed(1)}M`;
+        },
+        color: (context: any) => {
+          return context.dataset.borderColor;
+        },
+        backgroundColor: 'rgba(255, 255, 255, 0.8)',
+        borderRadius: 4,
+        padding: 4
+      }
     },
     scales: {
+      x: {
+        grid: {
+          display: false
+        },
+        ticks: {
+          font: {
+            size: 11
+          }
+        }
+      },
       y: {
         beginAtZero: true,
+        grid: {
+          color: 'rgba(0, 0, 0, 0.05)'
+        },
         ticks: {
           callback: (value: any) => {
             return `Rp ${(value / 1000000).toFixed(0)}M`;
           },
+          font: {
+            size: 11
+          }
         },
       },
     },
+    elements: {
+      point: {
+        radius: 4,
+        hoverRadius: 6,
+        borderWidth: 2
+      },
+      line: {
+        borderWidth: 3,
+        tension: 0.3
+      }
+    }
   };
 
   const stackedBarOptions = {
@@ -256,6 +320,9 @@ ${spendingPattern
           },
         },
       },
+      datalabels: {
+        display: false
+      }
     },
     scales: {
       x: {
@@ -280,9 +347,15 @@ ${spendingPattern
             {
               label: 'Total Realisasi (Rp)',
               data: monthlyTrendData.map(d => d.totalRealisasi),
-              borderColor: 'rgb(59, 130, 246)',
+              borderColor: '#3B82F6',
               backgroundColor: 'rgba(59, 130, 246, 0.1)',
-              tension: 0.1,
+              borderWidth: 3,
+              pointBackgroundColor: '#3B82F6',
+              pointBorderColor: '#fff',
+              pointHoverBackgroundColor: '#fff',
+              pointHoverBorderColor: '#3B82F6',
+              tension: 0.3,
+              fill: true,
             },
           ],
         }
@@ -293,35 +366,20 @@ ${spendingPattern
               {
                 label: 'Realisasi Akun (Rp)',
                 data: accountTrendData.data.map(d => d.realisasi),
-                borderColor: 'rgb(34, 197, 94)',
+                borderColor: '#22C55E',
                 backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                tension: 0.1,
+                borderWidth: 3,
+                pointBackgroundColor: '#22C55E',
+                pointBorderColor: '#fff',
+                pointHoverBackgroundColor: '#fff',
+                pointHoverBorderColor: '#22C55E',
+                tension: 0.3,
+                fill: true,
               },
             ],
           }
         : null;
 
-  // Data untuk grafik garis ganda kumulatif vs target
-  const cumulativeLineData = {
-    labels: cumulativeData.map(d => `${d.month}/${d.year}`),
-    datasets: [
-      {
-        label: 'Realisasi Kumulatif (Rp)',
-        data: cumulativeData.map(d => d.cumulative),
-        borderColor: 'rgb(59, 130, 246)',
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-        tension: 0.1,
-      },
-      {
-        label: 'Target Kumulatif (Rp)',
-        data: cumulativeData.map(d => d.targetCumulative),
-        borderColor: 'rgb(239, 68, 68)',
-        backgroundColor: 'rgba(239, 68, 68, 0.1)',
-        borderDash: [5, 5],
-        tension: 0.1,
-      },
-    ],
-  };
 
   // Data untuk stacked bar komposisi belanja
   const stackedBarData = useMemo(() => {
@@ -447,25 +505,13 @@ ${spendingPattern
                 <Line
                   data={trendLineData}
                   options={lineChartOptions}
+                  plugins={[ChartDataLabels]}
                   key={`trend-line-chart-${monthlyTrendData.length}`}
                 />
               </div>
             )}
           </div>
 
-          {/* Grafik Garis Ganda: Laju Serapan Kumulatif vs Target */}
-          <div className="bg-purple-50 rounded-lg p-4">
-            <h4 className="text-md font-semibold text-purple-800 mb-4">
-              📊 Laju Serapan Kumulatif vs Target
-            </h4>
-            <div className="h-80">
-              <Line
-                data={cumulativeLineData}
-                options={lineChartOptions}
-                key={`cumulative-line-chart-${cumulativeData.length}`}
-              />
-            </div>
-          </div>
 
           {/* Grafik Batang Bertumpuk: Komposisi Belanja Bulanan */}
           <div className="bg-orange-50 rounded-lg p-4">
@@ -480,6 +526,7 @@ ${spendingPattern
                 <Bar
                   data={stackedBarData}
                   options={stackedBarOptions}
+                  plugins={[ChartDataLabels]}
                   key={`stacked-bar-chart-${compositionData.length}`}
                 />
               </div>

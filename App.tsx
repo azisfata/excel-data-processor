@@ -674,7 +674,7 @@ const HistoryDropdown = () => (
             if (typeof window !== 'undefined') {
               localStorage.removeItem('lastSelectedHistoryId');
             }
-            const latestData = await supabaseService.getLatestProcessedResult(user.id);
+            const latestData = await supabaseService.getLatestProcessedResultByReportDate(user.id);
             if (latestData) {
               applyProcessedResult(latestData);
             } else {
@@ -754,7 +754,7 @@ const HistoryDropdown = () => (
       setIsInitializing(true);
       try {
         const [processedResultData, activitiesData, attachmentsMap, maxDepthSetting] = await Promise.all([
-          supabaseService.getLatestProcessedResult(user.id),
+          supabaseService.getLatestProcessedResultByReportDate(user.id),
           supabaseService.getActivities(user.id),
           attachmentService.fetchActivityAttachments().catch((err) => {
             console.error('Error loading attachments:', err);
@@ -1120,7 +1120,7 @@ const HistoryDropdown = () => (
           );
 
           // After saving, fetch latest to ensure consistency
-          const latestData = await supabaseService.getLatestProcessedResult(user.id);
+          const latestData = await supabaseService.getLatestProcessedResultByReportDate(user.id);
           if (latestData) {
             applyProcessedResult(latestData);
           }

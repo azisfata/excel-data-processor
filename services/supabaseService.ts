@@ -135,6 +135,52 @@ export async function getLatestProcessedResult(userId: string): Promise<{
   };
 }
 
+/**
+ * Fetches the most recent processed Excel data from Supabase based on report_date.
+ * @returns An object containing the latest result by report_date and the update timestamp, or null if none found.
+ */
+export async function getLatestProcessedResultByReportDate(userId: string): Promise<{
+  id: string;
+  result: ProcessingResult;
+  lastUpdated: string;
+  reportType: string | null;
+  reportDate: string | null;
+} | null> {
+  if (!userId) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from('processed_results')
+    .select('*')
+    .eq('user_id', userId)
+    .not('report_date', 'is', null)
+    .order('report_date', { ascending: false })
+    .limit(1);
+
+  if (error) {
+    console.error('Error fetching latest processed result by report_date:', error);
+    return null;
+  }
+
+  if (!data || data.length === 0) {
+    // Fallback to getLatestProcessedResult if no report_date found
+    return getLatestProcessedResult(userId);
+  }
+
+  const [latestResult] = data as ProcessedResultRow[];
+
+  const processingResult = buildProcessingResult(latestResult);
+
+  return {
+    id: latestResult.id,
+    result: processingResult,
+    lastUpdated: new Date(latestResult.created_at).toLocaleString('id-ID'),
+    reportType: latestResult.report_type || null,
+    reportDate: latestResult.report_date || null
+  };
+}
+
 export async function getProcessedResultById(id: string, userId: string): Promise<{
   id: string;
   result: ProcessingResult;
