@@ -379,12 +379,54 @@ const App: React.FC = () => {
   }, []);
   
   // Refs
+  const headerRef = useRef<HTMLElement>(null);
   const historyRef = useRef<HTMLDivElement>(null);
   const aiChatContainerRef = useRef<HTMLDivElement>(null);
   const aiAssistantPanelRef = useRef<HTMLDivElement>(null);
+  const calendarPanelRef = useRef<HTMLDivElement>(null);
+  const analyticsPanelRef = useRef<HTMLDivElement>(null);
+
+  const scrollToSection = useCallback((element: HTMLElement | null) => {
+    if (typeof window === 'undefined' || !element) {
+      return;
+    }
+
+    const headerHeight = headerRef.current?.offsetHeight ?? 0;
+    const elementTop = element.getBoundingClientRect().top + window.scrollY;
+    window.scrollTo({
+      top: Math.max(elementTop - headerHeight - 16, 0),
+      behavior: 'smooth',
+    });
+  }, [headerRef]);
+
   const scrollToAiPanel = useCallback(() => {
-    aiAssistantPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, []);
+    scrollToSection(aiAssistantPanelRef.current);
+  }, [scrollToSection]);
+
+  const handleHeaderTabClick = (tabId: HeaderTabKey) => {
+    setActiveHeaderTab(tabId);
+
+    if (tabId === 'overview') {
+      if (typeof window !== 'undefined') {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      return;
+    }
+
+    if (tabId === 'activities') {
+      scrollToSection(calendarPanelRef.current);
+      return;
+    }
+
+    if (tabId === 'analytics') {
+      scrollToSection(analyticsPanelRef.current);
+      return;
+    }
+
+    if (tabId === 'chat') {
+      scrollToSection(aiAssistantPanelRef.current);
+    }
+  };
   
   const buildAiDataSnapshot = useCallback((): string => {
     const totalActivitiesCount = activities.length;
@@ -1864,7 +1906,7 @@ const HistoryDropdown = () => (
   return (
     <div className="min-h-screen bg-gray-50">
         {/* Header */}
-        <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
+          <header ref={headerRef} className="bg-white border-b border-gray-200 sticky top-0 z-40">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="h-20 flex items-center justify-between">
               <div className="flex items-center gap-6">
@@ -1881,14 +1923,14 @@ const HistoryDropdown = () => (
                 </div>
                 <nav className="flex items-center gap-2 rounded-full bg-gray-100/60 px-2 py-1" role="tablist" aria-label="Navigasi panel dashboard">
                   {HEADER_TABS.map(tab => (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      onClick={() => setActiveHeaderTab(tab.id)}
-                      className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
-                        activeHeaderTab === tab.id
-                          ? 'bg-white text-indigo-600 shadow-sm'
-                          : 'text-gray-600 hover:text-indigo-600'
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => handleHeaderTabClick(tab.id)}
+                        className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
+                          activeHeaderTab === tab.id
+                            ? 'bg-white text-indigo-600 shadow-sm'
+                            : 'text-gray-600 hover:text-indigo-600'
                       }`}
                       role="tab"
                       aria-selected={activeHeaderTab === tab.id}
@@ -2233,19 +2275,21 @@ const HistoryDropdown = () => (
             />
 
             {/* Analytics Panels */}
-            <MonthlyAnalyticsPanel
-              currentReport={currentReport}
-              allReports={allReports}
-              onAIAnalysis={(analysis) => {
-                const aiMessage: AiMessage = {
-                  id: generateMessageId(),
-                  sender: 'assistant',
-                  content: analysis,
-                  timestamp: new Date().toISOString()
-                };
-                setAiMessages(prev => [...prev, aiMessage]);
-              }}
-            />
+            <div ref={analyticsPanelRef}>
+              <MonthlyAnalyticsPanel
+                currentReport={currentReport}
+                allReports={allReports}
+                onAIAnalysis={(analysis) => {
+                  const aiMessage: AiMessage = {
+                    id: generateMessageId(),
+                    sender: 'assistant',
+                    content: analysis,
+                    timestamp: new Date().toISOString()
+                  };
+                  setAiMessages(prev => [...prev, aiMessage]);
+                }}
+              />
+            </div>
 
             <TrendAnalyticsPanel
               allReports={allReports}
@@ -2439,16 +2483,16 @@ const HistoryDropdown = () => (
 
             {/* Calendar Section */}
             {activities.length > 0 && (
-              <div className="bg-white shadow-xl rounded-xl overflow-hidden mt-8">
-                <div 
+              <div ref={calendarPanelRef} className="bg-white shadow-xl rounded-xl overflow-hidden mt-8">
+                <div
                   className="p-4 bg-gray-50 border-b border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors duration-200 flex justify-between items-center"
                   onClick={() => setShowCalendar(!showCalendar)}
                 >
                   <h2 className="text-xl font-semibold text-gray-800">Kalender Kegiatan</h2>
-                  <svg 
-                    className={`w-5 h-5 text-gray-500 transform transition-transform duration-200 ${showCalendar ? 'rotate-180' : ''}`} 
-                    fill="none" 
-                    viewBox="0 0 24 24" 
+                  <svg
+                    className={`w-5 h-5 text-gray-500 transform transition-transform duration-200 ${showCalendar ? 'rotate-180' : ''}`}
+                    fill="none"
+                    viewBox="0 0 24 24"
                     stroke="currentColor"
                   >
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
