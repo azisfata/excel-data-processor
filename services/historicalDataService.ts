@@ -213,12 +213,12 @@ export function createMonthlyCompositionData(monthlyReports: MonthlyReport[]) {
     const level7Data = getLevel7DataForMonth(report);
     const monthLabel = monthNames[report.month - 1];
     
-    // Group by uraian dan hitung total realisasi
+    // Group by uraian dan hitung total realisasi bulan ini
     const composition = new Map<string, number>();
     level7Data.forEach(item => {
-      if (item.realisasi > 0) {
+      if (item.realisasiBulanIni > 0) {
         const existing = composition.get(item.uraian) || 0;
-        composition.set(item.uraian, existing + item.realisasi);
+        composition.set(item.uraian, existing + item.realisasiBulanIni);
       }
     });
     

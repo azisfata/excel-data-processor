@@ -94,11 +94,18 @@ export const generateRkbPdf = async (
       }
     }
 
+    // Format current date as DD/MM/YYYY
+    const currentDate = new Date().toLocaleDateString('id-ID', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+
     return [
       (index + 1).toString(), // No
       komponenKegiatan, // Komponen Kegiatan
       activity.nama, // Judul Kegiatan
-      '1.4', // RB (Fixed value as requested)
+      currentDate, // RB (Changed to show current date)
       activity.penanggung_jawab || '-', // PN/PP/KP (Penanggung Jawab)
       activity.kl_unit_terkait || '-', // K/L/Unit Terkait
       scheduledDate, // Tanggal Pelaksanaan
@@ -131,27 +138,21 @@ export const generateRkbPdf = async (
     styles: {
       fontSize: 10,
       cellPadding: 3,
-      lineWidth: 0.1, // Border thickness
-      lineColor: [0, 0, 0], // Black border color
     },
     headStyles: {
-      fillColor: [0, 0, 0], // Black background
-      textColor: [255, 255, 255], // White text
+      fillColor: [59, 130, 246], // Tailwind blue-500
+      textColor: [255, 255, 255],
       fontSize: 11,
       fontStyle: 'bold',
-      lineWidth: 0.1, // Border thickness
-      lineColor: [0, 0, 0], // Black border color
     },
     alternateRowStyles: {
       fillColor: [241, 245, 249], // Light gray for alternate rows
-      lineWidth: 0.1, // Border thickness
-      lineColor: [0, 0, 0], // Black border color
     },
     columnStyles: {
       0: { cellWidth: 12 }, // No.
       1: { cellWidth: 25 }, // Komponen Kegiatan
       2: { cellWidth: 40 }, // Judul Kegiatan
-      3: { cellWidth: 25 }, // RB
+      3: { cellWidth: 25 }, // Tanggal (Changed from RB)
       4: { cellWidth: 25 }, // PN/PP/KP
       5: { cellWidth: 30 }, // K/L/Unit Terkait
       6: { cellWidth: 25 }, // Tanggal Pelaksanaan
@@ -161,7 +162,6 @@ export const generateRkbPdf = async (
       10: { cellWidth: 25 }, // Rencana Tindak Lanjut
     },
     margin: { left: 15, right: 15 },
-    theme: 'grid', // Add grid theme for borders
     didDrawPage: function (data) {
       // Add page numbers
       const pageCount = doc.getNumberOfPages();
