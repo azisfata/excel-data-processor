@@ -77,6 +77,7 @@ const MonthlyAnalyticsPanel: React.FC<MonthlyAnalyticsPanelProps> = ({
 }) => {
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
   const [compositionView, setCompositionView] = useState<'realisasi' | 'pagu'>('realisasi');
+  const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
 
   // Data untuk bulan ini saja
   const currentMonthData = useMemo(() => {
@@ -181,7 +182,9 @@ const MonthlyAnalyticsPanel: React.FC<MonthlyAnalyticsPanelProps> = ({
   // Generate AI analysis untuk bulan ini
   const generateMonthlyAnalysis = () => {
     if (!currentReport || !currentMonthData.length) {
-      onAIAnalysis('Tidak ada data untuk dianalisis pada bulan ini.');
+      const analysis = 'Tidak ada data untuk dianalisis pada bulan ini.';
+      setAiAnalysis(analysis);
+      onAIAnalysis(analysis);
       return;
     }
 
@@ -192,16 +195,16 @@ const MonthlyAnalyticsPanel: React.FC<MonthlyAnalyticsPanelProps> = ({
       currentMonthData.reduce((sum, item) => sum + (item?.persentase || 0), 0) /
       currentMonthData.length;
 
-    // Kategorisasi kesehatan penyerapan
-    const healthyItems = currentMonthData.filter(item => item && item.persentase >= 75).length;
-    const warningItems = currentMonthData.filter(
-      item => item && item.persentase >= 50 && item.persentase < 75
+    // Kategorisasi kesehatan penyerapan berdasarkan uraian akun (sudah dikelompokkan di sisaAnggaranTerbanyak)
+    const healthyItems = sisaAnggaranTerbanyak.filter(item => item.persentase >= 75).length;
+    const warningItems = sisaAnggaranTerbanyak.filter(
+      item => item.persentase >= 50 && item.persentase < 75
     ).length;
-    const criticalItems = currentMonthData.filter(item => item && item.persentase < 50).length;
+    const criticalItems = sisaAnggaranTerbanyak.filter(item => item.persentase < 50).length;
 
     // Identifikasi kantong sisa besar
     const largeSisa = currentMonthData
-      .filter(item => item && item.sisa > 100000000) // > 100 juta
+      .filter(item => item && item.sisa > 10000000) // > 10 juta
       .sort((a, b) => (b?.sisa || 0) - (a?.sisa || 0))
       .slice(0, 5);
 
@@ -214,10 +217,10 @@ const MonthlyAnalyticsPanel: React.FC<MonthlyAnalyticsPanelProps> = ({
 - Sisa Anggaran: Rp ${totalSisa.toLocaleString('id-ID')}
 - Rata-rata Persentase: ${avgPersentase.toFixed(1)}%
 
-📈 **Distribusi Kesehatan Akun:**
-- Sehat (≥75%): ${healthyItems} akun
-- Perhatian (50-74%): ${warningItems} akun  
-- Kritis (&lt;50%): ${criticalItems} akun
+📈 **Distribusi Kesehatan Uraian Akun:**
+- Sehat (≥75%): ${healthyItems} uraian
+- Perhatian (50-74%): ${warningItems} uraian  
+- Kritis (&lt;50%): ${criticalItems} uraian
 
 💰 **Kantong Sisa Anggaran Terbesar:**
 ${largeSisa
@@ -235,10 +238,11 @@ ${largeSisa
           ? '⚠️ Penyerapan anggaran cukup baik, namun perlu ditingkatkan'
           : '❌ Penyerapan anggaran perlu perhatian serius'
     }
-- ${criticalItems > 0 ? `🚨 Ada ${criticalItems} akun dengan penyerapan kritis yang perlu immediate action` : '✅ Tidak ada akun dengan penyerapan kritis'}
-- ${largeSisa.length > 0 ? `💡 Fokus pada optimasi ${largeSisa.length} akun dengan sisa anggaran terbesar` : '✅ Tidak ada kantong sisa anggaran yang signifikan'}
+- ${criticalItems > 0 ? `🚨 Ada ${criticalItems} uraian akun dengan penyerapan kritis yang perlu immediate action` : '✅ Tidak ada uraian akun dengan penyerapan kritis'}
+- ${largeSisa.length > 0 ? `💡 Fokus pada optimasi ${largeSisa.length} uraian akun dengan sisa anggaran terbesar` : '✅ Tidak ada kantong sisa anggaran yang signifikan'}
     `.trim();
 
+    setAiAnalysis(analysis);
     onAIAnalysis(analysis);
   };
 
@@ -757,7 +761,7 @@ ${largeSisa
       >
         <div className="flex justify-between items-center">
           <h3 className="text-lg font-semibold text-gray-800">
-            📊 Analisis Bulanan -{' '}
+            📊 Analisis Bulanan (Sesuai Laporan) -{' '}
             {new Date(currentReport.reportDate).toLocaleDateString('id-ID', {
               month: 'long',
               year: 'numeric',
@@ -982,6 +986,54 @@ ${largeSisa
               Analisis dengan AI
             </button>
           </div>
+
+          {/* AI Analysis Result */}
+          {aiAnalysis && (
+            <div className="mt-6 p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200 shadow-sm max-h-96 overflow-y-auto">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0">
+                  <div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center">
+                    <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                      />
+                    </svg>
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <h4 className="text-base font-semibold text-gray-800 mb-2">Hasil Analisis AI</h4>
+                  <div className="text-gray-700 leading-relaxed text-xs">
+                    {aiAnalysis.split('\n').map((line, index) => {
+                      // Process bold text (**text**)
+                      const processedLine = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                      
+                      // Check if line contains bullet points
+                      if (line.trim().startsWith('-')) {
+                        return (
+                          <div key={index} className="mb-1" dangerouslySetInnerHTML={{ __html: `• ${processedLine.substring(1).trim()}` }} />
+                        );
+                      }
+                      
+                      // Check if line is a header (contains ** at start and end)
+                      if (line.includes('**') && !line.trim().startsWith('-')) {
+                        return (
+                          <div key={index} className="mb-2 font-semibold text-gray-900" dangerouslySetInnerHTML={{ __html: processedLine }} />
+                        );
+                      }
+                      
+                      // Regular line
+                      return (
+                        <div key={index} className="mb-1" dangerouslySetInnerHTML={{ __html: processedLine }} />
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

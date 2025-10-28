@@ -41,6 +41,7 @@ const TrendAnalyticsPanel: React.FC<TrendAnalyticsPanelProps> = ({ allReports, o
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
   const [selectedAccount, setSelectedAccount] = useState<string>('');
   const [viewType, setViewType] = useState<'total' | 'account'>('total');
+  const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
 
   // Process data untuk tren
   const monthlyTrendData = useMemo(() => {
@@ -71,12 +72,16 @@ const TrendAnalyticsPanel: React.FC<TrendAnalyticsPanelProps> = ({ allReports, o
   // Generate AI analysis untuk tren
   const generateTrendAnalysis = () => {
     if (!allReports.length) {
-      onAIAnalysis('Tidak ada data historis untuk dianalisis.');
+      const analysis = 'Tidak ada data historis untuk dianalisis.';
+      setAiAnalysis(analysis);
+      onAIAnalysis(analysis);
       return;
     }
 
     if (allReports.length < 2) {
-      onAIAnalysis('Membutuhkan minimal 2 bulan data untuk analisis tren.');
+      const analysis = 'Membutuhkan minimal 2 bulan data untuk analisis tren.';
+      setAiAnalysis(analysis);
+      onAIAnalysis(analysis);
       return;
     }
 
@@ -197,6 +202,7 @@ ${spendingPattern
     }
     `.trim();
 
+    setAiAnalysis(analysis);
     onAIAnalysis(analysis);
   };
 
@@ -377,7 +383,7 @@ ${spendingPattern
       >
         <div className="flex justify-between items-center">
           <h3 className="text-lg font-semibold text-gray-800">
-            📈 Analisis Tren Bulanan ({allReports.length} bulan)
+            📈 Analisis Tren Bulanan (Sesuai Laporan - {allReports.length} bulan)
           </h3>
           <svg
             className={`w-5 h-5 text-gray-500 transform transition-transform ${expandedSection === 'trend' ? 'rotate-180' : ''}`}
@@ -501,6 +507,54 @@ ${spendingPattern
               Analisis Tren dengan AI
             </button>
           </div>
+
+          {/* AI Analysis Result */}
+          {aiAnalysis && (
+            <div className="mt-6 p-4 bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg border border-purple-200 shadow-sm max-h-96 overflow-y-auto">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0">
+                  <div className="w-6 h-6 bg-purple-600 rounded-full flex items-center justify-center">
+                    <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                      />
+                    </svg>
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <h4 className="text-base font-semibold text-gray-800 mb-2">Hasil Analisis AI</h4>
+                  <div className="text-gray-700 leading-relaxed text-xs">
+                    {aiAnalysis.split('\n').map((line, index) => {
+                      // Process bold text (**text**)
+                      const processedLine = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                      
+                      // Check if line contains bullet points
+                      if (line.trim().startsWith('-')) {
+                        return (
+                          <div key={index} className="mb-1" dangerouslySetInnerHTML={{ __html: `• ${processedLine.substring(1).trim()}` }} />
+                        );
+                      }
+                      
+                      // Check if line is a header (contains ** at start and end)
+                      if (line.includes('**') && !line.trim().startsWith('-')) {
+                        return (
+                          <div key={index} className="mb-2 font-semibold text-gray-900" dangerouslySetInnerHTML={{ __html: processedLine }} />
+                        );
+                      }
+                      
+                      // Regular line
+                      return (
+                        <div key={index} className="mb-1" dangerouslySetInnerHTML={{ __html: processedLine }} />
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
