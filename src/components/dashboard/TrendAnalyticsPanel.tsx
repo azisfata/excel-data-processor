@@ -39,6 +39,23 @@ interface TrendAnalyticsPanelProps {
   onAIAnalysis: (analysis: string) => void;
 }
 
+const formatShortCurrency = (value: number): string => {
+  const absoluteValue = Math.abs(value);
+  if (absoluteValue >= 1_000_000_000_000) {
+    return `Rp ${(value / 1_000_000_000_000).toFixed(1).replace(/\.0$/, '')}T`;
+  }
+  if (absoluteValue >= 1_000_000_000) {
+    return `Rp ${(value / 1_000_000_000).toFixed(1).replace(/\.0$/, '')}B`;
+  }
+  if (absoluteValue >= 1_000_000) {
+    return `Rp ${(value / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+  }
+  if (absoluteValue >= 1_000) {
+    return `Rp ${(value / 1_000).toFixed(1).replace(/\.0$/, '')}K`;
+  }
+  return `Rp ${value.toLocaleString('id-ID')}`;
+};
+
 const TrendAnalyticsPanel: React.FC<TrendAnalyticsPanelProps> = ({ allReports, onAIAnalysis }) => {
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
   const [selectedUraian, setSelectedUraian] = useState<string>('');
@@ -257,7 +274,7 @@ ${spendingPattern
           weight: 'bold' as any
         },
         formatter: (value: number) => {
-          return `Rp ${(value / 1000000).toFixed(1)}M`;
+          return formatShortCurrency(value);
         },
         color: (context: any) => {
           return context.dataset.borderColor;
@@ -285,7 +302,7 @@ ${spendingPattern
         },
         ticks: {
           callback: (value: any) => {
-            return `Rp ${(value / 1000000).toFixed(0)}M`;
+            return formatShortCurrency(Number(value));
           },
           font: {
             size: 11
@@ -308,12 +325,17 @@ ${spendingPattern
 
   const stackedBarOptions = {
     responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: 'top' as const,
-      },
-      tooltip: {
+  maintainAspectRatio: false,
+  layout: {
+    padding: {
+      top: 28,
+    },
+  },
+  plugins: {
+    legend: {
+      position: 'top' as const,
+    },
+    tooltip: {
         callbacks: {
           label: (context: any) => {
             const value = context.parsed.y;
@@ -322,7 +344,36 @@ ${spendingPattern
         },
       },
       datalabels: {
-        display: false
+        display: (context: any) => {
+          const datasets = context?.chart?.data?.datasets || [];
+          const total = compositionData?.[context.dataIndex]?.totalRealisasiBulanIni || 0;
+          return datasets.length > 0 && context.datasetIndex === datasets.length - 1 && total > 0;
+        },
+        formatter: (_value: number, context: any) => {
+          const total = compositionData?.[context.dataIndex]?.totalRealisasiBulanIni || 0;
+          return total > 0 ? formatShortCurrency(total) : '';
+        },
+        anchor: 'end',
+        align: 'top',
+        offset: 10,
+        color: '#7C2D12',
+        backgroundColor: 'rgba(255, 255, 255, 0.92)',
+        borderColor: '#FDBA74',
+        borderWidth: 1,
+        borderRadius: 6,
+        padding: {
+          top: 4,
+          bottom: 4,
+          left: 8,
+          right: 8,
+        },
+        font: {
+          weight: 'bold' as const,
+          size: 11,
+        },
+        clip: false,
+        clamp: true,
+        textAlign: 'center' as const,
       }
     },
     scales: {
@@ -333,7 +384,7 @@ ${spendingPattern
         stacked: true,
         beginAtZero: true,
         ticks: {
-          callback: (value: any) => `Rp ${(value / 1000000).toFixed(0)}M`,
+          callback: (value: any) => formatShortCurrency(Number(value)),
         },
       },
     },
@@ -519,7 +570,7 @@ ${spendingPattern
             <h4 className="text-md font-semibold text-orange-800 mb-4">
               🍰 Komposisi Belanja Bulanan
               <span className="text-sm font-normal text-gray-600 ml-2">
-                (Top 10 kategori per bulan)
+                (Realisasi per bulan)
               </span>
             </h4>
             {stackedBarData ? (
