@@ -25,6 +25,7 @@ import { useHistoricalData } from './src/hooks/useHistoricalData';
 
 // Import the PDF generation function
 import { generateRkbPdf } from './src/utils/pdfGenerator';
+import { generateRkbDocumentPdf } from './src/utils/rkbPdfGenerator';
 
 const MONTH_NAMES_ID = [
   'Januari',
@@ -163,6 +164,7 @@ const App: React.FC = () => {
     reportDate: null,
   });
   const [showUploadMetadataModal, setShowUploadMetadataModal] = useState(false);
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [pendingUploadFile, setPendingUploadFile] = useState<File | null>(null);
   const [uploadReportType, setUploadReportType] = useState<'Akrual' | 'SP2D'>('Akrual');
   const [uploadReportDate, setUploadReportDate] = useState('');
@@ -1061,10 +1063,41 @@ const HistoryDropdown = () => (
     }
   };
 
-  const handleDownloadRkbPdf = async () => {
+  const handleDownloadRkbPdf = () => {
+    setShowDownloadModal(true);
+  };
+
+  const downloadRkbDocument = async () => {
     try {
-      // Generate the PDF with currently filtered activities based on year, month, and status filters
-      // Pass the result data for realisasi values
+      setShowDownloadModal(false);
+      // Generate the RKB PDF with currently filtered activities
+      const pdfBlob = await generateRkbDocumentPdf(filteredActivities, selectedYear, selectedMonth, selectedStatus, result);
+      
+      // Create download link
+      const url = URL.createObjectURL(pdfBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      const monthLabel = 
+        selectedMonth === 'all' 
+          ? 'all' 
+          : selectedMonth === 'no-date' 
+            ? 'no-date' 
+            : MONTH_NAMES_ID[selectedMonth];
+      a.download = `RKB_Document_${selectedYear}_${monthLabel}_${new Date().toISOString().slice(0, 10)}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error generating RKB PDF:', error);
+      setError('Gagal membuat file PDF RKB. Silakan coba lagi.');
+    }
+  };
+
+  const downloadLkbbDocument = async () => {
+    try {
+      setShowDownloadModal(false);
+      // Generate the LKBB PDF with currently filtered activities
       const pdfBlob = await generateRkbPdf(filteredActivities, selectedYear, selectedMonth, selectedStatus, result);
       
       // Create download link
@@ -1077,14 +1110,14 @@ const HistoryDropdown = () => (
           : selectedMonth === 'no-date' 
             ? 'no-date' 
             : MONTH_NAMES_ID[selectedMonth];
-      a.download = `RKB_${selectedYear}_${monthLabel}_${new Date().toISOString().slice(0, 10)}.pdf`;
+      a.download = `LKBB_${selectedYear}_${monthLabel}_${new Date().toISOString().slice(0, 10)}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Error generating PDF:', error);
-      setError('Gagal membuat file PDF. Silakan coba lagi.');
+      console.error('Error generating LKBB PDF:', error);
+      setError('Gagal membuat file PDF LKBB. Silakan coba lagi.');
     }
   };
 
@@ -2534,12 +2567,12 @@ const HistoryDropdown = () => (
                                     type="button"
                                     onClick={handleDownloadRkbPdf}
                                     className="inline-flex items-center px-3 py-1.5 text-xs text-white bg-red-600 hover:bg-red-700 rounded-md transition-colors whitespace-nowrap"
-                                    title="Unduh LKBB dalam format PDF"
+                                    title="Pilih jenis dokumen untuk diunduh"
                                 >
                                     <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
                                     </svg>
-                                    Unduh RKB  dan LKBB
+                                    Pilih Dokumen
                                 </button>
                             </div>
                         </div>
@@ -3314,6 +3347,60 @@ const HistoryDropdown = () => (
         )}
       </main>
       <FloatingAIButton onOpenAiPanel={scrollToAiPanel} />
+      
+      {/* Download Modal */}
+      {showDownloadModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-96">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Pilih Jenis Dokumen</h3>
+              <button 
+                onClick={() => setShowDownloadModal(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <p className="text-gray-600 mb-6">Silakan pilih jenis dokumen yang ingin Anda unduh:</p>
+            <div className="space-y-4">
+              <button
+                onClick={downloadRkbDocument}
+                className="w-full flex items-center justify-between p-4 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                <div className="text-left">
+                  <div className="font-medium">Dokumen RKB</div>
+                  <div className="text-sm text-gray-500">Rencana Kegiatan Bulanan</div>
+                </div>
+                <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </button>
+              <button
+                onClick={downloadLkbbDocument}
+                className="w-full flex items-center justify-between p-4 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                <div className="text-left">
+                  <div className="font-medium">Dokumen LKBB</div>
+                  <div className="text-sm text-gray-500">Laporan Kegiatan Bulanan</div>
+                </div>
+                <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </button>
+            </div>
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={() => setShowDownloadModal(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+              >
+                Batal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Confirmation Dialog */}
       <ConfirmDialog
