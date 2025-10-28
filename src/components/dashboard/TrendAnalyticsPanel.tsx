@@ -19,6 +19,7 @@ import {
   getAllLevel7Accounts,
   createMonthlyCompositionData,
 } from '../../../services/historicalDataService';
+import { AccountLevel7Data } from '../../../types';
 
 // Register Chart.js components
 ChartJS.register(
@@ -40,7 +41,7 @@ interface TrendAnalyticsPanelProps {
 
 const TrendAnalyticsPanel: React.FC<TrendAnalyticsPanelProps> = ({ allReports, onAIAnalysis }) => {
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
-  const [selectedAccount, setSelectedAccount] = useState<string>('');
+  const [selectedUraian, setSelectedUraian] = useState<string>('');
   const [viewType, setViewType] = useState<'total' | 'account'>('total');
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
 
@@ -51,11 +52,11 @@ const TrendAnalyticsPanel: React.FC<TrendAnalyticsPanelProps> = ({ allReports, o
   }, [allReports]);
 
   const accountTrendData = useMemo(() => {
-    if (!selectedAccount || !allReports.length) return null;
-    const data = createAccountTrendData(allReports, selectedAccount);
+    if (!selectedUraian || !allReports.length) return null;
+    const data = createAccountTrendData(allReports, selectedUraian);
     console.log('accountTrendData:', data);
     return data;
-  }, [allReports, selectedAccount]);
+  }, [allReports, selectedUraian]);
 
   const availableAccounts = useMemo(() => {
     if (!allReports.length) return [];
@@ -127,7 +128,7 @@ const TrendAnalyticsPanel: React.FC<TrendAnalyticsPanelProps> = ({ allReports, o
 
     // Identifikasi dormant items
     const dormantAccounts = availableAccounts.filter(account => {
-      const accountData = createAccountTrendData(allReports, account.kode);
+      const accountData = createAccountTrendData(allReports, account.uraian);
       if (!accountData) return true;
       return accountData.data.every(d => d.realisasi === 0);
     });
@@ -477,13 +478,13 @@ ${spendingPattern
               <div className="flex items-center gap-2">
                 <label className="text-sm font-medium text-gray-700">Akun:</label>
                 <select
-                  value={selectedAccount}
-                  onChange={e => setSelectedAccount(e.target.value)}
+                  value={selectedUraian}
+                  onChange={e => setSelectedUraian(e.target.value)}
                   className="border border-gray-300 rounded-md px-3 py-1 text-sm min-w-[300px]"
                 >
                   <option value="">Pilih akun...</option>
                   {availableAccounts.map(account => (
-                    <option key={account.kode} value={account.kode}>
+                    <option key={account.uraian} value={account.uraian}>
                       {account.uraian}
                     </option>
                   ))}

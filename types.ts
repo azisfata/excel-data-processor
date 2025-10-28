@@ -38,6 +38,17 @@ export interface ProcessingResult {
   accountNameMap: Map<string, string>;
 }
 
+export interface AccountLevel7Data {
+  kode: string;
+  kodeLengkap?: string;
+  uraian: string;
+  pagu: number;
+  realisasi: number;
+  realisasiBulanIni: number;
+  persentase: number;
+  sisa: number;
+}
+
 export interface ProcessedResultRow {
   id: string;
   file_name: string | null;

@@ -13,6 +13,7 @@ import {
 import ChartDataLabels from 'chartjs-plugin-datalabels';
 import { Bar, Doughnut } from 'react-chartjs-2';
 import { MonthlyReport, getLevel7DataForMonth } from '../../../services/historicalDataService';
+import { AccountLevel7Data } from '../../../types';
 
 // Register Chart.js components
 ChartJS.register(

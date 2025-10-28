@@ -2,10 +2,10 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   getMonthlyReports,
   MonthlyReport,
-  AccountLevel7Data,
   getAllLevel7Accounts,
   getLevel7DataForMonth,
 } from '../../services/historicalDataService';
+import { AccountLevel7Data } from '../../types';
 
 export interface UseHistoricalDataReturn {
   monthlyReports: MonthlyReport[];

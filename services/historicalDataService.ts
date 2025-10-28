@@ -1,5 +1,5 @@
 import { getAllProcessedResults } from './supabaseService';
-import { ProcessingResult } from '../types';
+import { ProcessingResult, AccountLevel7Data } from '../types';
 
 export interface MonthlyReport {
   id: string;
@@ -10,16 +10,6 @@ export interface MonthlyReport {
   month: number;
   totals: number[];
   result: ProcessingResult;
-}
-
-export interface AccountLevel7Data {
-  kode: string;
-  kodeLengkap?: string;
-  uraian: string;
-  pagu: number;
-  realisasi: number;
-  persentase: number;
-  sisa: number;
 }
 
 export interface MonthlyTrendData {
@@ -105,6 +95,7 @@ export function extractLevel7Data(result: ProcessingResult): AccountLevel7Data[]
       const uraian = String(row[1] || '').trim();
       const pagu = Number(row[2]) || 0;
       const realisasi = Number(row[6]) || 0;
+      const realisasiBulanIni = Number(row[5]) || 0;
       const persentase = pagu > 0 ? (realisasi / pagu) * 100 : 0;
       const sisa = pagu - realisasi;
       
@@ -118,6 +109,7 @@ export function extractLevel7Data(result: ProcessingResult): AccountLevel7Data[]
         uraian,
         pagu,
         realisasi,
+        realisasiBulanIni,
         persentase,
         sisa
       };
@@ -157,42 +149,35 @@ export function createMonthlyTrendData(monthlyReports: MonthlyReport[]): Monthly
 /**
  * Membuat data tren untuk akun level 7 tertentu
  */
-export function createAccountTrendData(monthlyReports: MonthlyReport[], selectedAccount: string): AccountTrendData | null {
+export function createAccountTrendData(monthlyReports: MonthlyReport[], selectedUraian: string): AccountTrendData | null {
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
   
   const data = monthlyReports.map(report => {
     const level7Data = getLevel7DataForMonth(report);
-    const account = level7Data.find(item => item.kode === selectedAccount);
+    const matchingAccounts = level7Data.filter(item => item.uraian === selectedUraian);
+    
+    // Akumulasi semua data dengan uraian yang sama
+    const totalPagu = matchingAccounts.reduce((sum, item) => sum + item.pagu, 0);
+    const totalRealisasi = matchingAccounts.reduce((sum, item) => sum + item.realisasi, 0); // Gunakan realisasi kumulatif
     
     const monthLabel = monthNames[report.month - 1];
     
     return {
       month: monthLabel,
       year: report.year,
-      pagu: account?.pagu || 0,
-      realisasi: account?.realisasi || 0,
-      persentase: account?.persentase || 0
+      pagu: totalPagu,
+      realisasi: totalRealisasi, // Gunakan realisasi kumulatif untuk tren
+      persentase: totalPagu > 0 ? (totalRealisasi / totalPagu) * 100 : 0
     };
   });
   
   if (data.every(item => item.realisasi === 0)) {
-    return null; // Tidak ada data untuk akun ini
-  }
-  
-  // Cari uraian dari data pertama yang ada
-  let uraian = selectedAccount;
-  for (const report of monthlyReports) {
-    const level7Data = getLevel7DataForMonth(report);
-    const account = level7Data.find(item => item.kode === selectedAccount);
-    if (account) {
-      uraian = account.uraian;
-      break;
-    }
+    return null; // Tidak ada data untuk uraian ini
   }
   
   return {
-    kode: selectedAccount,
-    uraian,
+    kode: selectedUraian, // Gunakan uraian sebagai identifier
+    uraian: selectedUraian,
     data
   };
 }
@@ -200,19 +185,22 @@ export function createAccountTrendData(monthlyReports: MonthlyReport[], selected
 /**
  * Mendapatkan daftar semua akun level 7 yang ada di semua laporan
  */
-export function getAllLevel7Accounts(monthlyReports: MonthlyReport[]): Array<{ kode: string; uraian: string }> {
-  const accountsSet = new Map<string, string>();
+export function getAllLevel7Accounts(monthlyReports: MonthlyReport[]): Array<{ uraian: string; totalRealisasi: number }> {
+  const accountsMap = new Map<string, number>();
   
   monthlyReports.forEach(report => {
     const level7Data = getLevel7DataForMonth(report);
     level7Data.forEach(item => {
       if (item.realisasi > 0) { // Hanya akun yang ada realisasinya
-        accountsSet.set(item.kode, item.uraian);
+        const existing = accountsMap.get(item.uraian) || 0;
+        accountsMap.set(item.uraian, existing + item.realisasi);
       }
     });
   });
   
-  return Array.from(accountsSet.entries()).map(([kode, uraian]) => ({ kode, uraian }));
+  return Array.from(accountsMap.entries())
+    .map(([uraian, totalRealisasi]) => ({ uraian, totalRealisasi }))
+    .sort((a, b) => b.totalRealisasi - a.totalRealisasi);
 }
 
 /**
