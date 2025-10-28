@@ -222,16 +222,18 @@ export function createMonthlyCompositionData(monthlyReports: MonthlyReport[]) {
       }
     });
     
-    // Sort by value descending dan ambil top 10
+    // Sort by value descending
     const sortedComposition = Array.from(composition.entries())
-      .sort(([,a], [,b]) => b - a)
-      .slice(0, 10);
+      .sort(([,a], [,b]) => b - a);
+
+    const totalRealisasiBulanIni = Array.from(composition.values()).reduce((sum, value) => sum + value, 0);
     
     return {
       month: monthLabel,
       year: report.year,
       composition: sortedComposition,
-      totalRealisasi: report.totals[4] || 0
+      totalRealisasi: totalRealisasiBulanIni,
+      totalRealisasiBulanIni
     };
   });
 }

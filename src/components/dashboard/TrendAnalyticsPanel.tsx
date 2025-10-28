@@ -42,13 +42,13 @@ interface TrendAnalyticsPanelProps {
 const formatShortCurrency = (value: number): string => {
   const absoluteValue = Math.abs(value);
   if (absoluteValue >= 1_000_000_000_000) {
-    return `Rp ${(value / 1_000_000_000_000).toFixed(1).replace(/\.0$/, '')}T`;
+    return `Rp ${(value / 1_000_000_000_000).toFixed(1).replace(/\.0$/, '')}TRN`;
   }
   if (absoluteValue >= 1_000_000_000) {
-    return `Rp ${(value / 1_000_000_000).toFixed(1).replace(/\.0$/, '')}B`;
+    return `Rp ${(value / 1_000_000_000).toFixed(1).replace(/\.0$/, '')}MLR`;
   }
   if (absoluteValue >= 1_000_000) {
-    return `Rp ${(value / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+    return `Rp ${(value / 1_000_000).toFixed(1).replace(/\.0$/, '')}JT`;
   }
   if (absoluteValue >= 1_000) {
     return `Rp ${(value / 1_000).toFixed(1).replace(/\.0$/, '')}K`;
@@ -570,7 +570,7 @@ ${spendingPattern
             <h4 className="text-md font-semibold text-orange-800 mb-4">
               🍰 Komposisi Belanja Bulanan
               <span className="text-sm font-normal text-gray-600 ml-2">
-                (Realisasi per bulan)
+                (Realisasi tiap bulan)
               </span>
             </h4>
             {stackedBarData ? (
