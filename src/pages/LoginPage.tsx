@@ -112,16 +112,16 @@ const LoginPage: React.FC = () => {
               </div>
               <div className="ml-4">
                 <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">SAPA AI</h1>
-                <p className="text-sm uppercase tracking-[0.2em] text-blue-200">Smart Analytics Platform</p>
+                <p className="text-sm uppercase tracking-[0.2em] text-blue-200">Sistem Analitik Program & Anggaran</p>
               </div>
             </div>
           </div>
 
           <div className="space-y-6">
             <div>
-              <h2 className="text-4xl font-bold mb-4">Platform Analitik Anggaran Terpadu</h2>
+              <h2 className="text-4xl font-bold mb-4">INOVASI TEKNOLOGI BERBASIS KECERDASAN ARTIFISIAL (KA) UNTUK RENCANA KERJA DAN ANGGARAN</h2>
               <p className="text-lg text-blue-100 max-w-lg">
-                Sistem pemrosesan data anggaran SAKTI dengan kecerdasan buatan untuk Kementerian Koordinator Bidang Pembangunan Manusia dan Kebudayaan Republik Indonesia
+                Sistem pemrosesan data anggaran SAKTI dengan kecerdasan buatan untuk <b>Kementerian Koordinator Bidang Pembangunan Manusia dan Kebudayaan Republik Indonesia</b>
               </p>
             </div>
 
@@ -179,7 +179,7 @@ const LoginPage: React.FC = () => {
               <div className="mt-8 grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div className="text-center transform transition-all duration-500 hover:scale-110">
                   <div className="text-2xl font-bold text-white counter">10K+</div>
-                  <div className="text-xs text-blue-200">Data Diproses</div>
+                  <div className="text-xs text-blue-200">Fitur</div>
                 </div>
                 <div className="text-center transform transition-all duration-500 hover:scale-110">
                   <div className="text-2xl font-bold text-white counter">99.9%</div>
@@ -190,8 +190,8 @@ const LoginPage: React.FC = () => {
                   <div className="text-xs text-blue-200">Monitoring</div>
                 </div>
                 <div className="text-center transform transition-all duration-500 hover:scale-110">
-                  <div className="text-2xl font-bold text-white counter">50+</div>
-                  <div className="text-xs text-blue-200">Kementerian/Lembaga</div>
+                  <div className="text-2xl font-bold text-white counter">25+</div>
+                  <div className="text-xs text-blue-200">Unit Kerja</div>
                 </div>
               </div>
             </div>
@@ -202,13 +202,12 @@ const LoginPage: React.FC = () => {
         <div className="flex-1 max-w-md">
           <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8 border border-white/20 transform transition-all duration-500 hover:scale-[1.02]">
             <div className="text-center mb-8">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-full mb-4 shadow-lg">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
-                </svg>
+              <div className="inline-flex items-center justify-center w-24 h-24 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-full mb-4 shadow-lg overflow-hidden transform transition-all duration-500 hover:scale-110 hover:shadow-2xl">
+                <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-0 group-hover:opacity-20 transition-opacity duration-300 rounded-full"></div>
+                <img src="/images/logo-kemenkopmk.png" alt="Logo Kemenko PMK" className="relative h-25 w-25 object-contain z-10" />
               </div>
               <h2 className="text-2xl font-bold text-gray-800 mb-2">Masuk ke Dashboard</h2>
-              <p className="text-gray-600">Akses platform analitik anggaran Kemenko PMK</p>
+              <p className="text-gray-600">Akses platform Analitik Program dan Anggaran Kemenko PMK</p>
             </div>
 
             {error && (
@@ -297,6 +296,9 @@ const LoginPage: React.FC = () => {
             </div>
 
             <div className="mt-6 pt-6 border-t border-gray-200">
+              <div className="text-center mb-4">
+                <p className="text-xs text-gray-500 font-medium bg-gradient-to-r from-gray-700 to-gray-500 bg-clip-text text-transparent">Kementerian Koordinator Bidang Pembangunan Manusia dan Kebudayaan Republik Indonesia</p>
+              </div>
               <div className="flex items-center justify-center space-x-4 text-xs text-gray-500">
                 <div className="flex items-center">
                   <svg className="w-4 h-4 mr-1 text-green-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -312,7 +314,7 @@ const LoginPage: React.FC = () => {
                 </div>
                 <div className="flex items-center">
                   <svg className="w-4 h-4 mr-1 text-purple-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4V2m0-6V4m6 6v10m6-2A2 2 0 100-4m0 4a2 2 0 110-4m0 4V2m0-6V4" />
                   </svg>
                   <span>Terintegrasi</span>
                 </div>
