@@ -494,7 +494,10 @@ ${largeSisa
           data: anggaranPerUraian.map(item => item.realisasi),
           backgroundColor: anggaranPerUraian.map(item => getHealthColorLight(item.persentase)),
           borderColor: anggaranPerUraian.map(item => getHealthColor(item.persentase)),
-          borderWidth: 2,
+          hoverBackgroundColor: anggaranPerUraian.map(item => getHealthColor(item.persentase)),
+          hoverBorderColor: anggaranPerUraian.map(item => getHealthColor(item.persentase)),
+          hoverBorderWidth: 1.5,
+          borderWidth: 0,
           borderRadius: 8,
           borderSkipped: false,
           maxBarThickness: 32,
@@ -510,17 +513,23 @@ ${largeSisa
               }
               const percentage =
                 originalData.pagu > 0 ? (originalData.realisasi / originalData.pagu) * 100 : 0;
-              return `${percentage.toFixed(0)}%`;
+              const formatted = Number.isFinite(percentage) ? percentage.toFixed(1) : '0.0';
+              return `${formatted}%`;
             },
-            color: '#FFFFFF',
-            anchor: 'center',
-            align: 'center',
+            color: '#111827',
+            anchor: 'end',
+            align: 'left',
+            offset: 12,
+            clamp: true,
             font: {
-              weight: 'bold',
+              weight: '600',
               size: 12,
+              family: 'Inter, "Segoe UI", "Helvetica Neue", Arial, sans-serif',
             },
-            textStroke: '1px rgba(0,0,0,0.3)',
-            textStrokeColor: 'rgba(0,0,0,0.3)',
+            padding: {
+              left: 8,
+              right: 8,
+            },
             clip: false,
           },
         },
@@ -529,7 +538,7 @@ ${largeSisa
           data: anggaranPerUraian.map(item => item.sisa),
           backgroundColor: '#E5E7EB',
           borderColor: '#9CA3AF',
-          borderWidth: 2,
+          borderWidth: 0,
           borderRadius: 0,
           borderSkipped: false,
           maxBarThickness: 32,
@@ -543,14 +552,26 @@ ${largeSisa
   }, [anggaranPerUraian]);
 
   const anggaranChartOptions = useMemo(() => {
+    const longestPercentageCharacters = anggaranPerUraian.reduce((max, item) => {
+      if (!item) {
+        return max;
+      }
+      const pagu = item.pagu ?? 0;
+      const realisasi = item.realisasi ?? 0;
+      const percentage = pagu > 0 ? (realisasi / pagu) * 100 : 0;
+      const formattedLength = Number.isFinite(percentage) ? percentage.toFixed(1).length : 3;
+      return Math.max(max, formattedLength);
+    }, 0);
+    const rightPadding = Math.min(160, Math.max(90, longestPercentageCharacters * 10));
+
     return {
       indexAxis: 'y' as const,
       responsive: true,
       maintainAspectRatio: false,
       layout: {
         padding: {
-          right: 60,
-          left: 10,
+          right: rightPadding,
+          left: 16,
           top: 10,
           bottom: 10,
         },
@@ -564,6 +585,7 @@ ${largeSisa
             color: 'rgba(156, 163, 175, 0.1)',
           },
           ticks: {
+            padding: 12,
             callback: (value: any) => {
               const numericValue =
                 typeof value === 'string' ? parseFloat(value) : (value as number);
@@ -610,9 +632,11 @@ ${largeSisa
             usePointStyle: true,
             boxWidth: 12,
             padding: 20,
+            color: '#1F2937',
             font: {
               size: 12,
               weight: '600',
+              family: 'Inter, "Segoe UI", "Helvetica Neue", Arial, sans-serif',
             },
             // Add custom legend items for health status
             generateLabels: function (chart: any) {
@@ -703,8 +727,9 @@ ${largeSisa
         },
       },
       interaction: {
-        intersect: true,
-        mode: 'nearest',
+        intersect: false,
+        mode: 'index',
+        axis: 'y',
       },
       animation: {
         duration: 750,

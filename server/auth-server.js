@@ -58,6 +58,7 @@ app.use(cors({
       'http://localhost:5173',
       'http://192.168.10.149:5173',
       'http://127.0.0.1:5173',
+      'http://172.2.17.175:5173',
       process.env.CORS_ORIGIN || 'http://localhost:3000' // Production domain
     ].filter(Boolean);
 
