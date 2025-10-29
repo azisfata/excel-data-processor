@@ -2483,7 +2483,7 @@ const HistoryDropdown = () => (
 
             {/* Calendar Section */}
             {activities.length > 0 && (
-              <div ref={calendarPanelRef} className="bg-white shadow-xl rounded-xl overflow-hidden mt-8">
+              <div className="bg-white shadow-xl rounded-xl overflow-hidden mt-8">
                 <div
                   className="p-4 bg-gray-50 border-b border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors duration-200 flex justify-between items-center"
                   onClick={() => setShowCalendar(!showCalendar)}
@@ -2509,7 +2509,7 @@ const HistoryDropdown = () => (
             )}
 
             {/* Activities Section */}
-            <div className="bg-white shadow-xl rounded-xl overflow-hidden mt-8">
+            <div ref={calendarPanelRef} className="bg-white shadow-xl rounded-xl overflow-hidden mt-8">
                 <div 
                     className="p-4 bg-gray-50 border-b border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors duration-200 flex justify-between items-center"
                     onClick={() => setShowActivities(!showActivities)}
