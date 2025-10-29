@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { fetchAiResponse, type AiChatMessage as AiRequestMessage } from '@/services/aiService';
+import { createActivityEnhancedPrompt, detectActivityQueryType, QUICK_ACTIVITY_PROMPTS } from '@/utils/aiActivityPrompts';
 
 type AiMessage = {
   id: string;
@@ -12,6 +13,7 @@ interface AIChatModalProps {
   onClose: () => void;
   onNewMessage: () => void;
   systemPrompt?: string;
+  userId?: string;
 }
 
 const buildDefaultSystemPrompt = (): string =>
@@ -21,7 +23,7 @@ const buildDefaultSystemPrompt = (): string =>
     'Jika tidak memiliki informasi yang cukup, jelaskan data apa yang dibutuhkan.',
   ].join('\n');
 
-const AIChatModal: React.FC<AIChatModalProps> = ({ onClose, onNewMessage, systemPrompt }) => {
+const AIChatModal: React.FC<AIChatModalProps> = ({ onClose, onNewMessage, systemPrompt, userId }) => {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<AiMessage[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -91,9 +93,22 @@ const AIChatModal: React.FC<AIChatModalProps> = ({ onClose, onNewMessage, system
     setError(null);
 
     try {
-      // Bangun payload permintaan
+      // Deteksi jenis query kegiatan
+      const queryType = detectActivityQueryType(input.trim());
+      
+      // Bangun payload permintaan dengan context kegiatan
+      let enhancedSystemPrompt = resolvedSystemPrompt;
+      
+      if (userId && queryType) {
+        enhancedSystemPrompt = await createActivityEnhancedPrompt(
+          resolvedSystemPrompt, 
+          userId, 
+          input.trim()
+        );
+      }
+      
       const payload: AiRequestMessage[] = [
-        { role: 'system', content: resolvedSystemPrompt },
+        { role: 'system', content: enhancedSystemPrompt },
         ...newMessages.map(msg => ({
           role: msg.sender,
           content: msg.content,
@@ -164,18 +179,17 @@ const AIChatModal: React.FC<AIChatModalProps> = ({ onClose, onNewMessage, system
             <div className="text-center text-gray-500 py-8">
               <p>Belum ada percakapan. Kirim pesan pertama Anda!</p>
               <div className="mt-4 flex flex-wrap gap-2 justify-center">
-                <button
-                  onClick={() => setInput('Berapa total realisasi anggaran saat ini?')}
-                  className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded hover:bg-blue-200"
-                >
-                  Total realisasi?
-                </button>
-                <button
-                  onClick={() => setInput('Tampilkan kegiatan dengan alokasi terbesar')}
-                  className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded hover:bg-blue-200"
-                >
-                  Kegiatan terbesar?
-                </button>
+                {QUICK_ACTIVITY_PROMPTS.map((prompt, index) => (
+                  <button
+                    key={index}
+                    onClick={() => setInput(prompt.prompt)}
+                    className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded hover:bg-blue-200 flex items-center gap-1"
+                    title={prompt.label}
+                  >
+                    <span>{prompt.icon}</span>
+                    {prompt.label}
+                  </button>
+                ))}
               </div>
             </div>
           ) : (
