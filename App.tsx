@@ -1162,7 +1162,7 @@ const HistoryDropdown = () => (
           : selectedMonth === 'no-date' 
             ? 'no-date' 
             : MONTH_NAMES_ID[selectedMonth];
-      a.download = `LKBB_${selectedYear}_${monthLabel}_${new Date().toISOString().slice(0, 10)}.pdf`;
+      a.download = `LKKB_${selectedYear}_${monthLabel}_${new Date().toISOString().slice(0, 10)}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -2642,9 +2642,9 @@ const HistoryDropdown = () => (
                                 </div>
                             </div>
                             <div className="space-y-1">
-                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                                {/* <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide">
                                     Aksi
-                                </label>
+                                </label> */}
                                 <button
                                     type="button"
                                     onClick={handleDownloadRkbPdf}
@@ -2654,7 +2654,7 @@ const HistoryDropdown = () => (
                                     <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
                                     </svg>
-                                    Pilih Dokumen
+                                    Download RKB dan LKKB
                                 </button>
                             </div>
                         </div>
@@ -3464,7 +3464,7 @@ const HistoryDropdown = () => (
                 className="w-full flex items-center justify-between p-4 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 <div className="text-left">
-                  <div className="font-medium">Dokumen LKBB</div>
+                  <div className="font-medium">Dokumen LKKB</div>
                   <div className="text-sm text-gray-500">Laporan Kegiatan Bulanan</div>
                 </div>
                 <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">

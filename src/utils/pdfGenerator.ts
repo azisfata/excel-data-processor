@@ -21,7 +21,7 @@ export const generateRkbPdf = async (
   // Add header
   doc.setFontSize(16);
   doc.setFont(undefined, 'bold');
-  doc.text('LAPORAN KEGIATAN BULANAN (LKBB)', pageWidth / 2, 20, { align: 'center' });
+  doc.text('LAPORAN KEGIATAN BULANAN (LKKB)', pageWidth / 2, 20, { align: 'center' });
 
   // Add filter information
   doc.setFontSize(12);
@@ -138,15 +138,21 @@ export const generateRkbPdf = async (
     styles: {
       fontSize: 10,
       cellPadding: 3,
+      lineWidth: 0.1, // Border thickness
+      lineColor: [0, 0, 0], // Black border color
     },
     headStyles: {
-      fillColor: [59, 130, 246], // Tailwind blue-500
-      textColor: [255, 255, 255],
+      fillColor: [0, 0, 0], // Black background
+      textColor: [255, 255, 255], // White text
       fontSize: 11,
       fontStyle: 'bold',
+      lineWidth: 0.1, // Border thickness
+      lineColor: [0, 0, 0], // Black border color
     },
     alternateRowStyles: {
       fillColor: [241, 245, 249], // Light gray for alternate rows
+      lineWidth: 0.1, // Border thickness
+      lineColor: [0, 0, 0], // Black border color
     },
     columnStyles: {
       0: { cellWidth: 12 }, // No.
