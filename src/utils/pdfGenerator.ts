@@ -1,6 +1,6 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { Activity, ProcessingResult } from '../../types';
+import { Activity, ProcessingResult } from '@/types';
 
 /**
  * Generates an RKB (Rencana Kegiatan Bulanan) PDF based on pre-filtered activities

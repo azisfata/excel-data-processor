@@ -1,5 +1,0 @@
-{
-  "name": "Excel Data Processor",
-  "description": "An application to upload, process with custom logic, and download Excel files.",
-  "requestFramePermissions": []
-}

@@ -1,10 +1,10 @@
 
-import { ExcelData, ProcessingResult } from '../types';
+import { ExcelData, ProcessingResult } from '@/types';
 import {
     normalizeCodeAndDescription,
     deriveAccountNameMap,
     isSixDigitSegment,
-} from '../utils/dataNormalization';
+} from '@/utils/dataNormalization';
 
 declare var XLSX: any;
 

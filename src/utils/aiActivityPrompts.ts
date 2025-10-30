@@ -1,4 +1,4 @@
-import { ActivityQueryResult, formatActivitiesForAI, getActivityStatistics } from '../services/activityQueryService';
+import { ActivityQueryResult, formatActivitiesForAI, getActivityStatistics } from '@/services/activityQueryService';
 
 export interface ActivityContext {
   todayActivities?: ActivityQueryResult;
@@ -23,11 +23,11 @@ export async function buildActivityContext(userId: string): Promise<string> {
       overdueActivities,
       statistics
     ] = await Promise.all([
-      import('../services/activityQueryService').then(m => m.getTodayActivities(userId)),
-      import('../services/activityQueryService').then(m => m.getThisWeekActivities(userId)),
-      import('../services/activityQueryService').then(m => m.getNextWeekActivities(userId)),
-      import('../services/activityQueryService').then(m => m.getOverdueActivities(userId)),
-      import('../services/activityQueryService').then(m => m.getActivityStatistics(userId))
+      import('@/services/activityQueryService').then(m => m.getTodayActivities(userId)),
+      import('@/services/activityQueryService').then(m => m.getThisWeekActivities(userId)),
+      import('@/services/activityQueryService').then(m => m.getNextWeekActivities(userId)),
+      import('@/services/activityQueryService').then(m => m.getOverdueActivities(userId)),
+      import('@/services/activityQueryService').then(m => m.getActivityStatistics(userId))
     ]);
 
     let context = `=== DATA KEGIATAN TERKINI ===\n\n`;

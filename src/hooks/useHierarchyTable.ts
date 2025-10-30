@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { createHierarchy, flattenTree } from '../../utils/hierarchy';
+import { createHierarchy, flattenTree } from '@/utils/hierarchy';
 
 interface UseHierarchyTableParams {
   data: any[];

@@ -19,8 +19,8 @@ import {
   createAccountTrendData,
   getAllLevel7Accounts,
   createMonthlyCompositionData,
-} from '../../../services/historicalDataService';
-import { AccountLevel7Data } from '../../../types';
+} from '@/services/historicalDataService';
+import { AccountLevel7Data } from '@/types';
 
 // Register Chart.js components
 ChartJS.register(

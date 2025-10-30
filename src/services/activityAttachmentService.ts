@@ -1,4 +1,4 @@
-import type { ActivityAttachment } from '../types';
+import type { ActivityAttachment } from '@/types';
 
 const BASE_URL = '/api/activities';
 

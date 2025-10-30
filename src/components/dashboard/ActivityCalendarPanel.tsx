@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Activity } from '../../../types';
+import { Activity } from '@/types';
 
 interface ActivityCalendarPanelProps {
   activities: Activity[];

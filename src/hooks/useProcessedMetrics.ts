@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
-import { Activity, ProcessingResult } from '../../types';
-import { getLevel7Segment, isSixDigitSegment } from '../../utils/dataNormalization';
+import { Activity, ProcessingResult } from '@/types';
+import { getLevel7Segment, isSixDigitSegment } from '@/utils/dataNormalization';
 
 interface UseProcessedMetricsParams {
   result: ProcessingResult | null;

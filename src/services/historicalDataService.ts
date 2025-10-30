@@ -1,5 +1,5 @@
 import { getAllProcessedResults } from './supabaseService';
-import { ProcessingResult, AccountLevel7Data } from '../types';
+import { ProcessingResult, AccountLevel7Data } from '@/types';
 
 export interface MonthlyReport {
   id: string;

@@ -1,31 +1,31 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useDropzone, type DropzoneOptions } from 'react-dropzone';
 import { useNavigate } from 'react-router-dom';
-import { ProcessingResult, Activity, ActivityAttachment, BudgetAllocation } from './types';
-import { processExcelData, downloadExcelFile, parseExcelFile } from './services/excelProcessor';
-import * as supabaseService from './services/supabaseService';
-import { useAuth } from './src/contexts/AuthContext';
-import * as attachmentService from './services/activityAttachmentService';
-import { supabase } from './utils/supabase';
-import { fetchAiResponse, getLastSuccessfulModel, type AiChatMessage as AiRequestMessage } from './services/aiService';
-import FloatingAIButton from './src/components/FloatingAIButton';
-import ConfirmDialog from './src/components/ConfirmDialog';
+import { ProcessingResult, Activity, ActivityAttachment, BudgetAllocation } from '@/types';
+import { processExcelData, downloadExcelFile, parseExcelFile } from '@/services/excelProcessor';
+import * as supabaseService from '@/services/supabaseService';
+import { useAuth } from '@/contexts/AuthContext';
+import * as attachmentService from '@/services/activityAttachmentService';
+import { supabase } from '@/utils/supabase';
+import { fetchAiResponse, getLastSuccessfulModel, type AiChatMessage as AiRequestMessage } from '@/services/aiService';
+import FloatingAIButton from '@/components/FloatingAIButton';
+import ConfirmDialog from '@/components/ConfirmDialog';
 import mammoth from 'mammoth';
 import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
 import Tesseract from 'tesseract.js';
-import { useHierarchyTable } from './src/hooks/useHierarchyTable';
-import { useProcessedMetrics } from './src/hooks/useProcessedMetrics';
-import BudgetOverviewPanel from './src/components/dashboard/BudgetOverviewPanel';
-import AccountSummaryPanel from './src/components/dashboard/AccountSummaryPanel';
-import MonthlyAnalyticsPanel from './src/components/dashboard/MonthlyAnalyticsPanel';
-import TrendAnalyticsPanel from './src/components/dashboard/TrendAnalyticsPanel';
-import ActivityCalendarPanel from './src/components/dashboard/ActivityCalendarPanel';
-import { useHistoricalData } from './src/hooks/useHistoricalData';
+import { useHierarchyTable } from '@/hooks/useHierarchyTable';
+import { useProcessedMetrics } from '@/hooks/useProcessedMetrics';
+import BudgetOverviewPanel from '@/components/dashboard/BudgetOverviewPanel';
+import AccountSummaryPanel from '@/components/dashboard/AccountSummaryPanel';
+import MonthlyAnalyticsPanel from '@/components/dashboard/MonthlyAnalyticsPanel';
+import TrendAnalyticsPanel from '@/components/dashboard/TrendAnalyticsPanel';
+import ActivityCalendarPanel from '@/components/dashboard/ActivityCalendarPanel';
+import { useHistoricalData } from '@/hooks/useHistoricalData';
 
 // Import the PDF generation function
-import { generateRkbPdf } from './src/utils/pdfGenerator';
-import { generateRkbDocumentPdf } from './src/utils/rkbPdfGenerator';
+import { generateRkbPdf } from '@/utils/pdfGenerator';
+import { generateRkbDocumentPdf } from '@/utils/rkbPdfGenerator';
 
 const MONTH_NAMES_ID = [
   'Januari',

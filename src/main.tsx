@@ -6,7 +6,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import UserManagementPage from './pages/UserManagementPage';
-import App from '../App';
+import App from './App';
 import './index.css';
 
 createRoot(document.getElementById('root')!).render(

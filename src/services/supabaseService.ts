@@ -1,5 +1,5 @@
 
-import { supabase } from '../utils/supabase';
+import { supabase } from '@/utils/supabase';
 import {
   ProcessingResult,
   Activity,
@@ -8,12 +8,12 @@ import {
   ProcessedResultRow,
   SupabaseActivityRow,
   SupabaseAllocationRow,
-} from '../types';
+} from '@/types';
 import {
   normalizeCodeAndDescription,
   deriveAccountNameMap,
   cloneExcelData,
-} from '../utils/dataNormalization';
+} from '@/utils/dataNormalization';
 
 // --- Processed Results ---
 

@@ -1,4 +1,4 @@
-import type { ExcelData, ExcelRow } from '../types';
+import type { ExcelData, ExcelRow } from '@/types';
 
 const DESCRIPTION_PREFIX_REGEX = /^(\d{6})\.\s*(.+)$/;
 const SIX_DIGIT_CODE_REGEX = /^\d{6}$/;

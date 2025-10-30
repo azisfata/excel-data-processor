@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { supabase } from '../../utils/supabase';
+import { supabase } from '@/utils/supabase';
 import { getAuthApiUrl } from '../config/authApi';
 
 interface User {
