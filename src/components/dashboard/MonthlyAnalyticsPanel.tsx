@@ -67,24 +67,36 @@ const formatToShortCurrency = (value: number): string => {
 
 interface MonthlyAnalyticsPanelProps {
   currentReport: MonthlyReport | null;
-  _allReports: MonthlyReport[];
+  allReports?: MonthlyReport[];
+  _allReports?: MonthlyReport[];
   onAIAnalysis: (analysis: string) => void;
 }
 
 const MonthlyAnalyticsPanel: React.FC<MonthlyAnalyticsPanelProps> = ({
   currentReport,
-  _allReports,
+  allReports: allReportsProp,
+  _allReports: legacyAllReports,
   onAIAnalysis,
 }) => {
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
   const [compositionView, setCompositionView] = useState<'realisasi' | 'pagu'>('realisasi');
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
 
+  const availableReports = allReportsProp ?? legacyAllReports ?? [];
+  const selectedHistoryId =
+    typeof window !== 'undefined'
+      ? window.localStorage.getItem('lastSelectedHistoryId')
+      : null;
+  const activeReport =
+    (selectedHistoryId && availableReports.find(report => report.id === selectedHistoryId)) ??
+    currentReport ??
+    (availableReports.length ? availableReports[availableReports.length - 1] : null);
+
   // Data untuk bulan ini saja
   const currentMonthData = useMemo(() => {
-    if (!currentReport) return [];
-    return getLevel7DataForMonth(currentReport);
-  }, [currentReport]);
+    if (!activeReport) return [];
+    return getLevel7DataForMonth(activeReport);
+  }, [activeReport]);
 
   // Data untuk pie chart komposisi (realisasi atau pagu berdasarkan pilihan user)
   const compositionData = useMemo(() => {
@@ -182,7 +194,7 @@ const MonthlyAnalyticsPanel: React.FC<MonthlyAnalyticsPanelProps> = ({
 
   // Generate AI analysis untuk bulan ini
   const generateMonthlyAnalysis = () => {
-    if (!currentReport || !currentMonthData.length) {
+    if (!activeReport || !currentMonthData.length) {
       const analysis = 'Tidak ada data untuk dianalisis pada bulan ini.';
       setAiAnalysis(analysis);
       onAIAnalysis(analysis);
@@ -210,7 +222,7 @@ const MonthlyAnalyticsPanel: React.FC<MonthlyAnalyticsPanelProps> = ({
       .slice(0, 5);
 
     const analysis = `
-📊 **ANALISIS PENYERAPAN ANGGARAN - ${currentReport.reportType} ${new Date(currentReport.reportDate).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}**
+📊 **ANALISIS PENYERAPAN ANGGARAN - ${activeReport.reportType} ${new Date(activeReport.reportDate).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}**
 
 🔍 **Tingkat Kesehatan Penyerapan:**
 - Total Pagu: Rp ${totalPagu.toLocaleString('id-ID')}
@@ -743,7 +755,7 @@ ${largeSisa
     } as any;
   }, [anggaranPerUraian]);
 
-  if (!currentReport) {
+  if (!activeReport) {
     return (
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <div className="text-center text-gray-500">
@@ -763,7 +775,7 @@ ${largeSisa
         <div className="flex justify-between items-center">
           <h3 className="text-lg font-semibold text-gray-800">
             📊 Analisis Bulanan (Sesuai Laporan) -{' '}
-            {new Date(currentReport.reportDate).toLocaleDateString('id-ID', {
+            {new Date(activeReport.reportDate).toLocaleDateString('id-ID', {
               month: 'long',
               year: 'numeric',
             })}
@@ -824,7 +836,7 @@ ${largeSisa
                   <Bar
                     data={anggaranChartData}
                     options={anggaranChartOptions}
-                    key={`anggaran-chart-${anggaranPerUraian.length}`}
+                    key={`anggaran-chart-${activeReport?.id ?? 'none'}-${anggaranPerUraian.length}`}
                   />
                 </div>
 
