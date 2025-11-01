@@ -22,8 +22,18 @@ export const generateRkbDocumentPdf = async (
   doc.text('LAPORAN KEMAJUAN KEGIATAN BULANAN', pageWidth / 2, 15, { align: 'center' });
 
   const monthNames = [
-    'Januari','Februari','Maret','April','Mei','Juni',
-    'Juli','Agustus','September','Oktober','November','Desember',
+    'Januari',
+    'Februari',
+    'Maret',
+    'April',
+    'Mei',
+    'Juni',
+    'Juli',
+    'Agustus',
+    'September',
+    'Oktober',
+    'November',
+    'Desember',
   ];
   let bulanText = 'Semua Bulan';
   if (selectedMonth === 'no-date') bulanText = 'Tanpa Tanggal';
@@ -63,8 +73,7 @@ export const generateRkbDocumentPdf = async (
       [
         { content: 'Program :', styles: { fontStyle: 'bold', cellPadding: 2 } },
         {
-          content:
-            'Program Dukungan Manajemen dan Pelaksanaan Tugas Teknis Lainnya Kemenko PMK',
+          content: 'Program Dukungan Manajemen dan Pelaksanaan Tugas Teknis Lainnya Kemenko PMK',
         },
         { content: 'Satuan Kerja', styles: { fontStyle: 'bold', halign: 'center' } },
         { content: 'Biro Digitalisasi dan Pengelolaan Informasi' },
@@ -126,37 +135,30 @@ export const generateRkbDocumentPdf = async (
       activity.penanggung_jawab || '-', // PN/PP/KP
       tanggalPelaksanaan, // Tanggal Pelaksanaan
       `Rp ${formatCurrency(totalAlokasi)}`, // Rencana Anggaran(Rp)
-      activity.pic || activity.penanggung_jawab || '-', // PIC
     ];
   });
 
   // Hitung total lebar tabel atas
-  const colWidthsTopTable = [
-    25,
-    availableWidth - 25 - 80 - 60,
-    80,
-    60,
-  ];
+  const colWidthsTopTable = [25, availableWidth - 25 - 80 - 60, 80, 60];
   const totalWidthTopTable = colWidthsTopTable.reduce((sum, w) => sum + w, 0);
 
   // ===== Kolom bawah disesuaikan =====
   const colWidthsBottomTable = [
     12, // No.
     25, // Komponen Kegiatan
-    35, // Judul Kegiatan
-    25, // K/L/Unit Terkait
-    30, // Tujuan
+    20, // Judul Kegiatan
+    40, // K/L/Unit Terkait
+    35, // Tujuan
     10, // RB
     20, // PN/PP/KP
     25, // Tanggal Pelaksanaan
     25, // Rencana Anggaran(Rp)
-    20, // PIC
   ];
 
   const totalWidthBottomTable = colWidthsBottomTable.reduce((sum, w) => sum + w, 0);
   const difference = totalWidthTopTable - totalWidthBottomTable;
   if (difference !== 0) {
-    colWidthsBottomTable[2] += difference; // sesuaikan ke Judul Kegiatan agar total tetap pas
+    colWidthsBottomTable[2] += difference;
   }
 
   autoTable(doc, {
@@ -172,7 +174,6 @@ export const generateRkbDocumentPdf = async (
         'PN/PP/KP',
         'Tanggal Pelaksanaan',
         'Rencana Anggaran(Rp)',
-        'PIC',
       ],
     ],
     body: tableBody,
@@ -200,15 +201,80 @@ export const generateRkbDocumentPdf = async (
       6: { cellWidth: colWidthsBottomTable[6] },
       7: { cellWidth: colWidthsBottomTable[7] },
       8: { cellWidth: colWidthsBottomTable[8] },
-      9: { cellWidth: colWidthsBottomTable[9] },
     },
     margin: { left: marginLeft, right: marginRight },
     theme: 'grid',
-    didDrawPage: (data) => {
+    didDrawPage: data => {
       const pageCount = doc.getNumberOfPages();
       doc.setFontSize(9);
       doc.text(`Halaman ${data.pageNumber} dari ${pageCount}`, pageWidth - 40, pageHeight - 10);
     },
+  });
+
+  // === Tambahkan tabel tanda tangan menyatu rapi ===
+  const lastTable = (doc as any).lastAutoTable;
+  const finalY = lastTable.finalY;
+
+  // Overlap 0.2 mm agar border bawah & atas saling menutup
+  const startY = finalY - 0.2;
+
+  // Tambahkan tabel tanda tangan
+  autoTable(doc, {
+    startY: startY,
+    body: [
+      [
+        {
+          content: 'Dipersiapkan Oleh:\nKepala Biro Digitalisasi dan Pengelolaan Informasi\n\n\n\n\n\n\nAgung Gumilar Triyanto',
+          styles: {
+            halign: 'left',
+            valign: 'top',
+            cellPadding: 4,
+            fontSize: 9,
+            lineColor: [0, 0, 0],
+            lineWidth: 0.1,
+          },
+        },
+        {
+          content: 'Mengetahui:\nSekretaris Kementerian Koordinator Bidang PMK\n\n\n\n\n\n\nImam Machdi',
+          styles: {
+            halign: 'left',
+            valign: 'top',
+            cellPadding: 4,
+            fontSize: 9,
+            lineColor: [0, 0, 0],
+            lineWidth: 0.1,
+          },
+        },
+        {
+          content: 'Arahan:',
+          styles: {
+            halign: 'left',
+            valign: 'top',
+            cellPadding: 4,
+            fontSize: 9,
+            lineColor: [0, 0, 0],
+            lineWidth: 0.1,
+          },
+        },
+      ],
+    ],
+    styles: {
+      fontSize: 9,
+      cellPadding: 2,
+      valign: 'top',
+      lineColor: [0, 0, 0],
+      lineWidth: 0.1,
+      overflow: 'linebreak',
+    },
+    columnStyles: {
+      0: { cellWidth: availableWidth / 3 },
+      1: { cellWidth: availableWidth / 3 },
+      2: { cellWidth: availableWidth / 3 },
+    },
+    margin: { left: marginLeft, right: marginRight },
+    theme: 'grid',
+    tableLineColor: [0, 0, 0],
+    tableLineWidth: 0.1,
   });
 
   return doc.output('blob');

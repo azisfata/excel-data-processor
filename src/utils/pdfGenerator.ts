@@ -256,6 +256,72 @@ export const generateRkbPdf = async (
     },
   });
 
+  // === Tambahkan tabel tanda tangan menyatu rapi ===
+  const lastTable = (doc as any).lastAutoTable;
+  const finalY = lastTable.finalY;
+
+  // Overlap 0.2 mm agar border bawah & atas saling menutup
+  const startY = finalY - 0.2;
+
+  // Tambahkan tabel tanda tangan
+  autoTable(doc, {
+    startY: startY,
+    body: [
+      [
+        {
+          content: 'Dipersiapkan Oleh:\nKepala Biro Digitalisasi dan Pengelolaan Informasi\n\n\n\n\n\n\nAgung Gumilar Triyanto',
+          styles: {
+            halign: 'left',
+            valign: 'top',
+            cellPadding: 4,
+            fontSize: 9,
+            lineColor: [0, 0, 0],
+            lineWidth: 0.1,
+          },
+        },
+        {
+          content: 'Mengetahui:\nSekretaris Kementerian Koordinator Bidang PMK\n\n\n\n\n\n\nImam Machdi',
+          styles: {
+            halign: 'left',
+            valign: 'top',
+            cellPadding: 4,
+            fontSize: 9,
+            lineColor: [0, 0, 0],
+            lineWidth: 0.1,
+          },
+        },
+        {
+          content: 'Arahan:',
+          styles: {
+            halign: 'left',
+            valign: 'top',
+            cellPadding: 4,
+            fontSize: 9,
+            lineColor: [0, 0, 0],
+            lineWidth: 0.1,
+          },
+        },
+      ],
+    ],
+    styles: {
+      fontSize: 9,
+      cellPadding: 2,
+      valign: 'top',
+      lineColor: [0, 0, 0],
+      lineWidth: 0.1,
+      overflow: 'linebreak',
+    },
+    columnStyles: {
+      0: { cellWidth: availableWidth / 3 },
+      1: { cellWidth: availableWidth / 3 },
+      2: { cellWidth: availableWidth / 3 },
+    },
+    margin: { left: marginLeft, right: marginRight },
+    theme: 'grid',
+    tableLineColor: [0, 0, 0],
+    tableLineWidth: 0.1,
+  });
+
   // Return as blob
   return doc.output('blob');
 };
