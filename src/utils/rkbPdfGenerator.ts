@@ -132,7 +132,7 @@ export const generateRkbDocumentPdf = async (
       activity.kl_unit_terkait || '-', // K/L/Unit Terkait
       activity.deskripsi || '-', // Tujuan
       '1.4', // RB
-      activity.penanggung_jawab || '-', // PN/PP/KP
+      '-', // PN/PP/KP
       tanggalPelaksanaan, // Tanggal Pelaksanaan
       `Rp ${formatCurrency(totalAlokasi)}`, // Rencana Anggaran(Rp)
     ];

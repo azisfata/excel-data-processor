@@ -156,7 +156,7 @@ export const generateRkbPdf = async (
       komponenKegiatan, // Komponen Kegiatan
       activity.nama, // Judul Kegiatan
       '1.4', // RB
-      activity.penanggung_jawab || '-', // PN/PP/KP (Penanggung Jawab)
+      '-', // PN/PP/KP (Penanggung Jawab)
       activity.kl_unit_terkait || '-', // K/L/Unit Terkait
       scheduledDate, // Tanggal Pelaksanaan
       `Rp ${formatCurrency(realisasiValue)}`, // Realisasi Anggaran
