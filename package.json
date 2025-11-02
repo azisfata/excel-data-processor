@@ -18,6 +18,8 @@
     "auth:local": "node -r dotenv/config server/auth-server.js dotenv_config_path=.env.loc",
     "api:prod": "node -r dotenv/config server/activity-upload-server.js dotenv_config_path=.env.prod",
     "auth:prod": "node -r dotenv/config server/auth-server.js dotenv_config_path=.env.prod",
+    "webhook": "node server/webhook-server.js",
+    "webhook:local": "node -r dotenv/config server/webhook-server.js dotenv_config_path=.env.loc",
     "create-admin": "node scripts/create-admin.js",
     "check-env": "node scripts/check-env.js",
     "start": "./start-production.sh",

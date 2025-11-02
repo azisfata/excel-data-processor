@@ -4,6 +4,7 @@ import cookieParser from 'cookie-parser';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { createClient } from '@supabase/supabase-js';
+import { randomInt, createHash } from 'crypto';
 import dotenv from 'dotenv';
 
 // Load environment variables
@@ -48,6 +49,31 @@ if (!supabaseUrl || !supabaseKey) {
 }
 
 const supabase = createClient(supabaseUrl, supabaseKey);
+
+const OTP_EXPIRY_MS = 5 * 60 * 1000; // 5 menit
+const OTP_RESEND_COOLDOWN_MS = 60 * 1000; // 60 detik
+const OTP_MAX_ATTEMPTS = 5;
+const FONNTE_API_URL = process.env.FONNTE_API_URL || 'https://api.fonnte.com/send';
+const FONNTE_TOKEN = process.env.FONNTE_TOKEN;
+
+const otpStore = new Map();
+
+const normalizePhoneNumber = (input) => {
+  if (typeof input !== 'string' && typeof input !== 'number') return '';
+  const digits = String(input).replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('0')) {
+    return `62${digits.slice(1)}`;
+  }
+  if (digits.startsWith('62')) {
+    return digits;
+  }
+  return `62${digits}`;
+};
+
+const hashOtp = (otp) => createHash('sha256').update(otp).digest('hex');
+
+const generateOtp = () => String(randomInt(100000, 1000000));
 
 app.use(cors({
   origin: function (origin, callback) {
@@ -104,14 +130,87 @@ const isValidEmail = (email) => {
   return email.endsWith('@kemenkopmk.go.id');
 };
 
+app.post('/api/auth/request-otp', async (req, res) => {
+  try {
+    if (!FONNTE_TOKEN) {
+      return res.status(500).json({ error: 'FONNTE_TOKEN belum dikonfigurasi di server.' });
+    }
+
+    const { phoneNumber, name } = req.body || {};
+    const normalizedPhone = normalizePhoneNumber(phoneNumber);
+
+    if (!normalizedPhone) {
+      return res.status(400).json({ error: 'Nomor WhatsApp tidak valid.' });
+    }
+
+    const { data: existingPhone } = await supabase
+      .from('users')
+      .select('id')
+      .eq('phone_number', normalizedPhone)
+      .maybeSingle();
+
+    if (existingPhone) {
+      return res.status(409).json({ error: 'Nomor WhatsApp ini sudah terdaftar.' });
+    }
+
+    const now = Date.now();
+    const existingOtp = otpStore.get(normalizedPhone);
+    if (existingOtp && now - existingOtp.lastSent < OTP_RESEND_COOLDOWN_MS) {
+      const waitSeconds = Math.ceil(
+        (OTP_RESEND_COOLDOWN_MS - (now - existingOtp.lastSent)) / 1000
+      );
+      return res.status(429).json({
+        error: `Harap tunggu ${waitSeconds} detik sebelum meminta OTP lagi.`
+      });
+    }
+
+    const otp = generateOtp();
+    const messageName = typeof name === 'string' && name.trim().length > 0 ? name.trim() : 'Pengguna SAPA';
+    const message = `Halo ${messageName}, kode OTP SAPA Anda adalah ${otp}. Berlaku 5 menit. Jangan bagikan kode ini kepada siapa pun.`;
+
+    const response = await fetch(FONNTE_API_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: FONNTE_TOKEN,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        target: normalizedPhone,
+        message
+      })
+    });
+
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      console.error('FONNTE OTP send error:', response.status, detail);
+      return res.status(502).json({
+        error: 'Gagal mengirim OTP melalui FONNTE. Silakan coba lagi.',
+        detail: detail ? detail.slice(0, 200) : undefined
+      });
+    }
+
+    otpStore.set(normalizedPhone, {
+      otpHash: hashOtp(otp),
+      expiresAt: now + OTP_EXPIRY_MS,
+      attempts: 0,
+      lastSent: now
+    });
+
+    res.json({ success: true, message: 'OTP berhasil dikirim.' });
+  } catch (error) {
+    console.error('request-otp error:', error);
+    res.status(500).json({ error: 'Terjadi kesalahan saat mengirim OTP.' });
+  }
+});
+
 // POST /api/auth/signup - Registrasi user baru
 app.post('/api/auth/signup', async (req, res) => {
   try {
-    const { email, password, name, unit } = req.body;
+    const { email, password, name, unit, phoneNumber, otp } = req.body;
 
     // Validasi input
-    if (!email || !password || !name) {
-      return res.status(400).json({ error: 'Email, password, dan nama wajib diisi' });
+    if (!email || !password || !name || !phoneNumber || !otp) {
+      return res.status(400).json({ error: 'Email, password, nama, nomor WhatsApp, dan OTP wajib diisi' });
     }
 
     // Validasi domain email
@@ -124,6 +223,34 @@ app.post('/api/auth/signup', async (req, res) => {
       return res.status(400).json({ error: 'Password minimal 6 karakter' });
     }
 
+    const normalizedPhone = normalizePhoneNumber(phoneNumber);
+    if (!normalizedPhone) {
+      return res.status(400).json({ error: 'Nomor WhatsApp tidak valid' });
+    }
+
+    const otpEntry = otpStore.get(normalizedPhone);
+    if (!otpEntry) {
+      return res.status(400).json({ error: 'OTP belum diminta atau sudah kadaluarsa' });
+    }
+
+    if (Date.now() > otpEntry.expiresAt) {
+      otpStore.delete(normalizedPhone);
+      return res.status(400).json({ error: 'OTP sudah kadaluarsa. Silakan minta ulang.' });
+    }
+
+    if (otpEntry.attempts >= OTP_MAX_ATTEMPTS) {
+      otpStore.delete(normalizedPhone);
+      return res.status(429).json({ error: 'Percobaan OTP terlalu banyak. Silakan minta OTP baru.' });
+    }
+
+    if (hashOtp(String(otp).trim()) !== otpEntry.otpHash) {
+      otpEntry.attempts += 1;
+      otpStore.set(normalizedPhone, otpEntry);
+      return res.status(400).json({ error: 'Kode OTP tidak valid.' });
+    }
+
+    otpStore.delete(normalizedPhone);
+
     // Cek apakah email sudah terdaftar
     const { data: existingUser } = await supabase
       .from('users')
@@ -133,6 +260,16 @@ app.post('/api/auth/signup', async (req, res) => {
 
     if (existingUser) {
       return res.status(400).json({ error: 'Email sudah terdaftar' });
+    }
+
+    const { data: existingPhone } = await supabase
+      .from('users')
+      .select('id')
+      .eq('phone_number', normalizedPhone)
+      .maybeSingle();
+
+    if (existingPhone) {
+      return res.status(400).json({ error: 'Nomor WhatsApp sudah digunakan oleh akun lain' });
     }
 
     // Hash password
@@ -148,7 +285,8 @@ app.post('/api/auth/signup', async (req, res) => {
       name,
       unit: unit || null,
       role: isAutoApprovedAdmin ? 'admin' : 'user',
-      is_approved: isAutoApprovedAdmin
+      is_approved: isAutoApprovedAdmin,
+      phone_number: normalizedPhone
     };
 
     // Insert user baru

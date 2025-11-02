@@ -62,6 +62,23 @@ module.exports = {
       out_file: './logs/activity-out.log',
       log_file: './logs/activity.log',
       time: true
+    },
+    {
+      name: 'excel-processor-whatsapp-webhook',
+      script: 'server/webhook-server.js',
+      instances: 1,
+      exec_mode: 'fork',
+      watch: false,
+      max_memory_restart: '200M',
+      env: {
+        NODE_ENV: 'production',
+        WHATSAPP_SERVER_PORT: getEnvVar('WHATSAPP_SERVER_PORT', 3003),
+        ...envConfig
+      },
+      error_file: './logs/webhook-err.log',
+      out_file: './logs/webhook-out.log',
+      log_file: './logs/webhook.log',
+      time: true
     }
   ]
 };

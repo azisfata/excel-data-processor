@@ -12,11 +12,20 @@ interface User {
   is_approved: boolean;
 }
 
+interface SignupPayload {
+  email: string;
+  password: string;
+  name: string;
+  unit?: string;
+  phoneNumber: string;
+  otp: string;
+}
+
 interface AuthContextType {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  signup: (email: string, password: string, name: string, unit?: string) => Promise<void>;
+  signup: (payload: SignupPayload) => Promise<void>;
   logout: () => Promise<void>;
   isAuthenticated: boolean;
   isApproved: boolean;
@@ -99,11 +108,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setUser(data.user);
   };
 
-  const signup = async (email: string, password: string, name: string, unit?: string) => {
+  const signup = async ({ email, password, name, unit, phoneNumber, otp }: SignupPayload) => {
     const response = await fetch(getAuthApiUrl('auth/signup'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, name, unit }),
+      body: JSON.stringify({ email, password, name, unit, phoneNumber, otp }),
     });
 
     const data = await response.json();
