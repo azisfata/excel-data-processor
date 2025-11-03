@@ -18,11 +18,11 @@ User WhatsApp -> FONNTE -> Webhook Server -> AI Service -> Webhook Server -> FON
 ```
 
 ### Komponen Inti
-1. **Webhook Server** (port 3003) – Express.js server untuk menangani pesan masuk/keluar WhatsApp.
-2. **AI Service Integration** – Reuse `fetchAiResponse` dari `aiService.ts`.
-3. **Session Management** – Penyimpanan konteks percakapan in-memory.
-4. **User Identity Mapping** – Validasi nomor WhatsApp terhadap akun SAPA yang telah diverifikasi.
-5. **FONNTE API Client** – Klien HTTP untuk mengirim balasan ke FONNTE.
+1. **Webhook Server** (port 3003) - Express.js server untuk menangani pesan masuk/keluar WhatsApp.
+2. **AI Service Integration** - Reuse `fetchAiResponse` melalui helper Node (`server/ai-service.js`).
+3. **Session Management** - Penyimpanan konteks percakapan in-memory.
+4. **User Identity Mapping** - Validasi nomor WhatsApp terhadap akun SAPA yang telah diverifikasi.
+5. **FONNTE API Client** - Klien HTTP untuk mengirim balasan ke FONNTE.
 
 Komponen identity bersifat wajib agar data internal hanya diberikan kepada nomor yang benar-benar sudah dihubungkan dengan akun resmi SAPA. Tanpa mekanisme ini, pesan anonim bisa mengakses informasi sensitif.
 
@@ -32,13 +32,15 @@ Komponen identity bersifat wajib agar data internal hanya diberikan kepada nomor
 ```
 server/
   webhook-server.js        # Webhook WhatsApp utama
+  ai-service.js            # Adaptasi fetchAiResponse untuk runtime Node
 ```
 
 ### File yang Dimodifikasi
 ```
 ecosystem.config.cjs       # Tambah proses PM2 untuk webhook
-.env                       # Tambah variabel lingkungan WhatsApp
-src/services/aiService.ts  # Perlu menambahkan fallback ke process.env
+.env                       # Tambah variabel lingkungan WhatsApp/FONNTE
+package.json               # Tambah skrip npm untuk webhook server
+server/auth-server.js      # (Sebelumnya) memperkenalkan kolom phone_number & OTP
 ```
 
 ## Implementasi Teknis
@@ -52,8 +54,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 
-import { fetchAiResponse } from '../src/services/aiService.js';
-import { createActivityEnhancedPrompt, detectActivityQueryType } from '../src/utils/aiActivityPrompts.js';
+import { fetchAiResponse } from './ai-service.js';
 
 dotenv.config();
 
@@ -61,12 +62,6 @@ const supabase = createClient(
   process.env.VITE_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
-
-/**
- * Penting:
- * Perbarui helper environment di src/services/aiService.ts agar juga membaca process.env.
- * Hal ini membuat fetchAiResponse dapat dipanggil dari runtime Node (server) maupun Vite (client).
- */
 ```
 
 #### Session Management
@@ -129,45 +124,32 @@ function buildWhatsAppSystemPrompt() {
 
 #### AI Processing Logic
 ```javascript
-async function processWhatsAppMessage({ sender, message, sessionManager, userId }) {
-  try {
-    const normalizedMessage = (message ?? '').toString().trim();
-    if (!normalizedMessage) {
-      throw new Error('Pesan kosong atau tidak valid.');
-    }
-
-    const existingSession = sessionManager.getSession(sender);
-
-    const payload = [
-      { role: 'system', content: buildWhatsAppSystemPrompt() },
-      ...existingSession.map(entry => ({
-        role: entry.role === 'assistant' ? 'assistant' : 'user',
-        content: entry.content
-      })),
-      { role: 'user', content: normalizedMessage }
-    ];
-
-    // Enhancement tahap berikutnya:
-    // Jika userId tersedia, panggil createActivityEnhancedPrompt/detectActivityQueryType
-    // untuk menyuntikkan context SAPA sebelum request AI.
-    if (userId) {
-      // Contoh (aktifkan setelah siap):
-      // const enhancedPrompt = await createActivityEnhancedPrompt(buildWhatsAppSystemPrompt(), userId, normalizedMessage);
-      // payload[0] = { role: 'system', content: enhancedPrompt };
-    }
-
-    const aiReply = await fetchAiResponse(payload);
-
-    sessionManager.addMessage(sender, 'user', normalizedMessage);
-    sessionManager.addMessage(sender, 'assistant', aiReply);
-
-    return aiReply;
-  } catch (error) {
-    console.error('Error processing WhatsApp message:', error);
-    throw error;
+async function processWhatsAppMessage({ sender, message }) {
+  const cleanMessage = (message ?? '').toString().trim();
+  if (!cleanMessage) {
+    throw new Error('Pesan kosong.');
   }
+
+  const history = sessionManager.getSession(sender);
+  const payload = [
+    { role: 'system', content: buildWhatsAppSystemPrompt() },
+    ...history.map(entry => ({
+      role: entry.role === 'assistant' ? 'assistant' : 'user',
+      content: entry.content
+    })),
+    { role: 'user', content: cleanMessage }
+  ];
+
+  const aiReply = await fetchAiResponse(payload);
+
+  sessionManager.addMessage(sender, 'user', cleanMessage);
+  sessionManager.addMessage(sender, 'assistant', aiReply);
+
+  return aiReply;
 }
 ```
+
+> Enhancement berikutnya dapat menyuntikkan context SAPA (melalui `createActivityEnhancedPrompt`) ketika dibutuhkan, tetapi implementasi awal fokus pada respons cepat berbasis history percakapan.
 
 #### FONNTE API Integration
 ```javascript
@@ -187,10 +169,11 @@ async function sendWhatsAppMessage(target, message) {
     });
 
     if (!response.ok) {
-      throw new Error(`FONNTE API error: ${response.status}`);
+      const detail = await response.text().catch(() => '');
+      throw new Error(`FONNTE API error (${response.status}): ${detail}`);
     }
 
-    return await response.json();
+    return await response.json().catch(() => ({}));
   } catch (error) {
     console.error('Error sending WhatsApp message:', error);
     throw error;
@@ -212,9 +195,8 @@ const whatsappUserResolver = {
   async findByPhone(phoneNumber) {
     const { data, error } = await supabase
       .from('users')
-      .select('id, name, role')
-      .eq('whatsapp_number', phoneNumber)
-      .eq('is_approved', true)
+      .select('id, name, role, is_approved')
+      .eq('phone_number', phoneNumber)
       .maybeSingle();
 
     if (error) {
@@ -222,7 +204,11 @@ const whatsappUserResolver = {
       throw new Error('Gagal memeriksa data pengguna.');
     }
 
-    return data ?? null;
+    if (!data || !data.is_approved) {
+      return null;
+    }
+
+    return data;
   }
 };
 ```
@@ -231,46 +217,27 @@ const whatsappUserResolver = {
 ```javascript
 async function handleWhatsAppWebhook(req, res) {
   try {
-    const rawPayload = req.body ?? {};
-    console.log('[WhatsApp] Incoming payload:', JSON.stringify(rawPayload));
-
-    const sender = typeof rawPayload.sender === 'string'
-      ? rawPayload.sender.trim()
-      : String(rawPayload.sender ?? '').trim();
-    const pesan = typeof rawPayload.pesan === 'string'
-      ? rawPayload.pesan
-      : String(rawPayload.pesan ?? '');
+    const sender = normalizeWhatsAppNumber(req.body?.sender);
+    const pesan = req.body?.pesan ?? req.body?.message ?? '';
 
     if (!sender || !pesan) {
-      return res.status(400).json({ error: 'Missing sender or message' });
+      return res.status(400).json({ error: 'Sender dan pesan wajib diisi.' });
     }
 
-    const normalizedSender = normalizeWhatsAppNumber(sender);
-    if (!normalizedSender) {
-      return res.status(400).json({ error: 'Sender format invalid' });
-    }
-
-    const appUser = await whatsappUserResolver.findByPhone(normalizedSender);
-    if (!appUser) {
+    const linkedUser = await whatsappUserResolver.findByPhone(sender);
+    if (!linkedUser) {
       await sendWhatsAppMessage(
-        normalizedSender,
+        sender,
         'Nomor WhatsApp Anda belum terhubung dengan akun SAPA. Silakan login ke portal SAPA dan verifikasi nomor Anda terlebih dahulu.'
       );
-      return res.status(403).json({ error: 'Sender not linked to any user' });
+      return res.status(403).json({ error: 'Nomor belum terverifikasi.' });
     }
 
-    logWebhookEvent(req, 'incoming', 'accepted');
+    const aiResponse = await processWhatsAppMessage({ sender, message: pesan });
 
-    const aiResponse = await processWhatsAppMessage({
-      sender: normalizedSender,
-      message: pesan,
-      sessionManager,
-      userId: appUser.id
-    });
+    await sendWhatsAppMessage(sender, aiResponse);
 
-    await sendWhatsAppMessage(normalizedSender, aiResponse);
-
-    res.json({ success: true, message: 'Processed successfully' });
+    res.json({ success: true });
   } catch (error) {
     console.error('WhatsApp webhook error:', error);
 
@@ -322,56 +289,38 @@ app.get('/api/health', (req, res) => {
 
 app.post('/api/whatsapp/send', async (req, res) => {
   try {
-    const { target, message } = req.body;
+    const target = normalizeWhatsAppNumber(req.body?.target);
+    const message = req.body?.message;
     if (!target || !message) {
-      return res.status(400).json({ error: 'Target and message required' });
-    }
-    await sendWhatsAppMessage(target, message);
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
 
-setInterval(() => {
-  sessionManager.cleanupOldSessions();
-}, 5 * 60 * 1000);
+### 2. AI Service Helper (`server/ai-service.js`)
+Helper Node ini memindahkan logika `fetchAiResponse` ke runtime Node sehingga webhook tidak bergantung pada bundler.
 
-app.use((error, req, res, next) => {
-  console.error('Webhook server error:', error);
-  res.status(500).json({ error: 'Internal server error' });
-});
-
-app.listen(port, () => {
-  console.log(`WhatsApp webhook server listening on port ${port}`);
-});
+```javascript
+import { fetchAiResponse } from './ai-service.js';
 ```
 
-### 2. Environment Variables (`.env`)
-Tambahkan konfigurasi berikut:
+Sorotan utama:
+- Gunakan `GEMINI_API_KEY` (fallback `VITE_GEMINI_API_KEY`) agar server memiliki kredensial sendiri.
+- Mendukung fallback model dan timeout sama seperti implementasi front-end.
+- Pastikan perubahan pada `src/services/aiService.ts` disinkronkan ke helper ini.
 
+### 3. Environment Variables (`.env`)
 ```env
-# WhatsApp Webhook Configuration
 WHATSAPP_SERVER_PORT=3003
 FONNTE_API_URL=https://api.fonnte.com/send
 FONNTE_TOKEN=your_fonnte_token_here
-WEBHOOK_SECRET_KEY=your_webhook_secret_here
-
-# AI Configuration (existing)
-VITE_GEMINI_API_KEY=...           # sudah tersedia
-VITE_GEMINI_MODEL=gemini-2.5-flash
-VITE_GEMINI_TIMEOUT_MS=60000
+WEBHOOK_SECRET_KEY=your_optional_webhook_signature
+GEMINI_API_KEY=your_gemini_server_key
 ```
+Pastikan variabel Supabase (`VITE_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `VITE_SUPABASE_ANON_KEY`) tersedia bagi proses webhook.
 
-Pastikan variabel Supabase (`VITE_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `VITE_SUPABASE_ANON_KEY`) turut tersedia di proses webhook agar resolver pengguna dapat bekerja.
+### 4. PM2 Configuration (`ecosystem.config.cjs`)
+Tambahkan aplikasi baru berikut agar webhook dikelola PM2:
 
-### 3. PM2 Configuration (`ecosystem.config.cjs`)
 ```javascript
-module.exports = {
-  apps: [
-    // ... existing apps
     {
-      name: 'excel-processor-webhook',
+      name: 'excel-processor-whatsapp-webhook',
       script: 'server/webhook-server.js',
       instances: 1,
       exec_mode: 'fork',
@@ -387,16 +336,13 @@ module.exports = {
       log_file: './logs/webhook.log',
       time: true
     }
-  ]
-};
 ```
 
-### 4. User Linking & Verification
-- Tambah kolom `whatsapp_number` (format E.164 tanpa tanda plus, mis. `628123456789`) pada tabel `users`.
-- Bangun alur verifikasi di aplikasi web: user login -> input nomor WhatsApp -> kirim OTP via FONNTE -> simpan nomor bila OTP cocok.
-- Hanya user `is_approved = true` dan nomor terverifikasi yang diizinkan mengakses WhatsApp AI.
-- Siapkan job untuk menormalisasi nomor tersimpan (hapus spasi/tanda baca) agar pencarian konsisten.
-- Dokumentasikan prosedur reset nomor bagi tim support.
+### 5. User Linking & Verification
+- Gunakan kolom `phone_number` (format E.164, contoh `628123456789`) pada tabel `users` untuk mencocokkan akun.
+- Alur OTP di aplikasi web memastikan nomor diverifikasi sebelum mengakses WhatsApp AI.
+- Normalisasi nomor (hapus spasi/tanda baca) sebelum menyimpan.
+- Dokumentasikan prosedur reset nomor bagi tim support (kosongkan `phone_number`, ulangi OTP).
 
 ## Deployment Steps
 
@@ -409,9 +355,13 @@ node -e "console.log('WHATSAPP_SERVER_PORT:', process.env.WHATSAPP_SERVER_PORT)"
 
 ### 2. Start Webhook Server
 ```bash
+# Jalankan lokal (development)
+npm run webhook
+
+# Atau kelola via PM2
 pm2 start ecosystem.config.cjs
 pm2 status
-pm2 logs excel-processor-webhook
+pm2 logs excel-processor-whatsapp-webhook
 ```
 
 ### 3. Testing
@@ -435,6 +385,12 @@ curl -X POST http://localhost:3003/webhook/whatsapp \
   -d '{"sender":"628000000000","pesan":"Coba akses data tanpa registrasi"}'
 ```
 
+### 4. Cloudflare Tunnel
+- Arahkan tunnel Cloudflare ke `http://localhost:3003`.
+- Mapping domain publik (mis. `https://fonnte.azisfata.my.id`).
+- Set webhook URL FONNTE ke `https://fonnte.azisfata.my.id/webhook/whatsapp`.
+- Uji kembali melalui domain publik dan pantau log webhook.
+
 ## Security Considerations
 
 ### Webhook Security
@@ -442,7 +398,7 @@ curl -X POST http://localhost:3003/webhook/whatsapp \
 function verifyWebhookSignature(req, res, next) {
   const signature = req.headers['x-fonnte-signature'];
   const secret = process.env.WEBHOOK_SECRET_KEY;
-  if (!signature || !secret) return next(); // Optional; aktifkan jika FONNTE menyediakan signature
+  if (!signature || !secret) return next();
   // TODO: implementasi verifikasi sesuai format FONNTE
   next();
 }
@@ -451,18 +407,14 @@ function verifyWebhookSignature(req, res, next) {
 ### Rate Limiting
 ```javascript
 const rateLimitMap = new Map();
-
 function rateLimit(req, res, next) {
   const sender = normalizeWhatsAppNumber(req.body?.sender);
   if (!sender) return res.status(400).json({ error: 'Invalid sender' });
-
   const now = Date.now();
   const history = (rateLimitMap.get(sender) || []).filter(ts => now - ts < 60 * 1000);
-
   if (history.length >= 10) {
     return res.status(429).json({ error: 'Too many requests' });
   }
-
   history.push(now);
   rateLimitMap.set(sender, history);
   next();
@@ -474,15 +426,10 @@ function rateLimit(req, res, next) {
 function validateWhatsAppInput(req, res, next) {
   const sender = normalizeWhatsAppNumber(req.body?.sender);
   const pesan = (req.body?.pesan ?? '').toString();
-
-  if (!sender) {
-    return res.status(400).json({ error: 'Invalid sender format' });
-  }
-
+  if (!sender) return res.status(400).json({ error: 'Invalid sender format' });
   if (!pesan || typeof pesan !== 'string' || pesan.length > 1000) {
     return res.status(400).json({ error: 'Invalid message' });
   }
-
   next();
 }
 ```
@@ -492,184 +439,50 @@ function validateWhatsAppInput(req, res, next) {
 ### Unit Testing
 ```javascript
 async function testAIIntegration() {
-  const testMessages = [
-    'Halo, siapa saya?',
-    'Berikan saya data anggaran',
-    'Terima kasih',
-    'Buat kegiatan baru'
-  ];
-
-  for (const message of testMessages) {
-    try {
-      const response = await processWhatsAppMessage({
-        sender: 'test123',
-        message,
-        sessionManager: new WhatsAppSessionManager()
-      });
-      console.log(`Test passed: ${message.substring(0, 20)}... -> ${response.substring(0, 50)}...`);
-    } catch (error) {
-      console.error(`Test failed: ${message}`, error);
-    }
+  const tests = ['Halo, siapa saya?', 'Berikan saya data anggaran'];
+  for (const message of tests) {
+    const response = await processWhatsAppMessage({ sender: 'test', message });
+    console.log('Response:', response.substring(0, 60));
   }
 }
 ```
 
 ### Integration Testing
-```bash
-curl -X POST http://localhost:3003/webhook/whatsapp \
-  -H "Content-Type: application/json" \
-  -d '{
-    "sender": "628123456789",
-    "pesan": "Tolong berikan saya laporan anggaran bulan ini"
-  }'
-
-# Verifikasi nomor yang belum terhubung
-curl -X POST http://localhost:3003/webhook/whatsapp \
-  -H "Content-Type: application/json" \
-  -d '{
-    "sender": "628000000000",
-    "pesan": "Coba akses data tanpa registrasi"
-  }'
-```
-
-### Load Testing
-```bash
-for i in {1..10}; do
-  curl -X POST http://localhost:3003/webhook/whatsapp \
-    -H "Content-Type: application/json" \
-    -d "{\"sender\":\"test${i}\",\"pesan\":\"Test message ${i}\"}" &
-done
-wait
-```
+Lakukan pengujian end-to-end dengan payload JSON meniru FONNTE via curl/Postman.
 
 ## Monitoring & Logging
-
-### Monitoring Endpoints
-```javascript
-app.get('/api/metrics', (req, res) => {
-  res.json({
-    activeSessions: sessionManager.sessions.size,
-    totalMessages: Array.from(sessionManager.sessions.values())
-      .reduce((total, session) => total + session.length, 0),
-    uptime: process.uptime(),
-    memory: process.memoryUsage()
-  });
-});
-```
-
-### Enhanced Logging
-```javascript
-function logWebhookEvent(req, action, result) {
-  const logEntry = {
-    timestamp: new Date().toISOString(),
-    sender: req.body?.sender,
-    message: req.body?.pesan?.substring(0, 100),
-    action,
-    result,
-    userAgent: req.headers['user-agent']
-  };
-  console.log(JSON.stringify(logEntry));
-}
-```
+- Endpoint `GET /api/health` untuk health check.
+- Tambah endpoint `/api/metrics` (opsional) guna expose metrik sesi aktif, uptime, dan memori.
+- Log event penting dalam format JSON agar mudah dianalisis.
 
 ## Troubleshooting
-
-### AI Service Timeout
-```javascript
-const AI_TIMEOUT = 30000;
-
-const aiResponse = await Promise.race([
-  fetchAiResponse(payload),
-  new Promise((_, reject) => setTimeout(() => reject(new Error('AI timeout')), AI_TIMEOUT))
-]);
-```
-
-### FONNTE API Errors
-```javascript
-async function sendWithRetry(target, message, maxRetries = 3) {
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      return await sendWhatsAppMessage(target, message);
-    } catch (error) {
-      if (i === maxRetries - 1) throw error;
-      console.log(`Retry ${i + 1}/${maxRetries}...`);
-      await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
-    }
-  }
-}
-```
-
-### Memory Management
-```javascript
-setInterval(() => {
-  sessionManager.cleanupOldSessions();
-  console.log(`Cleanup complete. Active sessions: ${sessionManager.sessions.size}`);
-}, 60 * 1000);
-```
-
-## Performance Optimization
-
-### Response Caching
-```javascript
-const responseCache = new Map();
-
-function getCachedResponse(message) {
-  const key = message.toLowerCase().trim();
-  return responseCache.get(key);
-}
-
-function setCachedResponse(message, response) {
-  const key = message.toLowerCase().trim();
-  if (responseCache.size > 100) {
-    const firstKey = responseCache.keys().next().value;
-    responseCache.delete(firstKey);
-  }
-  responseCache.set(key, response);
-}
-```
-
-### Message Queue (Advanced)
-```javascript
-const messageQueue = [];
-
-async function processQueue() {
-  while (messageQueue.length > 0) {
-    const { target, message } = messageQueue.shift();
-    try {
-      await sendWhatsAppMessage(target, message);
-    } catch (error) {
-      console.error('Queue processing error:', error);
-      messageQueue.unshift({ target, message });
-    }
-  }
-}
-
-setInterval(processQueue, 1000);
-```
+- **AI timeout**: naikkan `GEMINI_TIMEOUT_MS` atau gunakan fallback model lain.
+- **FONNTE error**: baca detail response body, aktifkan retry bila diperlukan.
+- **Nomor belum terhubung**: arahkan user mengulang verifikasi OTP di portal SAPA.
 
 ## Next Steps
 
-### Phase 1 – Basic Implementation
-- [ ] Create webhook server file.
-- [ ] Implement basic AI integration.
-- [ ] Add FONNTE API integration.
-- [ ] Tambah resolver Supabase untuk mencocokkan nomor WhatsApp -> user aplikasi.
-- [ ] Update `aiService.ts` agar membaca `process.env` selain `import.meta.env`.
-- [ ] Update PM2 configuration.
-- [ ] Basic testing.
+### Phase 1 � Basic Implementation
+- [x] Create webhook server file.
+- [x] Implement basic AI integration (Gemini helper untuk Node).
+- [x] Add FONNTE API integration.
+- [x] Tambah resolver Supabase untuk mencocokkan nomor WhatsApp -> user aplikasi.
+- [x] Tambahkan helper AI Node (`server/ai-service.js`).
+- [x] Update PM2 configuration & npm scripts.
+- [ ] Basic end-to-end testing (FONNTE -> tunnel -> webhook -> balasan).
 
-### Phase 2 – Enhancement
-- [ ] Add security features.
-- [ ] Implement session management.
-- [ ] Rilis alur verifikasi nomor WhatsApp + OTP di aplikasi web.
-- [ ] Integrasi `createActivityEnhancedPrompt` untuk pertanyaan yang memerlukan data kegiatan.
-- [ ] Add monitoring endpoints.
-- [ ] Comprehensive testing.
+### Phase 2 � Enhancement
+- [ ] Tambah hardening keamanan (signature verification, allow-list IP).
+- [x] Implement session management (in-memory + auto cleanup).
+- [x] Rilis alur verifikasi nomor WhatsApp + OTP di aplikasi web.
+- [ ] Integrasi `createActivityEnhancedPrompt` untuk permintaan data kegiatan kompleks.
+- [ ] Tambah monitoring endpoints/log enrichment.
+- [ ] Comprehensive testing (unit + integration).
 
-### Phase 3 – Production Ready
+### Phase 3 � Production Ready
 - [ ] Load testing.
-- [ ] Error handling improvements.
-- [ ] Documentation completion.
+- [ ] Error handling improvements (alerting, retry queue).
+- [ ] Documentation completion (runbook + SOP support).
 - [ ] Production deployment.
 
 ## Useful Links
