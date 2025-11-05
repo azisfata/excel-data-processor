@@ -4,9 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k \"npm:api:local\" \"npm:auth:local\" \"npm:dev:client:local\"",
+    "dev": "concurrently -k \"npm:api:local\" \"npm:auth:local\" \"npm:webhook:local\" \"npm:dev:client:local\"",
     "dev:client": "vite --mode development",
-    "dev:local": "concurrently -k \"npm:api:local\" \"npm:auth:local\" \"npm:dev:client:local\"",
+    "dev:local": "concurrently -k \"npm:api:local\" \"npm:auth:local\" \"npm:webhook:local\" \"npm:dev:client:local\"",
     "dev:client:local": "vite --mode development",
     "dev:old": "concurrently -k \"npm:api\" \"npm:auth\" \"npm:dev:client\"",
     "build": "vite build --mode production",

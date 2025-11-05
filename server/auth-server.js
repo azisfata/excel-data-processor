@@ -402,7 +402,7 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
   try {
     const { data: user, error } = await supabase
       .from('users')
-      .select('id, email, name, unit, role, created_at, is_approved')
+      .select('id, email, name, unit, role, created_at, is_approved, phone_number')
       .eq('id', req.user.id)
       .single();
 
@@ -434,7 +434,7 @@ userRouter.get('/', async (req, res) => {
   try {
     const { data: users, error } = await supabase
       .from('users')
-      .select('id, email, name, unit, role, created_at, is_approved')
+      .select('id, email, name, unit, role, created_at, is_approved, phone_number')
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -458,7 +458,7 @@ userRouter.put('/:id/approve', async (req, res) => {
       .from('users')
       .update({ is_approved: true })
       .eq('id', id)
-      .select('id, email, name, unit, role, created_at, is_approved')
+      .select('id, email, name, unit, role, created_at, is_approved, phone_number')
       .single();
 
     if (error) {
@@ -483,7 +483,7 @@ userRouter.put('/:id/approve', async (req, res) => {
 // POST /users - Create user (admin only)
 userRouter.post('/', async (req, res) => {
   try {
-    const { email, password, name, unit, role, is_approved } = req.body;
+    const { email, password, name, unit, role, is_approved, phone_number } = req.body;
 
     // Validasi input
     if (!email || !password || !name) {
@@ -525,10 +525,11 @@ userRouter.post('/', async (req, res) => {
           name,
           unit: unit || null,
           role: role || 'user',
-          is_approved: true
+          is_approved: true,
+          phone_number: phone_number || null
         }
       ])
-      .select('id, email, name, unit, role, created_at, is_approved')
+      .select('id, email, name, unit, role, created_at, is_approved, phone_number')
       .single();
 
     if (error) {
@@ -550,7 +551,7 @@ userRouter.post('/', async (req, res) => {
 userRouter.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { email, password, name, unit, role, is_approved } = req.body;
+    const { email, password, name, unit, role, is_approved, phone_number } = req.body;
 
     // Validasi input
     if (!name) {
@@ -593,6 +594,7 @@ userRouter.put('/:id', async (req, res) => {
     if (password) {
       updateData.password_hash = await bcrypt.hash(password, 10);
     }
+    if (phone_number) updateData.phone_number = phone_number;
 
     if (typeof is_approved === 'boolean') {
       updateData.is_approved = is_approved;
@@ -603,7 +605,7 @@ userRouter.put('/:id', async (req, res) => {
       .from('users')
       .update(updateData)
       .eq('id', id)
-      .select('id, email, name, unit, role, created_at, is_approved')
+      .select('id, email, name, unit, role, created_at, is_approved, phone_number')
       .single();
 
     if (error) {

@@ -12,6 +12,7 @@ interface User {
   role: string;
   created_at: string;
   is_approved: boolean;
+  phone_number?: string;
 }
 
 const UserManagementPage: React.FC = () => {
@@ -32,6 +33,7 @@ const UserManagementPage: React.FC = () => {
     email: '',
     unit: '',
     role: 'user',
+    phone_number: '',
     password: '',
     is_approved: true,
   });
@@ -84,6 +86,7 @@ const UserManagementPage: React.FC = () => {
         name: user.name,
         email: user.email,
         unit: user.unit || '',
+        phone_number: user.phone_number || '',
         role: user.role,
         password: '',
         is_approved: user.is_approved,
@@ -94,6 +97,7 @@ const UserManagementPage: React.FC = () => {
         name: '',
         email: '',
         unit: '',
+        phone_number: '',
         role: 'user',
         password: '',
         is_approved: true,
@@ -109,6 +113,7 @@ const UserManagementPage: React.FC = () => {
       name: '',
       email: '',
       unit: '',
+      phone_number: '',
       role: 'user',
       password: '',
       is_approved: true,
@@ -130,6 +135,7 @@ const UserManagementPage: React.FC = () => {
       const body: any = {
         name: formData.name,
         unit: formData.unit || null,
+        phone_number: formData.phone_number || null,
         role: formData.role,
       };
 
@@ -308,6 +314,9 @@ const UserManagementPage: React.FC = () => {
                     Email
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Nomor WhatsApp
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Role
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -330,6 +339,11 @@ const UserManagementPage: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-600">{user.email}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-600">
+                        {user.phone_number || '-'}
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span
@@ -439,6 +453,20 @@ const UserManagementPage: React.FC = () => {
                   onChange={e => setFormData({ ...formData, unit: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nomor WhatsApp
+                </label>
+                <input
+                  type="tel"
+                  value={formData.phone_number}
+                  onChange={e => setFormData({ ...formData, phone_number: e.target.value })}
+                  placeholder="628123456789"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                />
+                <p className="mt-1 text-xs text-gray-500">Format: 628123456789 (tanpa + dan spasi)</p>
               </div>
 
               <div>
