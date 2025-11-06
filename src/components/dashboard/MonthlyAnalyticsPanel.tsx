@@ -85,15 +85,11 @@ const MonthlyAnalyticsPanel: React.FC<MonthlyAnalyticsPanelProps> = ({
   const [compositionView, setCompositionView] = useState<'realisasi' | 'pagu'>('realisasi');
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
 
-
   // Removed process steps state for AI Processing Flow
-
 
   const availableReports = allReportsProp ?? legacyAllReports ?? [];
   const selectedHistoryId =
-    typeof window !== 'undefined'
-      ? window.localStorage.getItem('lastSelectedHistoryId')
-      : null;
+    typeof window !== 'undefined' ? window.localStorage.getItem('lastSelectedHistoryId') : null;
   const activeReport =
     (selectedHistoryId && availableReports.find(report => report.id === selectedHistoryId)) ??
     currentReport ??
@@ -264,22 +260,20 @@ ${largeSisa
 
     setAiAnalysis(analysis);
     onAIAnalysis(analysis);
-    
+
     // Ambil penjelasan XAI
     try {
-      const explanation = await getAIExplanation({ 
-        totalPagu, 
-        totalRealisasi, 
+      const explanation = await getAIExplanation({
+        totalPagu,
+        totalRealisasi,
         avgPersentase,
         healthyItems,
         warningItems,
         criticalItems,
-        largeSisa: largeSisa.length
+        largeSisa: largeSisa.length,
       });
-      
+
       setAiExplanation(explanation);
-
-
     } catch (error) {
       console.error('Error getting AI explanation:', error);
     }
@@ -1033,7 +1027,12 @@ ${largeSisa
               <div className="flex items-start gap-3">
                 <div className="flex-shrink-0">
                   <div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center">
-                    <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg
+                      className="w-4 h-4 text-white"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
                       <path
                         strokeLinecap="round"
                         strokeLinejoin="round"
@@ -1049,24 +1048,38 @@ ${largeSisa
                     {aiAnalysis.split('\n').map((line, index) => {
                       // Process bold text (**text**)
                       const processedLine = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-                      
+
                       // Check if line contains bullet points
                       if (line.trim().startsWith('-')) {
                         return (
-                          <div key={index} className="mb-1" dangerouslySetInnerHTML={{ __html: `• ${processedLine.substring(1).trim()}` }} />
+                          <div
+                            key={index}
+                            className="mb-1"
+                            dangerouslySetInnerHTML={{
+                              __html: `• ${processedLine.substring(1).trim()}`,
+                            }}
+                          />
                         );
                       }
-                      
+
                       // Check if line is a header (contains ** at start and end)
                       if (line.includes('**') && !line.trim().startsWith('-')) {
                         return (
-                          <div key={index} className="mb-2 font-semibold text-gray-900" dangerouslySetInnerHTML={{ __html: processedLine }} />
+                          <div
+                            key={index}
+                            className="mb-2 font-semibold text-gray-900"
+                            dangerouslySetInnerHTML={{ __html: processedLine }}
+                          />
                         );
                       }
-                      
+
                       // Regular line
                       return (
-                        <div key={index} className="mb-1" dangerouslySetInnerHTML={{ __html: processedLine }} />
+                        <div
+                          key={index}
+                          className="mb-1"
+                          dangerouslySetInnerHTML={{ __html: processedLine }}
+                        />
                       );
                     })}
                   </div>
@@ -1076,7 +1089,6 @@ ${largeSisa
           )}
 
           {/* XAI Components - Tampilkan jika ada penjelasan AI */}
-          
         </div>
       </div>
     </div>

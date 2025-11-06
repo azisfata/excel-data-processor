@@ -18,7 +18,7 @@ export function createHierarchy(data: any[]): TreeNode[] {
     children: {},
     data: [],
     level: -1,
-    isExpanded: true
+    isExpanded: true,
   };
 
   data.forEach(row => {
@@ -32,7 +32,7 @@ export function createHierarchy(data: any[]): TreeNode[] {
     parts.forEach((part, index) => {
       const isLeaf = index === parts.length - 1;
       currentPath = currentPath ? `${currentPath}.${part}` : part;
-      
+
       if (!currentNode.children[part]) {
         currentNode.children[part] = {
           id: currentPath,
@@ -41,13 +41,13 @@ export function createHierarchy(data: any[]): TreeNode[] {
           children: {},
           data: isLeaf ? [row] : [],
           level: index,
-          isExpanded: index < 5 // Auto-expand first 6 levels by default
+          isExpanded: index < 5, // Auto-expand first 6 levels by default
         };
       } else if (isLeaf) {
         // If it's a leaf node and already exists, add the row to its data
         currentNode.children[part].data.push(row);
       }
-      
+
       currentNode = currentNode.children[part];
     });
   });
@@ -93,17 +93,22 @@ export function flattenTree(nodes: TreeNode[], options: FlattenTreeOptions = {})
           __isVisible: isVisible,
           __isLeaf: true,
           __path: node.fullPath,
-          __hasChildren: false
+          __hasChildren: false,
         });
         return;
       }
 
       if (hasMultipleData) {
-        const totalPaguRevisi = node.data.reduce((sum: number, row: any) => sum + (Number(row[2]) || 0), 0);
-        const totalRealisasi = node.data.reduce((sum: number, row: any) => sum + (Number(row[6]) || 0), 0);
-        const persentaseRealisasi = totalPaguRevisi > 0
-          ? (totalRealisasi / totalPaguRevisi) * 100
-          : 0;
+        const totalPaguRevisi = node.data.reduce(
+          (sum: number, row: any) => sum + (Number(row[2]) || 0),
+          0
+        );
+        const totalRealisasi = node.data.reduce(
+          (sum: number, row: any) => sum + (Number(row[6]) || 0),
+          0
+        );
+        const persentaseRealisasi =
+          totalPaguRevisi > 0 ? (totalRealisasi / totalPaguRevisi) * 100 : 0;
         const sisaAnggaran = totalPaguRevisi - totalRealisasi;
         const groupName = resolveGroupName(node);
 
@@ -123,7 +128,7 @@ export function flattenTree(nodes: TreeNode[], options: FlattenTreeOptions = {})
           __path: node.fullPath,
           __hasChildren: true,
           __isDataGroup: true,
-          __dataCount: node.data.length
+          __dataCount: node.data.length,
         });
 
         if (node.isExpanded) {
@@ -134,7 +139,7 @@ export function flattenTree(nodes: TreeNode[], options: FlattenTreeOptions = {})
               __isVisible: isVisible && node.isExpanded,
               __isLeaf: true,
               __path: `${node.fullPath}-${index}`,
-              __hasChildren: false
+              __hasChildren: false,
             });
           });
         }
@@ -163,9 +168,8 @@ export function flattenTree(nodes: TreeNode[], options: FlattenTreeOptions = {})
       };
 
       const { totalPaguRevisi, totalRealisasi } = calculateTotals(childNodes);
-      const persentaseRealisasi = totalPaguRevisi > 0
-        ? (totalRealisasi / totalPaguRevisi) * 100
-        : 0;
+      const persentaseRealisasi =
+        totalPaguRevisi > 0 ? (totalRealisasi / totalPaguRevisi) * 100 : 0;
       const sisaAnggaran = totalPaguRevisi - totalRealisasi;
       const groupName = resolveGroupName(node);
 
@@ -183,7 +187,7 @@ export function flattenTree(nodes: TreeNode[], options: FlattenTreeOptions = {})
         __isLeaf: false,
         __isExpanded: node.isExpanded,
         __path: node.fullPath,
-        __hasChildren: true
+        __hasChildren: true,
       });
 
       if (node.isExpanded) {

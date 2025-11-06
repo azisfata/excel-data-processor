@@ -19,5 +19,5 @@ echo ""
 echo "📊 PM2 Status:"
 pm2 status
 echo ""
-echo "🔄 To restart, run: ./start-production.sh"
-echo "▶️  To start again, run: ./start-production.sh"
+echo "🔄 To restart, run: ./scripts/start-production.sh"
+echo "▶️  To start again, run: ./scripts/start-production.sh"

@@ -1,7 +1,6 @@
 // src/services/aiExplanationService.ts
 
-export interface AIDecisionExplanation {
-}
+export interface AIDecisionExplanation {}
 
 export const getAIExplanation = async (data: {
   totalPagu?: number;

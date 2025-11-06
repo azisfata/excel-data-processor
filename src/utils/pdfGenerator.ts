@@ -28,8 +28,18 @@ export const generateRkbPdf = async (
   doc.text('LAPORAN KEMAJUAN KEGIATAN BULANAN', pageWidth / 2, 15, { align: 'center' });
 
   const monthNames = [
-    'Januari','Februari','Maret','April','Mei','Juni',
-    'Juli','Agustus','September','Oktober','November','Desember',
+    'Januari',
+    'Februari',
+    'Maret',
+    'April',
+    'Mei',
+    'Juni',
+    'Juli',
+    'Agustus',
+    'September',
+    'Oktober',
+    'November',
+    'Desember',
   ];
   let bulanText = 'Semua Bulan';
   if (selectedMonth === 'no-date') bulanText = 'Tanpa Tanggal';
@@ -37,7 +47,7 @@ export const generateRkbPdf = async (
   const bulanLabel = `Bulan: ${bulanText} ${selectedYear === 'all' ? '' : selectedYear}`;
 
   // ===== TABEL HEADER INFO =====
-  let y = 20;
+  const y = 20;
   autoTable(doc, {
     startY: y,
     body: [
@@ -69,8 +79,7 @@ export const generateRkbPdf = async (
       [
         { content: 'Program :', styles: { fontStyle: 'bold', cellPadding: 2 } },
         {
-          content:
-            'Program Dukungan Manajemen dan Pelaksanaan Tugas Teknis Lainnya Kemenko PMK',
+          content: 'Program Dukungan Manajemen dan Pelaksanaan Tugas Teknis Lainnya Kemenko PMK',
         },
         { content: 'Satuan Kerja', styles: { fontStyle: 'bold', halign: 'center' } },
         { content: 'Biro Digitalisasi dan Pengelolaan Informasi' },
@@ -140,7 +149,7 @@ export const generateRkbPdf = async (
     const currentDate = new Date().toLocaleDateString('id-ID', {
       day: '2-digit',
       month: '2-digit',
-      year: 'numeric'
+      year: 'numeric',
     });
 
     // Using default values similar to rkbPdfGenerator
@@ -167,12 +176,7 @@ export const generateRkbPdf = async (
   });
 
   // Calculate column widths similar to rkbPdfGenerator
-  const colWidthsTopTable = [
-    25,
-    availableWidth - 25 - 80 - 60,
-    80,
-    60,
-  ];
+  const colWidthsTopTable = [25, availableWidth - 25 - 80 - 60, 80, 60];
   const totalWidthTopTable = colWidthsTopTable.reduce((sum, w) => sum + w, 0);
 
   // Column widths for the main table - adding 11th column for Rencana Tindak Lanjut
@@ -203,7 +207,7 @@ export const generateRkbPdf = async (
         'No.',
         'Komponen Kegiatan',
         'Judul Kegiatan',
-        'RB', 
+        'RB',
         'PN/PP/KP',
         'K/L/Unit Terkait',
         'Tanggal Pelaksanaan',
@@ -248,11 +252,7 @@ export const generateRkbPdf = async (
       // Add page numbers
       const pageCount = doc.getNumberOfPages();
       doc.setFontSize(9);
-      doc.text(
-        `Halaman ${data.pageNumber} dari ${pageCount}`,
-        pageWidth - 40,
-        pageHeight - 10
-      );
+      doc.text(`Halaman ${data.pageNumber} dari ${pageCount}`, pageWidth - 40, pageHeight - 10);
     },
   });
 
@@ -269,7 +269,8 @@ export const generateRkbPdf = async (
     body: [
       [
         {
-          content: 'Dipersiapkan Oleh:\nKepala Biro Digitalisasi dan Pengelolaan Informasi\n\n\n\n\n\n\nAgung Gumilar Triyanto',
+          content:
+            'Dipersiapkan Oleh:\nKepala Biro Digitalisasi dan Pengelolaan Informasi\n\n\n\n\n\n\nAgung Gumilar Triyanto',
           styles: {
             halign: 'left',
             valign: 'top',
@@ -280,7 +281,8 @@ export const generateRkbPdf = async (
           },
         },
         {
-          content: 'Mengetahui:\nSekretaris Kementerian Koordinator Bidang PMK\n\n\n\n\n\n\nImam Machdi',
+          content:
+            'Mengetahui:\nSekretaris Kementerian Koordinator Bidang PMK\n\n\n\n\n\n\nImam Machdi',
           styles: {
             halign: 'left',
             valign: 'top',

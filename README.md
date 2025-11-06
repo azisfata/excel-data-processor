@@ -359,19 +359,40 @@ npm run db:verify
    NODE_ENV=production
    COOKIE_SECURE=true
    CORS_ORIGIN=https://yourdomain.com
+   FONNTE_API_URL=https://api.fonnte.com/send
+   FONNTE_TOKEN=your-fonnte-token
+   WHATSAPP_SERVER_PORT=3003
+   WEBHOOK_SECRET_KEY=optional-shared-secret
    ```
 
 2. **Build & Deploy**
    ```bash
-   npm run build
-   npm run start
+   ./deploy-production.sh
    ```
 
 3. **Monitor Deployment**
    ```bash
    npm run pm2:status
    npm run pm2:logs
+   pm2 status sapa.kemenkopmk-wa-webhook
    ```
+   Jika API dan Auth server sudah berjalan di PM2, Anda bisa menambahkan webhook saja dengan:
+   ```bash
+   pm2 start ecosystem.config.cjs --only sapa.kemenkopmk-wa-webhook
+   pm2 save
+   ```
+
+### Automated Deploy Script
+
+Jalankan `./deploy-production.sh` setiap kali ada perubahan frontend/backend:
+
+- Secara default script akan menjalankan `npm ci`, build Vite (`npm run build`), sinkronisasi `dist/` ke `/var/www/excel-data-processor/`, lalu reload layanan PM2 `sapa.kemenkopmk-auth`, `sapa.kemenkopmk-activity`, dan `sapa.kemenkopmk-wa-webhook`.
+- Set `SKIP_INSTALL=1 ./deploy-production.sh` jika dependensi sudah up-to-date.
+- Override target web root atau daftar layanan dengan environment variable:
+  ```bash
+  WEB_ROOT=/path/custom PM2_SERVICES="sapa.kemenkopmk-auth sapa.kemenkopmk-activity" ./deploy-production.sh
+  ```
+***
 
 ### Manual Deployment
 
@@ -382,6 +403,7 @@ npm run build
 # Start servers manually
 NODE_ENV=production node server/auth-server.js &
 NODE_ENV=production node server/activity-upload-server.js &
+NODE_ENV=production node server/webhook-server.js &
 serve -s dist -l 5173
 ```
 

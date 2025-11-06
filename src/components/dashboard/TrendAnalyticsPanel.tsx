@@ -87,7 +87,6 @@ const TrendAnalyticsPanel: React.FC<TrendAnalyticsPanelProps> = ({ allReports, o
     return createMonthlyCompositionData(allReports);
   }, [allReports]);
 
-
   // Generate AI analysis untuk tren
   const generateTrendAnalysis = () => {
     if (!allReports.length) {
@@ -241,9 +240,9 @@ ${spendingPattern
           padding: 20,
           font: {
             size: 12,
-            weight: 500 as any
-          }
-        }
+            weight: 500 as any,
+          },
+        },
       },
       tooltip: {
         backgroundColor: 'rgba(0, 0, 0, 0.8)',
@@ -271,7 +270,7 @@ ${spendingPattern
         offset: 8,
         font: {
           size: 10,
-          weight: 'bold' as any
+          weight: 'bold' as any,
         },
         formatter: (value: number) => {
           return formatShortCurrency(value);
@@ -281,32 +280,32 @@ ${spendingPattern
         },
         backgroundColor: 'rgba(255, 255, 255, 0.8)',
         borderRadius: 4,
-        padding: 4
-      }
+        padding: 4,
+      },
     },
     scales: {
       x: {
         grid: {
-          display: false
+          display: false,
         },
         ticks: {
           font: {
-            size: 11
-          }
-        }
+            size: 11,
+          },
+        },
       },
       y: {
         beginAtZero: true,
         grid: {
-          color: 'rgba(0, 0, 0, 0.05)'
+          color: 'rgba(0, 0, 0, 0.05)',
         },
         ticks: {
           callback: (value: any) => {
             return formatShortCurrency(Number(value));
           },
           font: {
-            size: 11
-          }
+            size: 11,
+          },
         },
       },
     },
@@ -314,28 +313,28 @@ ${spendingPattern
       point: {
         radius: 4,
         hoverRadius: 6,
-        borderWidth: 2
+        borderWidth: 2,
       },
       line: {
         borderWidth: 3,
-        tension: 0.3
-      }
-    }
+        tension: 0.3,
+      },
+    },
   };
 
   const stackedBarOptions = {
     responsive: true,
-  maintainAspectRatio: false,
-  layout: {
-    padding: {
-      top: 28,
+    maintainAspectRatio: false,
+    layout: {
+      padding: {
+        top: 28,
+      },
     },
-  },
-  plugins: {
-    legend: {
-      position: 'top' as const,
-    },
-    tooltip: {
+    plugins: {
+      legend: {
+        position: 'top' as const,
+      },
+      tooltip: {
         callbacks: {
           label: (context: any) => {
             const value = context.parsed.y;
@@ -374,7 +373,7 @@ ${spendingPattern
         clip: false,
         clamp: true,
         textAlign: 'center' as const,
-      }
+      },
     },
     scales: {
       x: {
@@ -431,7 +430,6 @@ ${spendingPattern
             ],
           }
         : null;
-
 
   // Data untuk stacked bar komposisi belanja
   const stackedBarData = useMemo(() => {
@@ -564,14 +562,11 @@ ${spendingPattern
             )}
           </div>
 
-
           {/* Grafik Batang Bertumpuk: Komposisi Belanja Bulanan */}
           <div className="bg-orange-50 rounded-lg p-4">
             <h4 className="text-md font-semibold text-orange-800 mb-4">
               🍰 Komposisi Belanja Bulanan
-              <span className="text-sm font-normal text-gray-600 ml-2">
-                (Realisasi tiap bulan)
-              </span>
+              <span className="text-sm font-normal text-gray-600 ml-2">(Realisasi tiap bulan)</span>
             </h4>
             {stackedBarData ? (
               <div className="h-80">
@@ -613,7 +608,12 @@ ${spendingPattern
               <div className="flex items-start gap-3">
                 <div className="flex-shrink-0">
                   <div className="w-6 h-6 bg-purple-600 rounded-full flex items-center justify-center">
-                    <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg
+                      className="w-4 h-4 text-white"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
                       <path
                         strokeLinecap="round"
                         strokeLinejoin="round"
@@ -629,24 +629,38 @@ ${spendingPattern
                     {aiAnalysis.split('\n').map((line, index) => {
                       // Process bold text (**text**)
                       const processedLine = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-                      
+
                       // Check if line contains bullet points
                       if (line.trim().startsWith('-')) {
                         return (
-                          <div key={index} className="mb-1" dangerouslySetInnerHTML={{ __html: `• ${processedLine.substring(1).trim()}` }} />
+                          <div
+                            key={index}
+                            className="mb-1"
+                            dangerouslySetInnerHTML={{
+                              __html: `• ${processedLine.substring(1).trim()}`,
+                            }}
+                          />
                         );
                       }
-                      
+
                       // Check if line is a header (contains ** at start and end)
                       if (line.includes('**') && !line.trim().startsWith('-')) {
                         return (
-                          <div key={index} className="mb-2 font-semibold text-gray-900" dangerouslySetInnerHTML={{ __html: processedLine }} />
+                          <div
+                            key={index}
+                            className="mb-2 font-semibold text-gray-900"
+                            dangerouslySetInnerHTML={{ __html: processedLine }}
+                          />
                         );
                       }
-                      
+
                       // Regular line
                       return (
-                        <div key={index} className="mb-1" dangerouslySetInnerHTML={{ __html: processedLine }} />
+                        <div
+                          key={index}
+                          className="mb-1"
+                          dangerouslySetInnerHTML={{ __html: processedLine }}
+                        />
                       );
                     })}
                   </div>

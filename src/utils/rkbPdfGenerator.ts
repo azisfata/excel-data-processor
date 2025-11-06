@@ -41,7 +41,7 @@ export const generateRkbDocumentPdf = async (
   const bulanLabel = `Bulan: ${bulanText} ${selectedYear === 'all' ? '' : selectedYear}`;
 
   // ===== TABEL HEADER INFO =====
-  let y = 20;
+  const y = 20;
   autoTable(doc, {
     startY: y,
     body: [
@@ -224,7 +224,8 @@ export const generateRkbDocumentPdf = async (
     body: [
       [
         {
-          content: 'Dipersiapkan Oleh:\nKepala Biro Digitalisasi dan Pengelolaan Informasi\n\n\n\n\n\n\nAgung Gumilar Triyanto',
+          content:
+            'Dipersiapkan Oleh:\nKepala Biro Digitalisasi dan Pengelolaan Informasi\n\n\n\n\n\n\nAgung Gumilar Triyanto',
           styles: {
             halign: 'left',
             valign: 'top',
@@ -235,7 +236,8 @@ export const generateRkbDocumentPdf = async (
           },
         },
         {
-          content: 'Mengetahui:\nSekretaris Kementerian Koordinator Bidang PMK\n\n\n\n\n\n\nImam Machdi',
+          content:
+            'Mengetahui:\nSekretaris Kementerian Koordinator Bidang PMK\n\n\n\n\n\n\nImam Machdi',
           styles: {
             halign: 'left',
             valign: 'top',

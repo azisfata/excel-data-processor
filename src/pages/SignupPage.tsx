@@ -11,10 +11,12 @@ const SignupPage: React.FC = () => {
     password: '',
     confirmPassword: '',
     phoneNumber: '',
-    otp: ''
+    otp: '',
   });
   const [error, setError] = useState('');
-  const [otpStatus, setOtpStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [otpStatus, setOtpStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(
+    null
+  );
   const [otpSent, setOtpSent] = useState(false);
   const [otpLoading, setOtpLoading] = useState(false);
   const [otpCountdown, setOtpCountdown] = useState(0);
@@ -26,7 +28,7 @@ const SignupPage: React.FC = () => {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value
+      [e.target.name]: e.target.value,
     });
   };
 
@@ -68,8 +70,8 @@ const SignupPage: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           phoneNumber: formData.phoneNumber,
-          name: trimmedName || formData.username || 'Pengguna SAPA'
-        })
+          name: trimmedName || formData.username || 'Pengguna SAPA',
+        }),
       });
 
       const data = await response.json().catch(() => ({}));
@@ -79,7 +81,10 @@ const SignupPage: React.FC = () => {
 
       setOtpSent(true);
       setOtpCountdown(60);
-      setOtpStatus({ type: 'success', message: 'OTP berhasil dikirim. Silakan cek WhatsApp Anda.' });
+      setOtpStatus({
+        type: 'success',
+        message: 'OTP berhasil dikirim. Silakan cek WhatsApp Anda.',
+      });
     } catch (err: any) {
       setOtpStatus({ type: 'error', message: err.message || 'Gagal mengirim OTP' });
     } finally {
@@ -132,13 +137,13 @@ const SignupPage: React.FC = () => {
         name: formData.name,
         unit: formData.unit,
         phoneNumber: formData.phoneNumber,
-        otp: formData.otp
+        otp: formData.otp,
       });
       navigate('/login', {
         state: {
           message:
-            'Pendaftaran berhasil! Akun Anda harus disetujui oleh admin sebelum Anda dapat login.'
-        }
+            'Pendaftaran berhasil! Akun Anda harus disetujui oleh admin sebelum Anda dapat login.',
+        },
       });
     } catch (err: any) {
       setError(err.message || 'Registrasi gagal');
@@ -257,8 +262,8 @@ const SignupPage: React.FC = () => {
                 {otpLoading
                   ? 'Mengirim...'
                   : otpCountdown > 0
-                  ? `Kirim Ulang (${otpCountdown})`
-                  : 'Kirim OTP'}
+                    ? `Kirim Ulang (${otpCountdown})`
+                    : 'Kirim OTP'}
               </button>
               <input
                 id="otp"

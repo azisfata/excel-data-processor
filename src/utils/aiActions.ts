@@ -42,7 +42,7 @@ const ACTIVITY_FIELD_KEYS: ActivityStringField[] = [
   'penanggung_jawab',
   'capaian',
   'pending_issue',
-  'rencana_tindak_lanjut'
+  'rencana_tindak_lanjut',
 ];
 
 const normalizeAiAction = (
@@ -56,9 +56,7 @@ const normalizeAiAction = (
 
   const data = raw.data;
   const activityInput =
-    data && typeof data === 'object' && typeof data.activity === 'object'
-      ? data.activity
-      : {};
+    data && typeof data === 'object' && typeof data.activity === 'object' ? data.activity : {};
   const normalizedActivity: Partial<Activity> = {};
 
   for (const field of ACTIVITY_FIELD_KEYS) {
@@ -73,8 +71,7 @@ const normalizeAiAction = (
     } else {
       const textValue = String(value).trim();
       if (textValue) {
-        (normalizedActivity as Record<ActivityStringField, string | null>)[field] =
-          textValue;
+        (normalizedActivity as Record<ActivityStringField, string | null>)[field] = textValue;
       }
     }
   }
@@ -83,17 +80,13 @@ const normalizeAiAction = (
   const normalizedAllocations: AiAllocationInput[] = allocationsInput
     .map((item: any) => {
       if (!item || typeof item !== 'object') return null;
-      const kode =
-        item.kode !== undefined && item.kode !== null ? String(item.kode).trim() : '';
-      const jumlahNumber =
-        typeof item.jumlah === 'number' ? item.jumlah : Number(item.jumlah);
+      const kode = item.kode !== undefined && item.kode !== null ? String(item.kode).trim() : '';
+      const jumlahNumber = typeof item.jumlah === 'number' ? item.jumlah : Number(item.jumlah);
       if (!kode || Number.isNaN(jumlahNumber)) {
         return null;
       }
       const uraian =
-        item.uraian !== undefined && item.uraian !== null
-          ? String(item.uraian).trim()
-          : undefined;
+        item.uraian !== undefined && item.uraian !== null ? String(item.uraian).trim() : undefined;
       return { kode, jumlah: jumlahNumber, uraian };
     })
     .filter((item): item is AiAllocationInput => Boolean(item));
@@ -104,10 +97,7 @@ const normalizeAiAction = (
   }
 
   const activityIdCandidate =
-    data?.activityId ??
-    data?.activity_id ??
-    activityInput?.id ??
-    activityInput?.activityId;
+    data?.activityId ?? data?.activity_id ?? activityInput?.id ?? activityInput?.activityId;
   if (typeof activityIdCandidate === 'string' && activityIdCandidate.trim()) {
     actionData.activityId = activityIdCandidate.trim();
   }
@@ -117,7 +107,7 @@ const normalizeAiAction = (
   return {
     type,
     summary,
-    data: actionData
+    data: actionData,
   };
 };
 
@@ -182,7 +172,7 @@ export const extractAiAction = (
         parsedAction = {
           type: normalized.type,
           summary,
-          data: normalized.data
+          data: normalized.data,
         };
       }
     }

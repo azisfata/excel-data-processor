@@ -54,7 +54,7 @@ const UserManagementPage: React.FC = () => {
       console.log('Current user:', currentUser);
       console.log('Is admin:', isAdmin);
       console.log('Request URL:', getAuthApiUrl('auth/users'));
-      
+
       const response = await fetch(getAuthApiUrl('auth/users'), {
         credentials: 'include',
       });
@@ -341,9 +341,7 @@ const UserManagementPage: React.FC = () => {
                       <div className="text-sm text-gray-600">{user.email}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-600">
-                        {user.phone_number || '-'}
-                      </div>
+                      <div className="text-sm text-gray-600">{user.phone_number || '-'}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span
@@ -466,7 +464,9 @@ const UserManagementPage: React.FC = () => {
                   placeholder="628123456789"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 />
-                <p className="mt-1 text-xs text-gray-500">Format: 628123456789 (tanpa + dan spasi)</p>
+                <p className="mt-1 text-xs text-gray-500">
+                  Format: 628123456789 (tanpa + dan spasi)
+                </p>
               </div>
 
               <div>

@@ -1,6 +1,10 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { fetchAiResponse, type AiChatMessage as AiRequestMessage } from '@/services/aiService';
-import { createActivityEnhancedPrompt, detectActivityQueryType, QUICK_ACTIVITY_PROMPTS } from '@/utils/aiActivityPrompts';
+import {
+  createActivityEnhancedPrompt,
+  detectActivityQueryType,
+  QUICK_ACTIVITY_PROMPTS,
+} from '@/utils/aiActivityPrompts';
 
 // Import komponen XAI
 import { getAIExplanation } from '@/services/aiExplanationService';
@@ -26,13 +30,17 @@ const buildDefaultSystemPrompt = (): string =>
     'Jika tidak memiliki informasi yang cukup, jelaskan data apa yang dibutuhkan.',
   ].join('\n');
 
-const AIChatModal: React.FC<AIChatModalProps> = ({ onClose, onNewMessage, systemPrompt, userId }) => {
+const AIChatModal: React.FC<AIChatModalProps> = ({
+  onClose,
+  onNewMessage,
+  systemPrompt,
+  userId,
+}) => {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<AiMessage[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'chat'>('chat');
-
 
   // Removed process steps state for AI Processing Flow
   const messagesEndRef = useRef<null | HTMLDivElement>(null);
@@ -102,18 +110,18 @@ const AIChatModal: React.FC<AIChatModalProps> = ({ onClose, onNewMessage, system
     try {
       // Deteksi jenis query kegiatan
       const queryType = detectActivityQueryType(input.trim());
-      
+
       // Bangun payload permintaan dengan context kegiatan
       let enhancedSystemPrompt = resolvedSystemPrompt;
-      
+
       if (userId && queryType) {
         enhancedSystemPrompt = await createActivityEnhancedPrompt(
-          resolvedSystemPrompt, 
-          userId, 
+          resolvedSystemPrompt,
+          userId,
           input.trim()
         );
       }
-      
+
       const payload: AiRequestMessage[] = [
         { role: 'system', content: enhancedSystemPrompt },
         ...newMessages.map(msg => ({
@@ -136,8 +144,6 @@ const AIChatModal: React.FC<AIChatModalProps> = ({ onClose, onNewMessage, system
       // Tambahkan pesan asisten ke daftar
       const updatedMessages = [...newMessages, assistantMessage];
       setMessages(updatedMessages);
-
-
     } catch (err) {
       console.error('AI chat modal error:', err);
       const errorMessage =

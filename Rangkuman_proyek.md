@@ -28,7 +28,7 @@
 ## Infrastruktur & Konfigurasi
 - File konfigurasi: `.env.example` sebagai template; `.env.loc` untuk pengembangan; `.env.prod` untuk produksi. `vite.config.ts` otomatis memilih file berdasar mode build.
 - Variabel penting: port (`AUTH_SERVER_PORT`, `ACTIVITY_SERVER_PORT`, `FRONTEND_PORT`), host, kredensial Supabase, kunci Gemini, direktori unggah, batas ukuran file, daftar email admin.
-- Manajemen proses produksi memakai PM2 (`ecosystem.config.cjs`, `start-production.sh`, `stop-production.sh`). `npm run check-env` membantu validasi environment.
+- Manajemen proses produksi memakai PM2 (`ecosystem.config.cjs`, `scripts/start-production.sh`, `scripts/stop-production.sh`). `npm run check-env` membantu validasi environment.
 - Praktik keamanan: JWT secret kuat, cookie secure + domain khusus di produksi, whitelist CORS, dan larangan penggunaan service-role key di sisi klien.
 
 ## Proses Visualisasi Penyerapan Anggaran

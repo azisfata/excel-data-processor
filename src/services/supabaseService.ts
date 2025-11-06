@@ -1,4 +1,3 @@
-
 import { supabase } from '@/utils/supabase';
 import {
   ProcessingResult,
@@ -68,10 +67,16 @@ export async function getAllProcessedResults(userId: string) {
   return rows.map(item => {
     const now = new Date(item.created_at);
     const dateOptions: Intl.DateTimeFormatOptions = {
-      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
     };
     const timeOptions: Intl.DateTimeFormatOptions = {
-      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
     };
     const dateStr = now.toLocaleDateString('id-ID', dateOptions);
     const timeStr = now.toLocaleTimeString('id-ID', timeOptions);
@@ -86,7 +91,7 @@ export async function getAllProcessedResults(userId: string) {
       formattedDate,
       reportType: item.report_type || null,
       reportDate: item.report_date || null,
-      result: processingResult
+      result: processingResult,
     };
   });
 }
@@ -131,7 +136,7 @@ export async function getLatestProcessedResult(userId: string): Promise<{
     result: processingResult,
     lastUpdated: new Date(latestResult.created_at).toLocaleString('id-ID'),
     reportType: latestResult.report_type || null,
-    reportDate: latestResult.report_date || null
+    reportDate: latestResult.report_date || null,
   };
 }
 
@@ -177,11 +182,14 @@ export async function getLatestProcessedResultByReportDate(userId: string): Prom
     result: processingResult,
     lastUpdated: new Date(latestResult.created_at).toLocaleString('id-ID'),
     reportType: latestResult.report_type || null,
-    reportDate: latestResult.report_date || null
+    reportDate: latestResult.report_date || null,
   };
 }
 
-export async function getProcessedResultById(id: string, userId: string): Promise<{
+export async function getProcessedResultById(
+  id: string,
+  userId: string
+): Promise<{
   id: string;
   result: ProcessingResult;
   lastUpdated: string;
@@ -211,7 +219,7 @@ export async function getProcessedResultById(id: string, userId: string): Promis
     result: processingResult,
     lastUpdated: new Date(record.created_at).toLocaleString('id-ID'),
     reportType: record.report_type || null,
-    reportDate: record.report_date || null
+    reportDate: record.report_date || null,
   };
 }
 
@@ -231,22 +239,19 @@ export async function saveProcessedResult(
   }
 
   // Convert Map to plain object for storage
-  const accountNameMapObj = result.accountNameMap ? 
-    Object.fromEntries(result.accountNameMap) : {};
+  const accountNameMapObj = result.accountNameMap ? Object.fromEntries(result.accountNameMap) : {};
 
-  const { error } = await supabase
-    .from('processed_results')
-    .insert([
-      {
-        file_name: fileName,
-        processed_data: result.finalData,
-        totals: result.totals,
-        account_name_map: accountNameMapObj,
-        report_type: options.reportType,
-        report_date: options.reportDate,
-        user_id: userId
-      },
-    ]);
+  const { error } = await supabase.from('processed_results').insert([
+    {
+      file_name: fileName,
+      processed_data: result.finalData,
+      totals: result.totals,
+      account_name_map: accountNameMapObj,
+      report_type: options.reportType,
+      report_date: options.reportDate,
+      user_id: userId,
+    },
+  ]);
 
   if (error) {
     console.error('Error saving processed result:', error);
@@ -261,13 +266,14 @@ export async function saveProcessedResult(
  * @returns An array of activities.
  */
 export async function getActivities(userId: string): Promise<Activity[]> {
-    if (!userId) {
-        return [];
-    }
+  if (!userId) {
+    return [];
+  }
 
-    const { data, error } = await supabase
-        .from('activities')
-        .select(`
+  const { data, error } = await supabase
+    .from('activities')
+    .select(
+      `
             id,
             nama,
             status,
@@ -284,45 +290,47 @@ export async function getActivities(userId: string): Promise<Activity[]> {
                 uraian,
                 jumlah
             )
-        `)
-        .eq('user_id', userId)
-        .order('created_at', { ascending: true });
+        `
+    )
+    .eq('user_id', userId)
+    .order('created_at', { ascending: true });
 
-    if (error) {
-        console.error('Error fetching activities:', error);
-        return [];
-    }
+  if (error) {
+    console.error('Error fetching activities:', error);
+    return [];
+  }
 
-    if (!data) {
-        return [];
-    }
+  if (!data) {
+    return [];
+  }
 
-        const rows = data as SupabaseActivityRow[];
+  const rows = data as SupabaseActivityRow[];
 
-    return rows.map(activity => {
-        const allocations = (activity.allocations ?? []) as SupabaseAllocationRow[];
+  return rows.map(activity => {
+    const allocations = (activity.allocations ?? []) as SupabaseAllocationRow[];
 
-        return {
-            id: activity.id,
-            nama: activity.nama,
-            status: activity.status || 'draft',
-            tanggal_pelaksanaan: activity.tanggal_pelaksanaan || null,
-            tujuan_kegiatan: activity.tujuan_kegiatan || null,
-            kl_unit_terkait: activity.kl_unit_terkait || null,
-            penanggung_jawab: activity.penanggung_jawab || null,
-            capaian: activity.capaian || null,
-            pending_issue: activity.pending_issue || null,
-            rencana_tindak_lanjut: activity.rencana_tindak_lanjut || null,
-            attachments: [],
-            allocations: allocations.map((alloc): BudgetAllocation => ({
-                kode: alloc.kode,
-                uraian: alloc.uraian || '',
-                jumlah: alloc.jumlah,
-            })),
-        };
-    });
+    return {
+      id: activity.id,
+      nama: activity.nama,
+      status: activity.status || 'draft',
+      tanggal_pelaksanaan: activity.tanggal_pelaksanaan || null,
+      tujuan_kegiatan: activity.tujuan_kegiatan || null,
+      kl_unit_terkait: activity.kl_unit_terkait || null,
+      penanggung_jawab: activity.penanggung_jawab || null,
+      capaian: activity.capaian || null,
+      pending_issue: activity.pending_issue || null,
+      rencana_tindak_lanjut: activity.rencana_tindak_lanjut || null,
+      attachments: [],
+      allocations: allocations.map(
+        (alloc): BudgetAllocation => ({
+          kode: alloc.kode,
+          uraian: alloc.uraian || '',
+          jumlah: alloc.jumlah,
+        })
+      ),
+    };
+  });
 }
-
 
 /**
  * Adds a new activity and its associated allocations to the database.
@@ -330,59 +338,62 @@ export async function getActivities(userId: string): Promise<Activity[]> {
  * @param userId The ID of the user creating the activity.
  * @returns The newly created activity with its ID.
  */
-export async function addActivity(newActivity: Omit<Activity, 'id'>, userId: string): Promise<Activity> {
-    if (!userId) {
-        throw new Error('Sesi pengguna tidak valid. Silakan login ulang.');
+export async function addActivity(
+  newActivity: Omit<Activity, 'id'>,
+  userId: string
+): Promise<Activity> {
+  if (!userId) {
+    throw new Error('Sesi pengguna tidak valid. Silakan login ulang.');
+  }
+
+  const { data: activityData, error: activityError } = await supabase
+    .from('activities')
+    .insert({
+      nama: newActivity.nama,
+      status: newActivity.status || 'draft', // Default status 'draft' jika tidak diset
+      tanggal_pelaksanaan: newActivity.tanggal_pelaksanaan || null,
+      tujuan_kegiatan: newActivity.tujuan_kegiatan,
+      kl_unit_terkait: newActivity.kl_unit_terkait,
+      penanggung_jawab: newActivity.penanggung_jawab,
+      capaian: newActivity.capaian,
+      pending_issue: newActivity.pending_issue,
+      rencana_tindak_lanjut: newActivity.rencana_tindak_lanjut,
+      user_id: userId,
+    })
+    .select()
+    .single();
+
+  if (activityError || !activityData) {
+    console.error('Error creating activity:', activityError);
+    throw new Error('Gagal membuat kegiatan baru.');
+  }
+
+  const newActivityId = activityData.id;
+
+  if (newActivity.allocations.length > 0) {
+    const allocationsToInsert = newActivity.allocations.map(alloc => ({
+      activity_id: newActivityId,
+      kode: alloc.kode,
+      uraian: alloc.uraian,
+      jumlah: alloc.jumlah,
+    }));
+
+    const { error: allocationError } = await supabase
+      .from('allocations')
+      .insert(allocationsToInsert);
+
+    if (allocationError) {
+      console.error('Error adding allocations:', allocationError);
+      await supabase.from('activities').delete().match({ id: newActivityId });
+      throw new Error('Gagal menambahkan alokasi untuk kegiatan.');
     }
+  }
 
-    const { data: activityData, error: activityError } = await supabase
-        .from('activities')
-        .insert({ 
-            nama: newActivity.nama,
-            status: newActivity.status || 'draft',  // Default status 'draft' jika tidak diset
-            tanggal_pelaksanaan: newActivity.tanggal_pelaksanaan || null,
-            tujuan_kegiatan: newActivity.tujuan_kegiatan,
-            kl_unit_terkait: newActivity.kl_unit_terkait,
-            penanggung_jawab: newActivity.penanggung_jawab,
-            capaian: newActivity.capaian,
-            pending_issue: newActivity.pending_issue,
-            rencana_tindak_lanjut: newActivity.rencana_tindak_lanjut,
-            user_id: userId
-        })
-        .select()
-        .single();
-
-    if (activityError || !activityData) {
-        console.error('Error creating activity:', activityError);
-        throw new Error('Gagal membuat kegiatan baru.');
-    }
-
-    const newActivityId = activityData.id;
-
-    if (newActivity.allocations.length > 0) {
-        const allocationsToInsert = newActivity.allocations.map(alloc => ({
-            activity_id: newActivityId,
-            kode: alloc.kode,
-            uraian: alloc.uraian,
-            jumlah: alloc.jumlah,
-        }));
-
-        const { error: allocationError } = await supabase
-            .from('allocations')
-            .insert(allocationsToInsert);
-
-        if (allocationError) {
-            console.error('Error adding allocations:', allocationError);
-            await supabase.from('activities').delete().match({ id: newActivityId });
-            throw new Error('Gagal menambahkan alokasi untuk kegiatan.');
-        }
-    }
-    
-    return {
-        ...newActivity,
-        id: newActivityId,
-        attachments: newActivity.attachments ?? [],
-    };
+  return {
+    ...newActivity,
+    id: newActivityId,
+    attachments: newActivity.attachments ?? [],
+  };
 }
 
 /**
@@ -391,73 +402,77 @@ export async function addActivity(newActivity: Omit<Activity, 'id'>, userId: str
  * @param updatedActivity The updated activity data.
  * @returns The updated activity.
  */
-export async function updateActivity(id: string, updatedActivity: Omit<Activity, 'id'>, userId: string): Promise<Activity> {
-    if (!userId) {
-        throw new Error('Sesi pengguna tidak valid. Silakan login ulang.');
+export async function updateActivity(
+  id: string,
+  updatedActivity: Omit<Activity, 'id'>,
+  userId: string
+): Promise<Activity> {
+  if (!userId) {
+    throw new Error('Sesi pengguna tidak valid. Silakan login ulang.');
+  }
+
+  // Update the activity and ensure ownership
+  const { data: updatedRows, error: activityError } = await supabase
+    .from('activities')
+    .update({
+      nama: updatedActivity.nama,
+      status: updatedActivity.status || 'draft',
+      tanggal_pelaksanaan: updatedActivity.tanggal_pelaksanaan || null,
+      tujuan_kegiatan: updatedActivity.tujuan_kegiatan,
+      kl_unit_terkait: updatedActivity.kl_unit_terkait,
+      penanggung_jawab: updatedActivity.penanggung_jawab,
+      capaian: updatedActivity.capaian,
+      pending_issue: updatedActivity.pending_issue,
+      rencana_tindak_lanjut: updatedActivity.rencana_tindak_lanjut,
+    })
+    .eq('id', id)
+    .eq('user_id', userId)
+    .select('id');
+
+  if (activityError) {
+    console.error('Error updating activity:', activityError);
+    throw new Error('Gagal memperbarui kegiatan.');
+  }
+
+  if (!updatedRows || updatedRows.length === 0) {
+    throw new Error('Kegiatan tidak ditemukan atau Anda tidak memiliki akses.');
+  }
+
+  // Delete existing allocations
+  const { error: deleteAllocationsError } = await supabase
+    .from('allocations')
+    .delete()
+    .match({ activity_id: id });
+
+  if (deleteAllocationsError) {
+    console.error('Error removing old allocations:', deleteAllocationsError);
+    throw new Error('Gagal memperbarui alokasi kegiatan.');
+  }
+
+  // Add new allocations if any
+  if (updatedActivity.allocations.length > 0) {
+    const allocationsToInsert = updatedActivity.allocations.map(alloc => ({
+      activity_id: id,
+      kode: alloc.kode,
+      uraian: alloc.uraian,
+      jumlah: alloc.jumlah,
+    }));
+
+    const { error: allocationError } = await supabase
+      .from('allocations')
+      .insert(allocationsToInsert);
+
+    if (allocationError) {
+      console.error('Error adding new allocations:', allocationError);
+      throw new Error('Gagal menambahkan alokasi untuk kegiatan.');
     }
+  }
 
-    // Update the activity and ensure ownership
-    const { data: updatedRows, error: activityError } = await supabase
-        .from('activities')
-        .update({ 
-            nama: updatedActivity.nama,
-            status: updatedActivity.status || 'draft',
-            tanggal_pelaksanaan: updatedActivity.tanggal_pelaksanaan || null,
-            tujuan_kegiatan: updatedActivity.tujuan_kegiatan,
-            kl_unit_terkait: updatedActivity.kl_unit_terkait,
-            penanggung_jawab: updatedActivity.penanggung_jawab,
-            capaian: updatedActivity.capaian,
-            pending_issue: updatedActivity.pending_issue,
-            rencana_tindak_lanjut: updatedActivity.rencana_tindak_lanjut
-        })
-        .eq('id', id)
-        .eq('user_id', userId)
-        .select('id');
-
-    if (activityError) {
-        console.error('Error updating activity:', activityError);
-        throw new Error('Gagal memperbarui kegiatan.');
-    }
-
-    if (!updatedRows || updatedRows.length === 0) {
-        throw new Error('Kegiatan tidak ditemukan atau Anda tidak memiliki akses.');
-    }
-
-    // Delete existing allocations
-    const { error: deleteAllocationsError } = await supabase
-        .from('allocations')
-        .delete()
-        .match({ activity_id: id });
-
-    if (deleteAllocationsError) {
-        console.error('Error removing old allocations:', deleteAllocationsError);
-        throw new Error('Gagal memperbarui alokasi kegiatan.');
-    }
-
-    // Add new allocations if any
-    if (updatedActivity.allocations.length > 0) {
-        const allocationsToInsert = updatedActivity.allocations.map(alloc => ({
-            activity_id: id,
-            kode: alloc.kode,
-            uraian: alloc.uraian,
-            jumlah: alloc.jumlah,
-        }));
-
-        const { error: allocationError } = await supabase
-            .from('allocations')
-            .insert(allocationsToInsert);
-
-        if (allocationError) {
-            console.error('Error adding new allocations:', allocationError);
-            throw new Error('Gagal menambahkan alokasi untuk kegiatan.');
-        }
-    }
-    
-    return {
-        ...updatedActivity,
-        id,
-        attachments: updatedActivity.attachments ?? [],
-    };
+  return {
+    ...updatedActivity,
+    id,
+    attachments: updatedActivity.attachments ?? [],
+  };
 }
 
 /**
@@ -465,27 +480,26 @@ export async function updateActivity(id: string, updatedActivity: Omit<Activity,
  * @param id The UUID of the activity to remove.
  */
 export async function removeActivity(id: string, userId: string): Promise<void> {
-    if (!userId) {
-        throw new Error('Sesi pengguna tidak valid. Silakan login ulang.');
-    }
+  if (!userId) {
+    throw new Error('Sesi pengguna tidak valid. Silakan login ulang.');
+  }
 
-    const { data, error } = await supabase
-        .from('activities')
-        .delete()
-        .eq('id', id)
-        .eq('user_id', userId)
-        .select('id');
+  const { data, error } = await supabase
+    .from('activities')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', userId)
+    .select('id');
 
-    if (error) {
-        console.error('Error removing activity:', error);
-        throw new Error('Gagal menghapus kegiatan.');
-    }
+  if (error) {
+    console.error('Error removing activity:', error);
+    throw new Error('Gagal menghapus kegiatan.');
+  }
 
-    if (!data || data.length === 0) {
-        throw new Error('Kegiatan tidak ditemukan atau Anda tidak memiliki akses.');
-    }
+  if (!data || data.length === 0) {
+    throw new Error('Kegiatan tidak ditemukan atau Anda tidak memiliki akses.');
+  }
 }
-
 
 // --- User Settings ---
 
@@ -495,24 +509,24 @@ export async function removeActivity(id: string, userId: string): Promise<void> 
  * @returns The value of the setting, or null if not found.
  */
 export async function getSetting(key: string, userId: string): Promise<string | null> {
-    if (!userId) return null;
-    const { data, error } = await supabase
-        .from('user_settings')
-        .select('value')
-        .eq('key', key)
-        .eq('user_id', userId)
-        .limit(1);
+  if (!userId) return null;
+  const { data, error } = await supabase
+    .from('user_settings')
+    .select('value')
+    .eq('key', key)
+    .eq('user_id', userId)
+    .limit(1);
 
-    if (error) {
-        console.error(`Error fetching setting '${key}':`, error);
-        return null;
-    }
+  if (error) {
+    console.error(`Error fetching setting '${key}':`, error);
+    return null;
+  }
 
-    if (!data || data.length === 0) {
-        return null; // Gracefully return null if setting not found
-    }
+  if (!data || data.length === 0) {
+    return null; // Gracefully return null if setting not found
+  }
 
-    return data[0].value;
+  return data[0].value;
 }
 
 /**
@@ -522,21 +536,13 @@ export async function getSetting(key: string, userId: string): Promise<string | 
  * @param userId The ID of the user.
  */
 export async function saveSetting(key: string, value: string, userId: string): Promise<void> {
-    if (!userId) throw new Error('User ID is required to save a setting.');
-    const { error } = await supabase
-        .from('user_settings')
-        .upsert({ key, value, user_id: userId, updated_at: new Date().toISOString() });
+  if (!userId) throw new Error('User ID is required to save a setting.');
+  const { error } = await supabase
+    .from('user_settings')
+    .upsert({ key, value, user_id: userId, updated_at: new Date().toISOString() });
 
-    if (error) {
-        console.error(`Error saving setting '${key}':`, error);
-        throw new Error('Gagal menyimpan pengaturan.');
-    }
+  if (error) {
+    console.error(`Error saving setting '${key}':`, error);
+    throw new Error('Gagal menyimpan pengaturan.');
+  }
 }
-
-
-
-
-
-
-
-

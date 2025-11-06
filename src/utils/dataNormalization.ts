@@ -7,13 +7,19 @@ const cloneRow = (row: ExcelRow): ExcelRow => (Array.isArray(row) ? [...row] : [
 
 export const getLastSegmentFromCode = (code: string): string => {
   if (!code) return '';
-  const segments = code.split('.').map(segment => segment.trim()).filter(Boolean);
+  const segments = code
+    .split('.')
+    .map(segment => segment.trim())
+    .filter(Boolean);
   return segments.length ? segments[segments.length - 1] : '';
 };
 
 export const getSegmentAtLevel = (code: string, levelIndex: number): string => {
   if (!code) return '';
-  const segments = code.split('.').map(segment => segment.trim()).filter(Boolean);
+  const segments = code
+    .split('.')
+    .map(segment => segment.trim())
+    .filter(Boolean);
   return segments[levelIndex] ?? '';
 };
 
@@ -34,7 +40,10 @@ export function normalizeCodeAndDescription(data: ExcelData): ExcelData {
     const [, sixDigitCode, cleanedDescription] = match;
     const codeStr = typeof row[0] === 'string' ? row[0].trim() : '';
     const segments = codeStr
-      ? codeStr.split('.').map(segment => segment.trim()).filter(Boolean)
+      ? codeStr
+          .split('.')
+          .map(segment => segment.trim())
+          .filter(Boolean)
       : [];
 
     if (!segments.length) {

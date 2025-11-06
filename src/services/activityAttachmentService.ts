@@ -15,19 +15,25 @@ export async function fetchActivityAttachments(): Promise<Record<string, Activit
   return handleResponse<Record<string, ActivityAttachment[]>>(response);
 }
 
-export async function uploadActivityAttachment(activityId: string, file: File): Promise<ActivityAttachment> {
+export async function uploadActivityAttachment(
+  activityId: string,
+  file: File
+): Promise<ActivityAttachment> {
   const formData = new FormData();
   formData.append('file', file);
 
   const response = await fetch(`${BASE_URL}/${activityId}/attachment`, {
     method: 'POST',
-    body: formData
+    body: formData,
   });
 
   return handleResponse<ActivityAttachment>(response);
 }
 
-export async function uploadActivityAttachments(activityId: string, files: File[]): Promise<ActivityAttachment[]> {
+export async function uploadActivityAttachments(
+  activityId: string,
+  files: File[]
+): Promise<ActivityAttachment[]> {
   if (!files.length) {
     return [];
   }
@@ -39,13 +45,16 @@ export async function uploadActivityAttachments(activityId: string, files: File[
   return uploaded;
 }
 
-export async function deleteActivityAttachment(activityId: string, attachmentId?: string): Promise<void> {
+export async function deleteActivityAttachment(
+  activityId: string,
+  attachmentId?: string
+): Promise<void> {
   const endpoint = attachmentId
     ? `${BASE_URL}/${activityId}/attachment/${attachmentId}`
     : `${BASE_URL}/${activityId}/attachment`;
 
   const response = await fetch(endpoint, {
-    method: 'DELETE'
+    method: 'DELETE',
   });
 
   if (!response.ok) {
