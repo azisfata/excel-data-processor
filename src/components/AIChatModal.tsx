@@ -2,6 +2,9 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { fetchAiResponse, type AiChatMessage as AiRequestMessage } from '@/services/aiService';
 import { createActivityEnhancedPrompt, detectActivityQueryType, QUICK_ACTIVITY_PROMPTS } from '@/utils/aiActivityPrompts';
 
+// Import komponen XAI
+import { getAIExplanation } from '@/services/aiExplanationService';
+
 type AiMessage = {
   id: string;
   sender: 'user' | 'assistant';
@@ -28,6 +31,10 @@ const AIChatModal: React.FC<AIChatModalProps> = ({ onClose, onNewMessage, system
   const [messages, setMessages] = useState<AiMessage[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'chat'>('chat');
+
+
+  // Removed process steps state for AI Processing Flow
   const messagesEndRef = useRef<null | HTMLDivElement>(null);
   const resolvedSystemPrompt = useMemo(
     () =>
@@ -126,7 +133,11 @@ const AIChatModal: React.FC<AIChatModalProps> = ({ onClose, onNewMessage, system
         timestamp: new Date().toISOString(),
       };
 
-      setMessages(prev => [...prev, assistantMessage]);
+      // Tambahkan pesan asisten ke daftar
+      const updatedMessages = [...newMessages, assistantMessage];
+      setMessages(updatedMessages);
+
+
     } catch (err) {
       console.error('AI chat modal error:', err);
       const errorMessage =
@@ -160,7 +171,14 @@ const AIChatModal: React.FC<AIChatModalProps> = ({ onClose, onNewMessage, system
       <div className="bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden flex flex-col h-[500px] max-h-[80vh]">
         {/* Header */}
         <div className="bg-blue-600 text-white p-3 flex justify-between items-center">
-          <h3 className="font-semibold">AI Analyst</h3>
+          <div className="flex space-x-2">
+            <button
+              className={`px-3 py-1 rounded-md text-sm ${activeTab === 'chat' ? 'bg-blue-700' : 'hover:bg-blue-700'}`}
+              onClick={() => setActiveTab('chat')}
+            >
+              Chat
+            </button>
+          </div>
           <button onClick={onClose} className="text-white hover:text-gray-200 focus:outline-none">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
@@ -175,89 +193,91 @@ const AIChatModal: React.FC<AIChatModalProps> = ({ onClose, onNewMessage, system
 
         {/* Chat Messages */}
         <div className="flex-1 overflow-y-auto p-3 bg-gray-50">
-          {messages.length === 0 ? (
-            <div className="text-center text-gray-500 py-8">
-              <p>Belum ada percakapan. Kirim pesan pertama Anda!</p>
-              <div className="mt-4 flex flex-wrap gap-2 justify-center">
-                {QUICK_ACTIVITY_PROMPTS.map((prompt, index) => (
-                  <button
-                    key={index}
-                    onClick={() => setInput(prompt.prompt)}
-                    className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded hover:bg-blue-200 flex items-center gap-1"
-                    title={prompt.label}
-                  >
-                    <span>{prompt.icon}</span>
-                    {prompt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {messages.map(message => {
-                const isUser = message.sender === 'user';
-                const timestamp = formatTime(message.timestamp);
-
-                return (
-                  <div
-                    key={message.id}
-                    className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
-                  >
-                    <div
-                      className={`max-w-[85%] rounded-lg px-3 py-2 text-sm shadow-sm ${
-                        isUser
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-white border border-gray-200 text-gray-800'
-                      }`}
+          <>
+            {messages.length === 0 ? (
+              <div className="text-center text-gray-500 py-8">
+                <p>Belum ada percakapan. Kirim pesan pertama Anda!</p>
+                <div className="mt-4 flex flex-wrap gap-2 justify-center">
+                  {QUICK_ACTIVITY_PROMPTS.map((prompt, index) => (
+                    <button
+                      key={index}
+                      onClick={() => setInput(prompt.prompt)}
+                      className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded hover:bg-blue-200 flex items-center gap-1"
+                      title={prompt.label}
                     >
-                      <div className="mb-1 flex items-center justify-between gap-3">
-                        <span className="text-xs font-semibold uppercase tracking-wide">
-                          {isUser ? 'Anda' : 'AI'}
-                        </span>
-                        <span
-                          className={`text-[10px] ${isUser ? 'text-white/80' : 'text-gray-400'}`}
-                        >
-                          {timestamp}
-                        </span>
+                      <span>{prompt.icon}</span>
+                      {prompt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {messages.map(message => {
+                  const isUser = message.sender === 'user';
+                  const timestamp = formatTime(message.timestamp);
+
+                  return (
+                    <div
+                      key={message.id}
+                      className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
+                    >
+                      <div
+                        className={`max-w-[85%] rounded-lg px-3 py-2 text-sm shadow-sm ${
+                          isUser
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-white border border-gray-200 text-gray-800'
+                        }`}
+                      >
+                        <div className="mb-1 flex items-center justify-between gap-3">
+                          <span className="text-xs font-semibold uppercase tracking-wide">
+                            {isUser ? 'Anda' : 'AI'}
+                          </span>
+                          <span
+                            className={`text-[10px] ${isUser ? 'text-white/80' : 'text-gray-400'}`}
+                          >
+                            {timestamp}
+                          </span>
+                        </div>
+                        <p
+                          className="leading-relaxed"
+                          dangerouslySetInnerHTML={{ __html: formatContent(message.content) }}
+                        />
                       </div>
-                      <p
-                        className="leading-relaxed"
-                        dangerouslySetInnerHTML={{ __html: formatContent(message.content) }}
-                      />
+                    </div>
+                  );
+                })}
+                {isProcessing && (
+                  <div className="flex justify-start">
+                    <div className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700">
+                      <svg
+                        className="h-4 w-4 animate-spin text-blue-500"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        ></circle>
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V2a10 10 0 1010 10h-2a8 8 0 11-16 0z"
+                        ></path>
+                      </svg>
+                      <span>Sedang memproses...</span>
                     </div>
                   </div>
-                );
-              })}
-              {isProcessing && (
-                <div className="flex justify-start">
-                  <div className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700">
-                    <svg
-                      className="h-4 w-4 animate-spin text-blue-500"
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      ></circle>
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V2a10 10 0 1010 10h-2a8 8 0 11-16 0z"
-                      ></path>
-                    </svg>
-                    <span>Sedang memproses...</span>
-                  </div>
-                </div>
-              )}
-              <div ref={messagesEndRef} />
-            </div>
-          )}
+                )}
+                <div ref={messagesEndRef} />
+              </div>
+            )}
+          </>
         </div>
 
         {/* Input Form */}

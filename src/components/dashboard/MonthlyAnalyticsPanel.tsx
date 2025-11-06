@@ -14,6 +14,9 @@ import ChartDataLabels from 'chartjs-plugin-datalabels';
 import { Bar, Doughnut } from 'react-chartjs-2';
 import { MonthlyReport, getLevel7DataForMonth } from '@/services/historicalDataService';
 import { AccountLevel7Data } from '@/types';
+import { getAIExplanation } from '@/services/aiExplanationService';
+
+// Import komponen XAI
 
 // Register Chart.js components
 ChartJS.register(
@@ -81,6 +84,10 @@ const MonthlyAnalyticsPanel: React.FC<MonthlyAnalyticsPanelProps> = ({
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
   const [compositionView, setCompositionView] = useState<'realisasi' | 'pagu'>('realisasi');
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
+
+
+  // Removed process steps state for AI Processing Flow
+
 
   const availableReports = allReportsProp ?? legacyAllReports ?? [];
   const selectedHistoryId =
@@ -193,7 +200,7 @@ const MonthlyAnalyticsPanel: React.FC<MonthlyAnalyticsPanelProps> = ({
   const anggaranPerUraian = sisaAnggaranTerbanyak;
 
   // Generate AI analysis untuk bulan ini
-  const generateMonthlyAnalysis = () => {
+  const generateMonthlyAnalysis = async () => {
     if (!activeReport || !currentMonthData.length) {
       const analysis = 'Tidak ada data untuk dianalisis pada bulan ini.';
       setAiAnalysis(analysis);
@@ -257,6 +264,25 @@ ${largeSisa
 
     setAiAnalysis(analysis);
     onAIAnalysis(analysis);
+    
+    // Ambil penjelasan XAI
+    try {
+      const explanation = await getAIExplanation({ 
+        totalPagu, 
+        totalRealisasi, 
+        avgPersentase,
+        healthyItems,
+        warningItems,
+        criticalItems,
+        largeSisa: largeSisa.length
+      });
+      
+      setAiExplanation(explanation);
+
+
+    } catch (error) {
+      console.error('Error getting AI explanation:', error);
+    }
   };
 
   // Chart configurations dengan datalabel plugin
@@ -766,7 +792,7 @@ ${largeSisa
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 h-full flex flex-col">
       {/* Header */}
       <div
         className="p-4 bg-gray-50 border-b border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors"
@@ -793,7 +819,8 @@ ${largeSisa
 
       {/* Content */}
       <div
-        className={`transition-all duration-200 ${expandedSection === 'monthly' ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}
+        className={`transition-all duration-200 ${expandedSection === 'monthly' ? 'opacity-100 flex-1 overflow-y-auto' : 'max-h-0 opacity-0 overflow-hidden'}`}
+        style={{ maxHeight: expandedSection === 'monthly' ? 'calc(100vh - 200px)' : '0' }}
       >
         <div className="p-6 space-y-6">
           {/* Visualisasi Anggaran per Uraian */}
@@ -1047,6 +1074,9 @@ ${largeSisa
               </div>
             </div>
           )}
+
+          {/* XAI Components - Tampilkan jika ada penjelasan AI */}
+          
         </div>
       </div>
     </div>

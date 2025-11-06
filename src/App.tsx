@@ -174,11 +174,14 @@ const App: React.FC = () => {
   });
   const [showUploadMetadataModal, setShowUploadMetadataModal] = useState(false);
   const [showDownloadModal, setShowDownloadModal] = useState(false);
+  const [showSelectActivitiesModal, setShowSelectActivitiesModal] = useState(false);
   const [pendingUploadFile, setPendingUploadFile] = useState<File | null>(null);
   const [uploadReportType, setUploadReportType] = useState<'Akrual' | 'SP2D'>('Akrual');
   const [uploadReportDate, setUploadReportDate] = useState('');
   const [uploadMetadataError, setUploadMetadataError] = useState('');
   const [budgetView, setBudgetView] = useState('realisasi-laporan');
+  const [selectedDocumentType, setSelectedDocumentType] = useState<'rkb' | 'lkbb' | null>(null);
+  const [selectedActivityIds, setSelectedActivityIds] = useState<Set<string>>(new Set());
   const currentYear = useMemo(() => new Date().getFullYear(), []);
   const currentMonthIndex = useMemo(() => new Date().getMonth(), []);
 
@@ -1116,60 +1119,84 @@ const HistoryDropdown = () => (
   };
 
   const handleDownloadRkbPdf = () => {
-    setShowDownloadModal(true);
+    // Prepare selected activities based on current filters
+    const initialSelectedIds = new Set(filteredActivities.map(activity => activity.id));
+    setSelectedActivityIds(initialSelectedIds);
+    setShowSelectActivitiesModal(true);
   };
 
-  const downloadRkbDocument = async () => {
+
+
+  const handleDownloadWithSelectedActivities = async (docType: 'rkb' | 'lkbb') => {
     try {
-      setShowDownloadModal(false);
-      // Generate the RKB PDF with currently filtered activities
-      const pdfBlob = await generateRkbDocumentPdf(filteredActivities, selectedYear, selectedMonth, selectedStatus, result);
+      // Get the selected activities based on the checked IDs
+      const selectedActivities = activities.filter(activity => selectedActivityIds.has(activity.id));
       
-      // Create download link
-      const url = URL.createObjectURL(pdfBlob);
-      const a = document.createElement('a');
-      a.href = url;
-      const monthLabel = 
-        selectedMonth === 'all' 
-          ? 'all' 
-          : selectedMonth === 'no-date' 
-            ? 'no-date' 
-            : MONTH_NAMES_ID[selectedMonth];
-      a.download = `RKB_Document_${selectedYear}_${monthLabel}_${new Date().toISOString().slice(0, 10)}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      if (docType === 'rkb') {
+        // Generate the RKB PDF with selected activities
+        const pdfBlob = await generateRkbDocumentPdf(selectedActivities, selectedYear, selectedMonth, selectedStatus, result);
+        
+        // Create download link
+        const url = URL.createObjectURL(pdfBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        const monthLabel = 
+          selectedMonth === 'all' 
+            ? 'all' 
+            : selectedMonth === 'no-date' 
+              ? 'no-date' 
+              : MONTH_NAMES_ID[selectedMonth];
+        a.download = `RKB_Document_${selectedYear}_${monthLabel}_${new Date().toISOString().slice(0, 10)}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } else if (docType === 'lkbb') {
+        // Generate the LKBB PDF with selected activities
+        const pdfBlob = await generateRkbPdf(selectedActivities, selectedYear, selectedMonth, selectedStatus, result);
+        
+        // Create download link
+        const url = URL.createObjectURL(pdfBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        const monthLabel = 
+          selectedMonth === 'all' 
+            ? 'all' 
+            : selectedMonth === 'no-date' 
+              ? 'no-date' 
+              : MONTH_NAMES_ID[selectedMonth];
+        a.download = `LKKB_${selectedYear}_${monthLabel}_${new Date().toISOString().slice(0, 10)}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+      
+      setShowSelectActivitiesModal(false);
     } catch (error) {
-      console.error('Error generating RKB PDF:', error);
-      setError('Gagal membuat file PDF RKB. Silakan coba lagi.');
+      console.error('Error generating PDF:', error);
+      setError('Gagal membuat file PDF. Silakan coba lagi.');
     }
   };
 
-  const downloadLkbbDocument = async () => {
-    try {
-      setShowDownloadModal(false);
-      // Generate the LKBB PDF with currently filtered activities
-      const pdfBlob = await generateRkbPdf(filteredActivities, selectedYear, selectedMonth, selectedStatus, result);
-      
-      // Create download link
-      const url = URL.createObjectURL(pdfBlob);
-      const a = document.createElement('a');
-      a.href = url;
-      const monthLabel = 
-        selectedMonth === 'all' 
-          ? 'all' 
-          : selectedMonth === 'no-date' 
-            ? 'no-date' 
-            : MONTH_NAMES_ID[selectedMonth];
-      a.download = `LKKB_${selectedYear}_${monthLabel}_${new Date().toISOString().slice(0, 10)}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Error generating LKBB PDF:', error);
-      setError('Gagal membuat file PDF LKBB. Silakan coba lagi.');
+  const toggleActivitySelection = (activityId: string) => {
+    setSelectedActivityIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(activityId)) {
+        newSet.delete(activityId);
+      } else {
+        newSet.add(activityId);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleAllActivities = (selectAll: boolean) => {
+    if (selectAll) {
+      const allIds = new Set(filteredActivities.map(activity => activity.id));
+      setSelectedActivityIds(allIds);
+    } else {
+      setSelectedActivityIds(new Set());
     }
   };
 
@@ -3430,55 +3457,130 @@ const HistoryDropdown = () => (
       </main>
       <FloatingAIButton onOpenAiPanel={scrollToAiPanel} />
       
-      {/* Download Modal */}
-      {showDownloadModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-96">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">Pilih Jenis Dokumen</h3>
-              <button 
-                onClick={() => setShowDownloadModal(false)}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <p className="text-gray-600 mb-6">Silakan pilih jenis dokumen yang ingin Anda unduh:</p>
-            <div className="space-y-4">
-              <button
-                onClick={downloadRkbDocument}
-                className="w-full flex items-center justify-between p-4 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                <div className="text-left">
-                  <div className="font-medium">Dokumen RKB</div>
-                  <div className="text-sm text-gray-500">Rencana Kegiatan Bulanan</div>
+      {/* Document Generation is now handled directly in the activity selection modal */}
+      
+      {/* Select Activities Modal */}
+      {showSelectActivitiesModal && !selectedDocumentType && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto p-4">
+          <div className="bg-white rounded-lg w-full max-w-4xl max-h-[90vh] flex flex-col">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-semibold">Pilih Kegiatan untuk Dokumen</h3>
+                <button 
+                  onClick={() => setShowSelectActivitiesModal(false)}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <div className="mt-4 flex items-center justify-between">
+                <p className="text-gray-600">Pilih kegiatan yang akan disertakan dalam dokumen.</p>
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => toggleAllActivities(true)}
+                    className="px-3 py-1.5 text-sm text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
+                  >
+                    Pilih Semua
+                  </button>
+                  <button
+                    onClick={() => toggleAllActivities(false)}
+                    className="px-3 py-1.5 text-sm text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-md transition-colors"
+                  >
+                    Batal Semua
+                  </button>
                 </div>
-                <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-              </button>
-              <button
-                onClick={downloadLkbbDocument}
-                className="w-full flex items-center justify-between p-4 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                <div className="text-left">
-                  <div className="font-medium">Dokumen LKKB</div>
-                  <div className="text-sm text-gray-500">Laporan Kegiatan Bulanan</div>
-                </div>
-                <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-              </button>
+              </div>
             </div>
-            <div className="mt-6 flex justify-end">
-              <button
-                onClick={() => setShowDownloadModal(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
-              >
-                Batal
-              </button>
+            <div className="p-6 overflow-y-auto flex-1 max-h-[60vh]">
+              <div className="space-y-4">
+                {filteredActivities.length > 0 ? (
+                  filteredActivities.map(activity => (
+                    <div key={activity.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                      <label className="flex items-start space-x-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedActivityIds.has(activity.id)}
+                          onChange={() => toggleActivitySelection(activity.id)}
+                          className="mt-1 h-4 w-4 text-blue-600 rounded focus:ring-blue-500 border-gray-300"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-900 break-words">{activity.nama}</p>
+                              <p className="text-xs text-gray-500 mt-1 truncate">{activity.tujuan_kegiatan || 'Tidak ada tujuan'}</p>
+                              <div className="flex items-center mt-2 space-x-4 text-xs text-gray-500">
+                                <span>Tanggal: {activity.tanggal_pelaksanaan ? formatActivityDate(activity.tanggal_pelaksanaan) : '-'}</span>
+                                <span>Status: {activity.status || '-'}</span>
+                                <span>Total Alokasi: {formatCurrency(activity.allocations.reduce((sum, alloc) => sum + (alloc.jumlah || 0), 0))}</span>
+                              </div>
+                            </div>
+                            <div className="flex-shrink-0 ml-4">
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                {activity.allocations.length} alokasi
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </label>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-gray-500 text-center py-4">Tidak ada kegiatan yang sesuai dengan filter yang dipilih.</p>
+                )}
+              </div>
+            </div>
+            <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex justify-between">
+              <div className="text-sm text-gray-500">
+                {selectedActivityIds.size} dari {filteredActivities.length} kegiatan dipilih
+              </div>
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => setShowSelectActivitiesModal(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                >
+                  Batal
+                </button>
+                <div className="flex space-x-2">
+                  <button
+                    onClick={async () => {
+                      if (selectedActivityIds.size > 0) {
+                        await handleDownloadWithSelectedActivities('rkb');
+                      }
+                    }}
+                    disabled={selectedActivityIds.size === 0}
+                    className={`px-4 py-2 text-sm font-medium text-white rounded-md transition-colors flex items-center ${
+                      selectedActivityIds.size === 0
+                        ? 'bg-gray-400 cursor-not-allowed'
+                        : 'bg-red-600 hover:bg-red-700'
+                    }`}
+                  >
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                    </svg>
+                    Download RKB
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (selectedActivityIds.size > 0) {
+                        await handleDownloadWithSelectedActivities('lkbb');
+                      }
+                    }}
+                    disabled={selectedActivityIds.size === 0}
+                    className={`px-4 py-2 text-sm font-medium text-white rounded-md transition-colors flex items-center ${
+                      selectedActivityIds.size === 0
+                        ? 'bg-gray-400 cursor-not-allowed'
+                        : 'bg-green-600 hover:bg-green-700'
+                    }`}
+                  >
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                    </svg>
+                    Download LKKB
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
