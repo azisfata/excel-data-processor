@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { supabase } from '@/utils/supabase';
 import { getAuthApiUrl } from '../config/authApi';
 
@@ -10,6 +10,7 @@ interface User {
   role: string;
   created_at?: string;
   is_approved: boolean;
+  phone_number: string | null;
 }
 
 interface SignupPayload {
@@ -30,6 +31,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isApproved: boolean;
   isAdmin: boolean;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -50,35 +52,32 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    // On initial load, try to authenticate the user from the cookie
-    const checkAuth = async () => {
-      try {
-        const response = await fetch(getAuthApiUrl('auth/me'), {
-          credentials: 'include',
-        });
+  const fetchCurrentUser = useCallback(async () => {
+    try {
+      const response = await fetch(getAuthApiUrl('auth/me'), {
+        credentials: 'include',
+      });
 
-        if (response.ok) {
-          const data = await response.json();
-          setUser(data.user);
-        } else {
-          setUser(null);
-          if (supabase.global?.headers) {
-            delete supabase.global.headers['Authorization'];
-          }
-        }
-      } catch {
+      if (response.ok) {
+        const data = await response.json();
+        setUser(data.user);
+      } else {
         setUser(null);
         if (supabase.global?.headers) {
           delete supabase.global.headers['Authorization'];
         }
-      } finally {
-        setLoading(false);
       }
-    };
-
-    checkAuth();
+    } catch {
+      setUser(null);
+      if (supabase.global?.headers) {
+        delete supabase.global.headers['Authorization'];
+      }
+    }
   }, []);
+
+  useEffect(() => {
+    fetchCurrentUser().finally(() => setLoading(false));
+  }, [fetchCurrentUser]);
 
   const login = async (email: string, password: string) => {
     const response = await fetch(getAuthApiUrl('auth/login'), {
@@ -146,6 +145,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     isAuthenticated: !!user,
     isApproved: user?.is_approved ?? false,
     isAdmin: user?.role === 'admin',
+    refreshUser: fetchCurrentUser,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

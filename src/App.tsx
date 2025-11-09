@@ -228,6 +228,7 @@ const App: React.FC = () => {
   const [aiAutofillSuccess, setAiAutofillSuccess] = useState<string | null>(null);
   const [aiAutofillSteps, setAiAutofillSteps] = useState<AiAutofillStep[]>([]);
   const [activeHeaderTab, setActiveHeaderTab] = useState<HeaderTabKey>('overview');
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
   // State for confirmation dialogs
   const [confirmDialog, setConfirmDialog] = useState({
@@ -296,6 +297,7 @@ const App: React.FC = () => {
   const [allocationSearch, setAllocationSearch] = useState('');
   const [isAllocationDropdownOpen, setIsAllocationDropdownOpen] = useState(false);
   const allocationDropdownRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement | null>(null);
 
   const reportYear = useMemo(() => {
     return latestReportMeta.reportDate
@@ -319,6 +321,21 @@ const App: React.FC = () => {
     prevDate.setMonth(prevDate.getMonth() - 1);
     return prevDate.toLocaleDateString('id-ID', { month: 'long' });
   }, [latestReportMeta.reportDate]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        userMenuRef.current &&
+        event.target instanceof Node &&
+        !userMenuRef.current.contains(event.target)
+      ) {
+        setIsUserMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const isReportJanuary = useMemo(
     () => reportMonthName?.toLowerCase() === 'januari',
@@ -2125,6 +2142,7 @@ const App: React.FC = () => {
   }
 
   const handleLogout = async () => {
+    setIsUserMenuOpen(false);
     await logout();
     navigate('/login');
   };
@@ -2206,31 +2224,86 @@ const App: React.FC = () => {
                   Kelola User
                 </button>
               )}
-              <div className="flex items-center gap-3 rounded-full border border-gray-200 bg-white/80 px-3 py-1.5 shadow-sm">
-                <div className="text-right leading-tight">
-                  <p className="text-sm font-semibold text-gray-800">{user?.name}</p>
-                  <p className="text-xs text-gray-500">{user?.unit || user?.role}</p>
-                </div>
+              <div className="relative" ref={userMenuRef}>
                 <button
-                  onClick={handleLogout}
-                  className="inline-flex items-center gap-2 rounded-full bg-red-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-red-700"
+                  type="button"
+                  onClick={() => setIsUserMenuOpen(prev => !prev)}
+                  className="flex items-center gap-3 rounded-full border border-gray-200 bg-white/80 px-3 py-1.5 shadow-sm transition hover:border-indigo-200"
+                  aria-haspopup="true"
+                  aria-expanded={isUserMenuOpen}
                 >
+                  <div className="text-right leading-tight">
+                    <p className="text-sm font-semibold text-gray-800">{user?.name}</p>
+                    <p className="text-xs text-gray-500">{user?.unit || user?.role}</p>
+                  </div>
                   <svg
-                    className="h-4 w-4"
+                    className={`h-4 w-4 text-gray-500 transition-transform ${isUserMenuOpen ? 'rotate-180' : ''}`}
                     xmlns="http://www.w3.org/2000/svg"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
                     strokeWidth={2}
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-                    />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                   </svg>
-                  Logout
                 </button>
+                {isUserMenuOpen && (
+                  <div className="absolute right-0 mt-2 w-56 rounded-2xl border border-gray-100 bg-white shadow-xl ring-1 ring-black/5 z-50">
+                    <div className="px-4 py-3 border-b border-gray-100">
+                      <p className="text-sm font-semibold text-gray-900">{user?.name}</p>
+                      <p className="text-xs text-gray-500">{user?.unit || user?.role}</p>
+                      <p className="text-xs text-gray-400 truncate">{user?.email}</p>
+                    </div>
+                    <div className="p-2 space-y-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsUserMenuOpen(false);
+                          navigate('/account');
+                        }}
+                        className="w-full inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50"
+                      >
+                        <svg
+                          className="h-4 w-4"
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.89 3.31.876 2.42 2.42a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.89 1.543-.876 3.31-2.42 2.42a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.89-3.31-.876-2.42-2.42a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.89-1.543.876-3.31 2.42-2.42.996.574 2.25.034 2.572-1.065z"
+                          />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        Pengaturan Akun
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleLogout}
+                        className="w-full inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+                      >
+                        <svg
+                          className="h-4 w-4"
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                          />
+                        </svg>
+                        Logout
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>

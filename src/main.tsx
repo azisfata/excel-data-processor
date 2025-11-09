@@ -6,6 +6,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import UserManagementPage from './pages/UserManagementPage';
+import AccountSettingsPage from './pages/AccountSettingsPage';
 import App from './App';
 import './index.css';
 
@@ -21,6 +22,14 @@ createRoot(document.getElementById('root')!).render(
             element={
               <ProtectedRoute>
                 <App />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/account"
+            element={
+              <ProtectedRoute>
+                <AccountSettingsPage />
               </ProtectedRoute>
             }
           />

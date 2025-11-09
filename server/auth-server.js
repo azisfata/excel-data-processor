@@ -75,6 +75,96 @@ const hashOtp = (otp) => createHash('sha256').update(otp).digest('hex');
 
 const generateOtp = () => String(randomInt(100000, 1000000));
 
+const sendOtpToPhone = async ({ phoneNumber, name, requesterUserId = null, purpose = 'signup' }) => {
+  if (!FONNTE_TOKEN) {
+    return { success: false, status: 500, error: 'FONNTE_TOKEN belum dikonfigurasi di server.' };
+  }
+
+  const normalizedPhone = normalizePhoneNumber(phoneNumber);
+  if (!normalizedPhone) {
+    return { success: false, status: 400, error: 'Nomor WhatsApp tidak valid.' };
+  }
+
+  try {
+    const { data: existingPhone, error: phoneLookupError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('phone_number', normalizedPhone)
+      .maybeSingle();
+
+    if (phoneLookupError && phoneLookupError.code !== 'PGRST116') {
+      console.error('Error checking phone number:', phoneLookupError);
+      return { success: false, status: 500, error: 'Gagal memeriksa nomor WhatsApp.' };
+    }
+
+    if (existingPhone && (!requesterUserId || existingPhone.id !== requesterUserId)) {
+      return {
+        success: false,
+        status: 409,
+        error:
+          purpose === 'phone_update'
+            ? 'Nomor WhatsApp ini sudah digunakan oleh akun lain.'
+            : 'Nomor WhatsApp ini sudah terdaftar.'
+      };
+    }
+
+    const now = Date.now();
+    const existingOtp = otpStore.get(normalizedPhone);
+    if (existingOtp && now - existingOtp.lastSent < OTP_RESEND_COOLDOWN_MS) {
+      const waitSeconds = Math.ceil(
+        (OTP_RESEND_COOLDOWN_MS - (now - existingOtp.lastSent)) / 1000
+      );
+      return {
+        success: false,
+        status: 429,
+        error: `Harap tunggu ${waitSeconds} detik sebelum meminta OTP lagi.`
+      };
+    }
+
+    const otp = generateOtp();
+    const messageName =
+      typeof name === 'string' && name.trim().length > 0 ? name.trim() : 'Pengguna SAPA';
+    const defaultMessage = `Halo ${messageName}, kode OTP SAPA Anda adalah ${otp}. Berlaku 5 menit. Jangan bagikan kode ini kepada siapa pun.`;
+    const phoneUpdateMessage = `Halo ${messageName}, kode OTP untuk mengubah nomor WhatsApp SAPA Anda adalah ${otp}. Berlaku 5 menit. Jangan bagikan kode ini kepada siapa pun.`;
+    const message = purpose === 'phone_update' ? phoneUpdateMessage : defaultMessage;
+
+    const response = await fetch(FONNTE_API_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: FONNTE_TOKEN,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        target: normalizedPhone,
+        message
+      })
+    });
+
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      console.error('FONNTE OTP send error:', response.status, detail);
+      return {
+        success: false,
+        status: 502,
+        error: 'Gagal mengirim OTP melalui FONNTE. Silakan coba lagi.',
+        detail: detail ? detail.slice(0, 200) : undefined
+      };
+    }
+
+    otpStore.set(normalizedPhone, {
+      otpHash: hashOtp(otp),
+      expiresAt: now + OTP_EXPIRY_MS,
+      attempts: 0,
+      lastSent: now
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('sendOtpToPhone error:', error);
+    return { success: false, status: 500, error: 'Terjadi kesalahan saat mengirim OTP.' };
+  }
+};
+
 app.use(cors({
   origin: function (origin, callback) {
     // Allow requests with no origin (mobile apps, Postman, etc.)
@@ -132,73 +222,66 @@ const isValidEmail = (email) => {
 
 app.post('/api/auth/request-otp', async (req, res) => {
   try {
-    if (!FONNTE_TOKEN) {
-      return res.status(500).json({ error: 'FONNTE_TOKEN belum dikonfigurasi di server.' });
-    }
-
     const { phoneNumber, name } = req.body || {};
-    const normalizedPhone = normalizePhoneNumber(phoneNumber);
+    const result = await sendOtpToPhone({ phoneNumber, name, purpose: 'signup' });
 
-    if (!normalizedPhone) {
-      return res.status(400).json({ error: 'Nomor WhatsApp tidak valid.' });
+    if (!result.success) {
+      return res
+        .status(result.status || 500)
+        .json({ error: result.error, detail: result.detail });
     }
-
-    const { data: existingPhone } = await supabase
-      .from('users')
-      .select('id')
-      .eq('phone_number', normalizedPhone)
-      .maybeSingle();
-
-    if (existingPhone) {
-      return res.status(409).json({ error: 'Nomor WhatsApp ini sudah terdaftar.' });
-    }
-
-    const now = Date.now();
-    const existingOtp = otpStore.get(normalizedPhone);
-    if (existingOtp && now - existingOtp.lastSent < OTP_RESEND_COOLDOWN_MS) {
-      const waitSeconds = Math.ceil(
-        (OTP_RESEND_COOLDOWN_MS - (now - existingOtp.lastSent)) / 1000
-      );
-      return res.status(429).json({
-        error: `Harap tunggu ${waitSeconds} detik sebelum meminta OTP lagi.`
-      });
-    }
-
-    const otp = generateOtp();
-    const messageName = typeof name === 'string' && name.trim().length > 0 ? name.trim() : 'Pengguna SAPA';
-    const message = `Halo ${messageName}, kode OTP SAPA Anda adalah ${otp}. Berlaku 5 menit. Jangan bagikan kode ini kepada siapa pun.`;
-
-    const response = await fetch(FONNTE_API_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: FONNTE_TOKEN,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        target: normalizedPhone,
-        message
-      })
-    });
-
-    if (!response.ok) {
-      const detail = await response.text().catch(() => '');
-      console.error('FONNTE OTP send error:', response.status, detail);
-      return res.status(502).json({
-        error: 'Gagal mengirim OTP melalui FONNTE. Silakan coba lagi.',
-        detail: detail ? detail.slice(0, 200) : undefined
-      });
-    }
-
-    otpStore.set(normalizedPhone, {
-      otpHash: hashOtp(otp),
-      expiresAt: now + OTP_EXPIRY_MS,
-      attempts: 0,
-      lastSent: now
-    });
 
     res.json({ success: true, message: 'OTP berhasil dikirim.' });
   } catch (error) {
     console.error('request-otp error:', error);
+    res.status(500).json({ error: 'Terjadi kesalahan saat mengirim OTP.' });
+  }
+});
+
+app.post('/api/auth/request-phone-change-otp', authenticateToken, async (req, res) => {
+  try {
+    const { phoneNumber } = req.body || {};
+
+    if (!phoneNumber) {
+      return res.status(400).json({ error: 'Nomor WhatsApp wajib diisi.' });
+    }
+
+    const { data: currentUser, error } = await supabase
+      .from('users')
+      .select('id, name, phone_number')
+      .eq('id', req.user.id)
+      .single();
+
+    if (error || !currentUser) {
+      console.error('Error fetching current user for phone change OTP:', error);
+      return res.status(404).json({ error: 'User tidak ditemukan.' });
+    }
+
+    const normalizedPhone = normalizePhoneNumber(phoneNumber);
+    if (!normalizedPhone) {
+      return res.status(400).json({ error: 'Nomor WhatsApp tidak valid.' });
+    }
+
+    if (currentUser.phone_number && normalizedPhone === currentUser.phone_number) {
+      return res.status(400).json({ error: 'Nomor baru tidak boleh sama dengan nomor saat ini.' });
+    }
+
+    const result = await sendOtpToPhone({
+      phoneNumber: normalizedPhone,
+      name: currentUser.name,
+      requesterUserId: currentUser.id,
+      purpose: 'phone_update'
+    });
+
+    if (!result.success) {
+      return res
+        .status(result.status || 500)
+        .json({ error: result.error, detail: result.detail });
+    }
+
+    res.json({ success: true, message: 'OTP berhasil dikirim ke nomor WhatsApp baru.' });
+  } catch (error) {
+    console.error('request-phone-change-otp error:', error);
     res.status(500).json({ error: 'Terjadi kesalahan saat mengirim OTP.' });
   }
 });
@@ -309,7 +392,8 @@ app.post('/api/auth/signup', async (req, res) => {
         name: newUser.name,
         unit: newUser.unit,
         role: newUser.role,
-        is_approved: newUser.is_approved
+        is_approved: newUser.is_approved,
+        phone_number: newUser.phone_number
       }
     });
   } catch (error) {
@@ -381,7 +465,8 @@ app.post('/api/auth/login', async (req, res) => {
         name: user.name,
         unit: user.unit,
         role: user.role,
-        is_approved: user.is_approved
+        is_approved: user.is_approved,
+        phone_number: user.phone_number
       },
       token
     });
@@ -421,6 +506,171 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Get user error:', error);
     res.status(500).json({ error: 'Terjadi kesalahan server' });
+  }
+});
+
+app.post('/api/auth/change-password', authenticateToken, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body || {};
+
+    if (!currentPassword || !newPassword) {
+      return res
+        .status(400)
+        .json({ error: 'Password saat ini dan password baru wajib diisi.' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'Password baru minimal 6 karakter.' });
+    }
+
+    if (currentPassword === newPassword) {
+      return res
+        .status(400)
+        .json({ error: 'Password baru harus berbeda dengan password saat ini.' });
+    }
+
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('id, password_hash')
+      .eq('id', req.user.id)
+      .single();
+
+    if (error || !user) {
+      console.error('Error fetching user for password change:', error);
+      return res.status(404).json({ error: 'User tidak ditemukan.' });
+    }
+
+    const isPasswordValid = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!isPasswordValid) {
+      return res.status(400).json({ error: 'Password saat ini tidak sesuai.' });
+    }
+
+    const newPasswordHash = await bcrypt.hash(newPassword, 10);
+    const { error: updateError } = await supabase
+      .from('users')
+      .update({ password_hash: newPasswordHash })
+      .eq('id', req.user.id);
+
+    if (updateError) {
+      console.error('Error updating password:', updateError);
+      return res.status(500).json({ error: 'Gagal memperbarui password.' });
+    }
+
+    res.json({ message: 'Password berhasil diperbarui.' });
+  } catch (error) {
+    console.error('change-password error:', error);
+    res.status(500).json({ error: 'Terjadi kesalahan saat memperbarui password.' });
+  }
+});
+
+app.post('/api/auth/change-phone', authenticateToken, async (req, res) => {
+  try {
+    const { phoneNumber, otp } = req.body || {};
+
+    if (!phoneNumber || !otp) {
+      return res.status(400).json({ error: 'Nomor WhatsApp dan OTP wajib diisi.' });
+    }
+
+    const normalizedPhone = normalizePhoneNumber(phoneNumber);
+    if (!normalizedPhone) {
+      return res.status(400).json({ error: 'Nomor WhatsApp tidak valid.' });
+    }
+
+    const otpEntry = otpStore.get(normalizedPhone);
+    if (!otpEntry) {
+      return res.status(400).json({ error: 'OTP belum diminta atau sudah kadaluarsa' });
+    }
+
+    if (Date.now() > otpEntry.expiresAt) {
+      otpStore.delete(normalizedPhone);
+      return res.status(400).json({ error: 'OTP sudah kadaluarsa. Silakan minta ulang.' });
+    }
+
+    if (otpEntry.attempts >= OTP_MAX_ATTEMPTS) {
+      otpStore.delete(normalizedPhone);
+      return res
+        .status(429)
+        .json({ error: 'Percobaan OTP terlalu banyak. Silakan minta OTP baru.' });
+    }
+
+    if (hashOtp(String(otp).trim()) !== otpEntry.otpHash) {
+      otpEntry.attempts += 1;
+      otpStore.set(normalizedPhone, otpEntry);
+      return res.status(400).json({ error: 'Kode OTP tidak valid.' });
+    }
+
+    const { data: conflictingUser, error: conflictError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('phone_number', normalizedPhone)
+      .neq('id', req.user.id)
+      .maybeSingle();
+
+    if (conflictError && conflictError.code !== 'PGRST116') {
+      console.error('Error checking phone conflict:', conflictError);
+      return res.status(500).json({ error: 'Gagal memeriksa nomor WhatsApp.' });
+    }
+
+    if (conflictingUser) {
+      return res.status(409).json({ error: 'Nomor WhatsApp ini sudah digunakan oleh akun lain.' });
+    }
+
+    otpStore.delete(normalizedPhone);
+
+    const { data: updatedUser, error } = await supabase
+      .from('users')
+      .update({ phone_number: normalizedPhone })
+      .eq('id', req.user.id)
+      .select('id, email, name, unit, role, created_at, is_approved, phone_number')
+      .single();
+
+    if (error || !updatedUser) {
+      console.error('Error updating phone number:', error);
+      return res.status(500).json({ error: 'Gagal memperbarui nomor WhatsApp.' });
+    }
+
+    res.json({
+      message: 'Nomor WhatsApp berhasil diperbarui.',
+      user: updatedUser
+    });
+  } catch (error) {
+    console.error('change-phone error:', error);
+    res.status(500).json({ error: 'Terjadi kesalahan saat memperbarui nomor WhatsApp.' });
+  }
+});
+
+app.post('/api/auth/update-profile', authenticateToken, async (req, res) => {
+  try {
+    const { name } = req.body || {};
+
+    const trimmedName = typeof name === 'string' ? name.trim() : '';
+    if (!trimmedName) {
+      return res.status(400).json({ error: 'Nama tidak boleh kosong.' });
+    }
+
+    if (trimmedName.length < 3) {
+      return res.status(400).json({ error: 'Nama minimal 3 karakter.' });
+    }
+
+    const { data: updatedUser, error } = await supabase
+      .from('users')
+      .update({ name: trimmedName })
+      .eq('id', req.user.id)
+      .select('id, email, name, unit, role, created_at, is_approved, phone_number')
+      .single();
+
+    if (error || !updatedUser) {
+      console.error('Error updating profile name:', error);
+      return res.status(500).json({ error: 'Gagal memperbarui nama.' });
+    }
+
+    res.json({
+      message: 'Nama berhasil diperbarui.',
+      user: updatedUser
+    });
+  } catch (error) {
+    console.error('update-profile error:', error);
+    res.status(500).json({ error: 'Terjadi kesalahan saat memperbarui profil.' });
   }
 });
 
