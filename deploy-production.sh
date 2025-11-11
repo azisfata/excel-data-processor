@@ -4,7 +4,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 WEB_ROOT="${WEB_ROOT:-/var/www/excel-data-processor}"
-PM2_SERVICES="${PM2_SERVICES:-sapa.kemenkopmk-auth sapa.kemenkopmk-activity sapa.kemenkopmk-wa-webhook}"
+PM2_SERVICES="${PM2_SERVICES:-sapa-auth sapa-activity sapa-wa}"
 
 log() {
   printf '[deploy] %s\n' "$*" >&2

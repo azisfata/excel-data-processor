@@ -28,7 +28,7 @@ module.exports = {
       time: true
     },
     {
-      name: 'excel-processor-auth-server',
+      name: 'sapa-auth',
       script: 'server/auth-server.js',
       instances: 1,
       exec_mode: 'fork',
@@ -46,7 +46,7 @@ module.exports = {
       time: true
     },
     {
-      name: 'excel-processor-activity-server',
+      name: 'sapa-activity',
       script: 'server/activity-upload-server.js',
       instances: 1,
       exec_mode: 'fork',
@@ -64,7 +64,7 @@ module.exports = {
       time: true
     },
     {
-      name: 'sapa.kemenkopmk-wa-webhook',
+      name: 'sapa-wa',
       script: 'server/webhook-server.js',
       instances: 1,
       exec_mode: 'fork',

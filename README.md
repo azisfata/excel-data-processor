@@ -374,11 +374,11 @@ npm run db:verify
    ```bash
    npm run pm2:status
    npm run pm2:logs
-   pm2 status sapa.kemenkopmk-wa-webhook
+   pm2 status sapa-wa
    ```
    Jika API dan Auth server sudah berjalan di PM2, Anda bisa menambahkan webhook saja dengan:
    ```bash
-   pm2 start ecosystem.config.cjs --only sapa.kemenkopmk-wa-webhook
+   pm2 start ecosystem.config.cjs --only sapa-wa
    pm2 save
    ```
 
@@ -386,11 +386,11 @@ npm run db:verify
 
 Jalankan `./deploy-production.sh` setiap kali ada perubahan frontend/backend:
 
-- Secara default script akan menjalankan `npm ci`, build Vite (`npm run build`), sinkronisasi `dist/` ke `/var/www/excel-data-processor/`, lalu reload layanan PM2 `sapa.kemenkopmk-auth`, `sapa.kemenkopmk-activity`, dan `sapa.kemenkopmk-wa-webhook`.
+- Secara default script akan menjalankan `npm ci`, build Vite (`npm run build`), sinkronisasi `dist/` ke `/var/www/excel-data-processor/`, lalu reload layanan PM2 `sapa-auth`, `sapa-activity`, dan `sapa-wa`.
 - Set `SKIP_INSTALL=1 ./deploy-production.sh` jika dependensi sudah up-to-date.
 - Override target web root atau daftar layanan dengan environment variable:
   ```bash
-  WEB_ROOT=/path/custom PM2_SERVICES="sapa.kemenkopmk-auth sapa.kemenkopmk-activity" ./deploy-production.sh
+  WEB_ROOT=/path/custom PM2_SERVICES="sapa-auth sapa-activity" ./deploy-production.sh
   ```
 ***
 
