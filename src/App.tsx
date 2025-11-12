@@ -179,7 +179,7 @@ const App: React.FC = () => {
   const [selectedMonth, setSelectedMonth] = useState<number | 'all' | 'no-date'>(() =>
     new Date().getMonth()
   );
-  const [showAllActivities, setShowAllActivities] = useState(true);
+  const [showAllActivities, setShowAllActivities] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState<Set<string>>(new Set(['all']));
   const [activitySearchTerm, setActivitySearchTerm] = useState('');
   const [activitiesPerPage, setActivitiesPerPage] = useState<number | 'all'>(10);

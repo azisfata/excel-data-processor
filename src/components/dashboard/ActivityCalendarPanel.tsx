@@ -14,6 +14,13 @@ interface CalendarDay {
   isToday: boolean;
 }
 
+const getDateKey = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 const ActivityCalendarPanel: React.FC<ActivityCalendarPanelProps> = ({
   activities,
   formatActivityDate,
@@ -30,7 +37,7 @@ const ActivityCalendarPanel: React.FC<ActivityCalendarPanelProps> = ({
       if (activity.tanggal_pelaksanaan) {
         const date = new Date(activity.tanggal_pelaksanaan);
         if (!isNaN(date.getTime())) {
-          const dateKey = date.toISOString().split('T')[0]; // YYYY-MM-DD format
+          const dateKey = getDateKey(date);
           if (!map.has(dateKey)) {
             map.set(dateKey, []);
           }
@@ -59,7 +66,7 @@ const ActivityCalendarPanel: React.FC<ActivityCalendarPanelProps> = ({
       const date = new Date(startDate);
       date.setDate(startDate.getDate() + i);
 
-      const dateKey = date.toISOString().split('T')[0];
+      const dateKey = getDateKey(date);
       const dayActivities = activitiesByDate.get(dateKey) || [];
 
       days.push({
@@ -114,7 +121,7 @@ const ActivityCalendarPanel: React.FC<ActivityCalendarPanelProps> = ({
 
   // Get activities for selected date
   const selectedDateActivities = selectedDate
-    ? activitiesByDate.get(selectedDate.toISOString().split('T')[0]) || []
+    ? activitiesByDate.get(getDateKey(selectedDate)) || []
     : [];
 
   return (
