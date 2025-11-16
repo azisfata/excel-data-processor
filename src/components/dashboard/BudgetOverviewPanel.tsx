@@ -20,36 +20,42 @@ const BudgetOverviewPanel: React.FC<BudgetOverviewPanelProps> = ({
   const sisa = paguRevisi - realisasi;
 
   return (
-    <div className="bg-white shadow-md rounded-lg overflow-hidden border border-gray-200">
+    <div className="bg-white shadow-md rounded-lg overflow-hidden border border-gray-200 dark:bg-slate-900 dark:border-slate-700">
       <div className="p-6 space-y-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 border-t-4 border-t-blue-500">
-            <p className="text-sm font-medium text-gray-500">Pagu Revisi</p>
-            <p className="mt-1 text-2xl font-semibold text-gray-900">
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 border-t-4 border-t-blue-500 dark:bg-slate-900/60 dark:border-slate-700">
+            <p className="text-sm font-medium text-gray-500 dark:text-slate-300">Pagu Revisi</p>
+            <p className="mt-1 text-2xl font-semibold text-gray-900 dark:text-slate-100">
               {formatCurrency(paguRevisi)}
             </p>
           </div>
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 border-t-4 border-t-green-500">
-            <p className="text-sm font-medium text-gray-500">Realisasi</p>
-            <p className="mt-1 text-2xl font-semibold text-gray-900">{formatCurrency(realisasi)}</p>
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 border-t-4 border-t-green-500 dark:bg-slate-900/60 dark:border-slate-700">
+            <p className="text-sm font-medium text-gray-500 dark:text-slate-300">Realisasi</p>
+            <p className="mt-1 text-2xl font-semibold text-gray-900 dark:text-slate-100">
+              {formatCurrency(realisasi)}
+            </p>
           </div>
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 border-t-4 border-t-gray-400">
-            <p className="text-sm font-medium text-gray-500">Sisa Anggaran</p>
-            <p className="mt-1 text-2xl font-semibold text-gray-900">{formatCurrency(sisa)}</p>
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 border-t-4 border-t-gray-400 dark:bg-slate-900/60 dark:border-slate-700">
+            <p className="text-sm font-medium text-gray-500 dark:text-slate-300">Sisa Anggaran</p>
+            <p className="mt-1 text-2xl font-semibold text-gray-900 dark:text-slate-100">
+              {formatCurrency(sisa)}
+            </p>
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm">
+        <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm dark:bg-slate-900/70 dark:border-slate-700">
           <div className="max-w-3xl mx-auto">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-700">Capaian Realisasi</span>
-              <span className="text-sm font-semibold text-indigo-700">
+              <span className="text-sm font-medium text-gray-700 dark:text-slate-200">
+                Capaian Realisasi
+              </span>
+              <span className="text-sm font-semibold text-indigo-700 dark:text-indigo-300">
                 {progressPercentage.toFixed(2)}%
               </span>
             </div>
-            <div className="w-full bg-gray-100 rounded-full h-2.5">
+            <div className="w-full bg-gray-100 rounded-full h-2.5 dark:bg-slate-800">
               <div
-                className="bg-gradient-to-r from-indigo-500 to-indigo-600 h-full rounded-full"
+                className="bg-gradient-to-r from-indigo-500 to-indigo-600 h-full rounded-full shadow-[0_0_15px_rgba(79,70,229,0.35)]"
                 style={{ width: `${progressPercentage}%` }}
               />
             </div>
@@ -60,14 +66,18 @@ const BudgetOverviewPanel: React.FC<BudgetOverviewPanelProps> = ({
                   {(budgetView === 'realisasi-outstanding' ||
                     budgetView === 'realisasi-komitmen') &&
                     additionalTotals.outstanding > 0 && (
-                      <div className="text-sm text-gray-600">
-                        <span className="font-semibold text-yellow-800">Outstanding:</span>{' '}
+                      <div className="text-sm text-gray-600 dark:text-slate-300">
+                        <span className="font-semibold text-yellow-800 dark:text-yellow-300">
+                          Outstanding:
+                        </span>{' '}
                         {formatCurrency(additionalTotals.outstanding)}
                       </div>
                     )}
                   {budgetView === 'realisasi-komitmen' && additionalTotals.komitmen > 0 && (
-                    <div className="text-sm text-gray-600">
-                      <span className="font-semibold text-orange-800">Komitmen:</span>{' '}
+                    <div className="text-sm text-gray-600 dark:text-slate-300">
+                      <span className="font-semibold text-orange-800 dark:text-orange-300">
+                        Komitmen:
+                      </span>{' '}
                       {formatCurrency(additionalTotals.komitmen)}
                     </div>
                   )}

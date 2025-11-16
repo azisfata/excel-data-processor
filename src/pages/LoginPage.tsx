@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '@/contexts/ThemeContext';
 
 const LoginPage: React.FC = () => {
   const [username, setUsername] = useState('');
@@ -10,9 +11,25 @@ const LoginPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
   const { login } = useAuth();
+  const { setTheme } = useTheme();
+  const previousThemeRef = useRef<'light' | 'dark'>('light');
   const navigate = useNavigate();
   const location = useLocation();
   const emailDomain = '@kemenkopmk.go.id';
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const isDark = root.classList.contains('dark');
+    previousThemeRef.current = isDark ? 'dark' : 'light';
+    if (isDark) {
+      setTheme('light');
+    }
+    return () => {
+      if (previousThemeRef.current === 'dark') {
+        setTheme('dark');
+      }
+    };
+  }, [setTheme]);
 
   useEffect(() => {
     setMounted(true);

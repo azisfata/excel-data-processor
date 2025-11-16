@@ -382,6 +382,11 @@ npm run db:verify
    pm2 save
    ```
 
+4. **HTTPS & Reverse Proxy**
+   - Simpan bundle SSL Anda di folder `SSL/` (lihat `docs/https-setup.md`).
+   - Ikuti panduan tersebut untuk membuat server block Nginx yang meneruskan trafik HTTPS ke port internal PM2 (`5173`, `3001`, `3002`, `3003`).
+   - Setelah `.env` atau file sertifikat berubah, jalankan kembali build dan `pm2 reload` agar cookie secure, CORS, dan URL publik sinkron dengan domain HTTPS Anda.
+
 ### Automated Deploy Script
 
 Jalankan `./deploy-production.sh` setiap kali ada perubahan frontend/backend:

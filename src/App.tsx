@@ -14,6 +14,7 @@ import {
 } from '@/services/aiService';
 import FloatingAIButton from '@/components/FloatingAIButton';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import ThemeToggle from '@/components/ThemeToggle';
 import mammoth from 'mammoth';
 import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
@@ -2202,6 +2203,7 @@ const App: React.FC = () => {
               </nav>
             </div>
             <div className="flex items-center gap-4">
+              <ThemeToggle />
               {isAdmin && (
                 <button
                   onClick={() => navigate('/users')}
@@ -2713,15 +2715,15 @@ const App: React.FC = () => {
             />
 
             {/* Data Table with Search and Filter */}
-            <div className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200 mb-6">
+            <div className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200 mb-6 dark:bg-slate-900 dark:border-slate-700">
               {/* Collapsible Header */}
               <div
-                className="p-4 bg-gray-50 border-b border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors duration-200 flex justify-between items-center"
+                className="p-4 bg-gray-50 border-b border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors duration-200 flex justify-between items-center dark:bg-slate-900 dark:border-slate-700 dark:hover:bg-slate-800"
                 onClick={() => setIsTableExpanded(!isTableExpanded)}
               >
-                <h3 className="text-lg font-medium text-gray-800">Daftar Kode Akun</h3>
+                <h3 className="text-lg font-medium text-gray-800 dark:text-slate-100">Daftar Kode Akun</h3>
                 <svg
-                  className={`w-5 h-5 text-gray-500 transform transition-transform duration-200 ${isTableExpanded ? 'rotate-180' : ''}`}
+                  className={`w-5 h-5 text-gray-500 transform transition-transform duration-200 ${isTableExpanded ? 'rotate-180' : ''} dark:text-slate-300`}
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -2739,7 +2741,7 @@ const App: React.FC = () => {
               <div
                 className={`transition-all duration-200 ${isTableExpanded ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}
               >
-                <div className="p-4 border-b border-gray-200">
+                <div className="p-4 border-b border-gray-200 dark:border-slate-700 dark:bg-slate-900">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 w-full">
                     {/* Search and Filter */}
                     <div className="flex-1 w-full flex flex-col sm:flex-row gap-3">
@@ -2749,7 +2751,7 @@ const App: React.FC = () => {
                           placeholder="Cari kode/uraian..."
                           value={searchTerm}
                           onChange={e => setSearchTerm(e.target.value)}
-                          className="block w-full pl-10 pr-16 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+                          className="block w-full pl-10 pr-16 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-900/60 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-400"
                           title="Contoh: a and b atau x or y"
                         />
                         <div className="absolute inset-y-0 right-0 flex items-center pr-3 space-x-2">
@@ -2768,10 +2770,10 @@ const App: React.FC = () => {
                               />
                             </svg>
                             <div
-                              className="absolute z-20 invisible group-hover:visible w-72 bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-sm text-gray-700"
+                              className="absolute z-20 invisible group-hover:visible w-72 bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-sm text-gray-700 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-100"
                               style={{ top: 'calc(100% + 8px)', right: '0' }}
                             >
-                              <p className="font-semibold text-gray-900 border-b pb-1 mb-2">
+                              <p className="font-semibold text-gray-900 border-b pb-1 mb-2 dark:text-slate-100 dark:border-slate-700">
                                 Panduan Pencarian
                               </p>
                               <p>
@@ -2788,7 +2790,7 @@ const App: React.FC = () => {
                             </div>
                           </div>
                           <svg
-                            className="w-5 h-5 text-gray-400 pointer-events-none"
+                            className="w-5 h-5 text-gray-400 pointer-events-none dark:text-slate-500"
                             fill="none"
                             stroke="currentColor"
                             viewBox="0 0 24 24"
@@ -2806,7 +2808,7 @@ const App: React.FC = () => {
                       <div className="flex items-center">
                         <label
                           htmlFor="depthSelect"
-                          className="text-sm font-medium text-gray-700 mr-2 whitespace-nowrap"
+                          className="text-sm font-medium text-gray-700 mr-2 whitespace-nowrap dark:text-slate-200"
                         >
                           Level:
                         </label>
@@ -2814,7 +2816,7 @@ const App: React.FC = () => {
                           id="depthSelect"
                           value={maxDepth}
                           onChange={e => handleDepthChange(parseInt(e.target.value, 10))}
-                          className="block rounded-md border-gray-300 py-1.5 pl-2 pr-8 text-sm"
+                          className="block rounded-md border-gray-300 py-1.5 pl-2 pr-8 text-sm dark:bg-slate-900/60 dark:border-slate-700 dark:text-slate-100"
                         >
                           {[1, 2, 3, 4, 5, 6, 7, 8].map(l => (
                             <option key={l} value={l}>
@@ -2842,9 +2844,9 @@ const App: React.FC = () => {
               <div
                 className={`overflow-x-auto transition-all duration-200 ${isTableExpanded ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}
               >
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50 sticky top-0 z-10">
-                    <tr className="text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-700">
+                  <thead className="bg-gray-50 sticky top-0 z-10 dark:bg-slate-800/70">
+                    <tr className="text-left text-xs font-semibold text-gray-600 uppercase tracking-wider dark:text-slate-200">
                       <th className="px-6 py-3 w-1/6">Kode</th>
                       <th className="px-6 py-3 w-3/6">Uraian</th>
                       <th className="px-6 py-3 w-1/6 text-right">Pagu Revisi</th>
@@ -2853,7 +2855,7 @@ const App: React.FC = () => {
                       <th className="px-6 py-3 w-1/6 text-right">Sisa Anggaran</th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                  <tbody className="bg-white divide-y divide-gray-200 dark:bg-slate-900 dark:divide-slate-800/70">
                     {displayedData.map((row, rowIndex) => {
                       const showExpandCollapse = row.__hasChildren || row.__isDataGroup;
                       const isGroup = row.__isGroup;
@@ -2872,9 +2874,13 @@ const App: React.FC = () => {
                       return (
                         <tr
                           key={`${row.__path}-${rowIndex}`}
-                          className={`transition-colors ${isGroup ? 'bg-gray-100 font-medium' : 'odd:bg-white even:bg-slate-50'} hover:bg-blue-50`}
+                          className={`transition-colors ${
+                            isGroup
+                              ? 'bg-gray-100 dark:bg-slate-800/70 font-medium'
+                              : 'odd:bg-white even:bg-slate-50 dark:odd:bg-slate-900 dark:even:bg-slate-800/60'
+                          } hover:bg-blue-50 dark:hover:bg-slate-800/90`}
                         >
-                          <td className="px-6 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                          <td className="px-6 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-slate-100">
                             <div className="flex items-center">
                               <div
                                 className="flex items-center"
@@ -2884,11 +2890,11 @@ const App: React.FC = () => {
                                   <button
                                     type="button"
                                     onClick={() => toggleNode(row.__path, row.__isDataGroup)}
-                                    className={`mr-2 w-6 h-6 flex items-center justify-center rounded-full border text-xs font-semibold transition-colors ${
-                                      row.__isExpanded
-                                        ? 'bg-blue-100 border-blue-300 text-blue-700'
-                                        : 'bg-gray-100 border-gray-300 text-gray-600'
-                                    }`}
+                                      className={`mr-2 w-6 h-6 flex items-center justify-center rounded-full border text-xs font-semibold transition-colors ${
+                                        row.__isExpanded
+                                          ? 'bg-blue-100 border-blue-300 text-blue-700 dark:bg-blue-900/30 dark:border-blue-500 dark:text-blue-100'
+                                          : 'bg-gray-100 border-gray-300 text-gray-600 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-100'
+                                      }`}
                                     aria-label={
                                       row.__isExpanded ? 'Collapse kode akun' : 'Expand kode akun'
                                     }
@@ -2901,23 +2907,23 @@ const App: React.FC = () => {
                               </div>
                             </div>
                           </td>
-                          <td className="px-6 py-3 text-sm text-gray-700">{row[1]}</td>
-                          <td className="px-6 py-3 text-right">
+                          <td className="px-6 py-3 text-sm text-gray-700 dark:text-slate-200">{row[1]}</td>
+                          <td className="px-6 py-3 text-right text-gray-900 dark:text-slate-100">
                             {typeof paguRevisi === 'number'
                               ? paguRevisi.toLocaleString('id-ID')
                               : paguRevisi}
                           </td>
-                          <td className="px-6 py-3 text-right">
+                          <td className="px-6 py-3 text-right text-gray-900 dark:text-slate-100">
                             {typeof sdPeriode === 'number'
                               ? sdPeriode.toLocaleString('id-ID')
                               : sdPeriode}
                           </td>
-                          <td className="px-6 py-3 text-right">
+                          <td className="px-6 py-3 text-right text-gray-900 dark:text-slate-100">
                             {paguRevisi > 0 && typeof sdPeriode === 'number'
                               ? `${((sdPeriode / paguRevisi) * 100).toFixed(2)}%`
                               : ''}
                           </td>
-                          <td className="px-6 py-3 text-right">
+                          <td className="px-6 py-3 text-right text-gray-900 dark:text-slate-100">
                             {typeof paguRevisi === 'number' && typeof sdPeriode === 'number'
                               ? (paguRevisi - sdPeriode).toLocaleString('id-ID')
                               : ''}
@@ -2926,11 +2932,11 @@ const App: React.FC = () => {
                       );
                     })}
                     {searchTerm && (
-                      <tr className="bg-gray-100 font-bold border-t-2 border-gray-300">
-                        <td colSpan={2} className="px-6 py-2 text-sm text-gray-900">
+                      <tr className="bg-gray-100 font-bold border-t-2 border-gray-300 dark:bg-slate-800/70 dark:border-slate-600">
+                        <td colSpan={2} className="px-6 py-2 text-sm text-gray-900 dark:text-slate-100">
                           Total Hasil Pencarian
                         </td>
-                        <td className="px-6 py-2 text-right text-sm text-gray-900">
+                        <td className="px-6 py-2 text-right text-sm text-gray-900 dark:text-slate-100">
                           {(() => {
                             const dataRows = displayedData.filter(
                               row => !row.__hasChildren && !row.__isDataGroup
@@ -2940,7 +2946,7 @@ const App: React.FC = () => {
                               .toLocaleString('id-ID');
                           })()}
                         </td>
-                        <td className="px-6 py-2 text-right text-sm text-gray-900">
+                        <td className="px-6 py-2 text-right text-sm text-gray-900 dark:text-slate-100">
                           {(() => {
                             const dataRows = displayedData.filter(
                               row => !row.__hasChildren && !row.__isDataGroup
@@ -2950,7 +2956,7 @@ const App: React.FC = () => {
                               .toLocaleString('id-ID');
                           })()}
                         </td>
-                        <td className="px-6 py-2 text-right text-sm text-gray-900">
+                        <td className="px-6 py-2 text-right text-sm text-gray-900 dark:text-slate-100">
                           {(() => {
                             const dataRows = displayedData.filter(
                               row => !row.__hasChildren && !row.__isDataGroup
@@ -3028,13 +3034,13 @@ const App: React.FC = () => {
             {/* Activities Section */}
             <div
               ref={calendarPanelRef}
-              className="bg-white shadow-xl rounded-xl overflow-hidden mt-8"
+              className="bg-white shadow-xl rounded-xl overflow-hidden mt-8 dark:bg-slate-900 dark:border dark:border-slate-700"
             >
               <div
-                className="p-4 bg-gray-50 border-b border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors duration-200 flex justify-between items-center"
+                className="p-4 bg-gray-50 border-b border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors duration-200 flex justify-between items-center dark:bg-slate-900 dark:border-slate-700 dark:hover:bg-slate-800"
                 onClick={() => setShowActivities(!showActivities)}
               >
-                <h2 className="text-xl font-semibold text-gray-800">Daftar Kegiatan</h2>
+                <h2 className="text-xl font-semibold text-gray-800 dark:text-slate-100">Daftar Kegiatan</h2>
                 <div className="flex items-center space-x-4">
                   <button
                     onClick={e => {
@@ -3046,7 +3052,7 @@ const App: React.FC = () => {
                     Tambah Kegiatan
                   </button>
                   <svg
-                    className={`w-5 h-5 text-gray-500 transform transition-transform duration-200 ${showActivities ? 'rotate-180' : ''}`}
+                    className={`w-5 h-5 text-gray-500 transform transition-transform duration-200 ${showActivities ? 'rotate-180' : ''} dark:text-slate-300`}
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -3063,17 +3069,17 @@ const App: React.FC = () => {
               <div
                 className={`transition-all duration-200 ${showActivities ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}
               >
-                <div className="p-6 space-y-6">
+                <div className="p-6 space-y-6 dark:bg-slate-900">
                   <div className="flex flex-wrap items-end gap-4">
                     <div className="space-y-1 flex-1 min-w-[220px]">
                       <label
                         htmlFor="activity-search"
-                        className="block text-xs font-semibold text-gray-500 uppercase tracking-wide"
+                        className="block text-xs font-semibold text-gray-500 uppercase tracking-wide dark:text-slate-300"
                       >
                         Cari Nama Kegiatan
                       </label>
                       <div className="relative">
-                        <div className="pointer-events-none absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400">
+                        <div className="pointer-events-none absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400 dark:text-slate-500">
                           <svg
                             className="h-4 w-4"
                             fill="none"
@@ -3095,14 +3101,14 @@ const App: React.FC = () => {
                           value={activitySearchTerm}
                           onChange={e => setActivitySearchTerm(e.target.value)}
                           placeholder="Masukkan nama kegiatan..."
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 pl-9 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 pl-9 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-900/60 dark:border-slate-700 dark:text-slate-100"
                         />
                       </div>
                     </div>
                     <div className="space-y-1">
                       <label
                         htmlFor="activity-year-filter"
-                        className="block text-xs font-semibold text-gray-500 uppercase tracking-wide"
+                        className="block text-xs font-semibold text-gray-500 uppercase tracking-wide dark:text-slate-300"
                       >
                         Tahun
                       </label>
@@ -3111,7 +3117,7 @@ const App: React.FC = () => {
                         value={selectedYear.toString()}
                         onChange={handleYearFilterChange}
                         disabled={showAllActivities}
-                        className={`border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${showAllActivities ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''}`}
+                        className={`border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-900/60 dark:border-slate-700 dark:text-slate-100 ${showAllActivities ? 'bg-gray-100 text-gray-500 cursor-not-allowed dark:bg-slate-800 dark:text-slate-400' : ''}`}
                       >
                         <option value="all">Semua Tahun</option>
                         {availableYears.map(year => (
@@ -3124,7 +3130,7 @@ const App: React.FC = () => {
                     <div className="space-y-1">
                       <label
                         htmlFor="activity-month-filter"
-                        className="block text-xs font-semibold text-gray-500 uppercase tracking-wide"
+                        className="block text-xs font-semibold text-gray-500 uppercase tracking-wide dark:text-slate-300"
                       >
                         Bulan
                       </label>
@@ -3133,7 +3139,7 @@ const App: React.FC = () => {
                         value={selectedMonth.toString()}
                         onChange={handleMonthFilterChange}
                         disabled={showAllActivities}
-                        className={`border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${showAllActivities ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''}`}
+                        className={`border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-900/60 dark:border-slate-700 dark:text-slate-100 ${showAllActivities ? 'bg-gray-100 text-gray-500 cursor-not-allowed dark:bg-slate-800 dark:text-slate-400' : ''}`}
                       >
                         <option value="all">Semua Bulan</option>
                         {monthOptions.map(option => (
@@ -3229,20 +3235,20 @@ const App: React.FC = () => {
                           <div key={group.key} className="space-y-3">
                             {group.label ? (
                               <div className="flex items-center justify-between">
-                                <h3 className="text-lg font-semibold text-gray-800">
+                                <h3 className="text-lg font-semibold text-gray-800 dark:text-slate-100">
                                   {group.label}
                                 </h3>
-                                <span className="text-xs text-gray-500">
+                                <span className="text-xs text-gray-500 dark:text-slate-400">
                                   {totalActivitiesByGroup.get(group.key) ?? group.activities.length}{' '}
                                   kegiatan
                                 </span>
                               </div>
                             ) : null}
-                            <div className="border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+                            <div className="border border-gray-200 rounded-lg shadow-sm overflow-hidden dark:border-slate-700 dark:bg-slate-900/70">
                               <div className="overflow-x-auto">
-                                <table className="min-w-full md:min-w-[760px] table-fixed divide-y divide-gray-200">
-                                  <thead className="bg-gray-50">
-                                    <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                                <table className="min-w-full md:min-w-[760px] table-fixed divide-y divide-gray-200 dark:divide-slate-700">
+                                  <thead className="bg-gray-50 dark:bg-slate-800/70">
+                                    <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide dark:text-slate-200">
                                       <th className="px-4 py-3 w-[48%] min-w-[240px]">
                                         Nama Kegiatan
                                       </th>
@@ -3257,7 +3263,7 @@ const App: React.FC = () => {
                                       </th>
                                     </tr>
                                   </thead>
-                                  <tbody className="bg-white divide-y divide-gray-100">
+                                  <tbody className="bg-white divide-y divide-gray-100 dark:bg-slate-900 dark:divide-slate-800/60">
                                     {group.activities.map(activity => {
                                       const scheduledDate = formatActivityDate(
                                         activity.tanggal_pelaksanaan
@@ -3271,42 +3277,42 @@ const App: React.FC = () => {
                                       return (
                                         <tr
                                           key={activity.id}
-                                          className="odd:bg-white even:bg-slate-50 hover:bg-blue-50 transition-colors cursor-pointer"
+                                          className="odd:bg-white even:bg-slate-50 hover:bg-blue-50 transition-colors cursor-pointer dark:odd:bg-slate-900 dark:even:bg-slate-800/70 dark:hover:bg-slate-800/90"
                                           onClick={() => setSelectedActivity(activity)}
                                         >
                                           <td className="px-4 py-3 align-top max-w-sm">
                                             <div className="flex flex-col space-y-1">
-                                              <span className="font-medium text-gray-900 break-words leading-snug">
+                                              <span className="font-medium text-gray-900 break-words leading-snug dark:text-slate-100">
                                                 {activity.nama}
                                               </span>
-                                              <span className="text-xs text-gray-500">
+                                              <span className="text-xs text-gray-500 dark:text-slate-400">
                                                 {activity.allocations.length} alokasi
                                               </span>
                                             </div>
                                           </td>
-                                          <td className="px-4 py-3 align-top text-sm text-gray-600 whitespace-nowrap">
+                                          <td className="px-4 py-3 align-top text-sm text-gray-600 whitespace-nowrap dark:text-slate-300">
                                             {scheduledDate || '-'}
                                           </td>
-                                          <td className="px-4 py-3 align-top text-sm text-gray-900 text-right">
+                                          <td className="px-4 py-3 align-top text-sm text-gray-900 text-right dark:text-slate-100">
                                             {totalAlokasi}
                                           </td>
                                           <td className="px-4 py-3 align-top">
                                             {activity.status ? (
-                                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
+                                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-100 dark:border dark:border-blue-500/40">
                                                 {activity.status}
                                               </span>
                                             ) : (
-                                              <span className="text-xs text-gray-400 italic">
+                                              <span className="text-xs text-gray-400 italic dark:text-slate-400">
                                                 Belum diatur
                                               </span>
                                             )}
                                           </td>
-                                          <td className="px-4 py-3 align-top text-sm text-gray-600">
+                                          <td className="px-4 py-3 align-top text-sm text-gray-600 dark:text-slate-300">
                                             {activity.attachments &&
                                             activity.attachments.length > 0 ? (
                                               <div className="flex items-center space-x-2">
                                                 <svg
-                                                  className="w-4 h-4 text-gray-400"
+                                                  className="w-4 h-4 text-gray-400 dark:text-slate-400"
                                                   fill="none"
                                                   stroke="currentColor"
                                                   viewBox="0 0 24 24"
@@ -3383,12 +3389,12 @@ const App: React.FC = () => {
                                       );
                                     })}
                                   </tbody>
-                                  <tfoot className="bg-gray-50 font-medium">
+                                  <tfoot className="bg-gray-50 font-medium dark:bg-slate-800/70">
                                     <tr>
-                                      <td className="px-4 py-3 text-right" colSpan={2}>
+                                      <td className="px-4 py-3 text-right dark:text-slate-100" colSpan={2}>
                                         Total Alokasi Halaman Ini
                                       </td>
-                                      <td className="px-4 py-3 text-right">
+                                      <td className="px-4 py-3 text-right dark:text-slate-100">
                                         {formatCurrency(
                                           group.activities.reduce(
                                             (sum, activity) =>
@@ -3410,18 +3416,20 @@ const App: React.FC = () => {
                           </div>
                         ))}
                       </div>
-                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-t border-gray-200 pt-4">
-                        <p className="text-sm text-gray-500">
+                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-t border-gray-200 pt-4 dark:border-slate-700">
+                        <p className="text-sm text-gray-500 dark:text-slate-400">
                           Menampilkan {pageRangeStart}-{pageRangeEnd} dari {totalActivities}{' '}
                           kegiatan
                         </p>
                         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                           <div className="flex items-center space-x-2">
-                            <span className="text-sm text-gray-500">Baris per halaman</span>
+                            <span className="text-sm text-gray-500 dark:text-slate-300">
+                              Baris per halaman
+                            </span>
                             <select
                               value={String(activitiesPerPage)}
                               onChange={handlePageSizeChange}
-                              className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-900/60 dark:border-slate-700 dark:text-slate-100"
                             >
                               {PAGE_SIZE_OPTIONS.map(option => (
                                 <option key={option} value={String(option)}>
@@ -3437,13 +3445,13 @@ const App: React.FC = () => {
                               disabled={activitiesPage === 1 || activitiesPerPage === 'all'}
                               className={`px-3 py-1.5 rounded-md border text-sm ${
                                 activitiesPage === 1 || activitiesPerPage === 'all'
-                                  ? 'text-gray-400 border-gray-200 cursor-not-allowed'
-                                  : 'text-gray-700 border-gray-300 hover:bg-gray-100'
+                                  ? 'text-gray-400 border-gray-200 cursor-not-allowed dark:text-slate-600 dark:border-slate-700'
+                                  : 'text-gray-700 border-gray-300 hover:bg-gray-100 dark:text-slate-100 dark:border-slate-600 dark:hover:bg-slate-800'
                               }`}
                             >
                               Sebelumnya
                             </button>
-                            <span className="text-sm text-gray-600">
+                            <span className="text-sm text-gray-600 dark:text-slate-300">
                               Halaman {activitiesPage} dari {totalPages}
                             </span>
                             <button
@@ -3456,8 +3464,8 @@ const App: React.FC = () => {
                               }
                               className={`px-3 py-1.5 rounded-md border text-sm ${
                                 activitiesPage === totalPages || activitiesPerPage === 'all'
-                                  ? 'text-gray-400 border-gray-200 cursor-not-allowed'
-                                  : 'text-gray-700 border-gray-300 hover:bg-gray-100'
+                                  ? 'text-gray-400 border-gray-200 cursor-not-allowed dark:text-slate-600 dark:border-slate-700'
+                                  : 'text-gray-700 border-gray-300 hover:bg-gray-100 dark:text-slate-100 dark:border-slate-600 dark:hover:bg-slate-800'
                               }`}
                             >
                               Berikutnya
@@ -3467,7 +3475,7 @@ const App: React.FC = () => {
                       </div>
                     </>
                   ) : (
-                    <p className="text-gray-500 text-center py-4">
+                    <p className="text-gray-500 text-center py-4 dark:text-slate-400">
                       {activities.length === 0
                         ? 'Belum ada kegiatan. Tambahkan kegiatan baru untuk memulai.'
                         : 'Tidak ada kegiatan untuk filter yang dipilih.'}
